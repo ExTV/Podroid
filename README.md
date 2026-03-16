@@ -106,7 +106,7 @@ adb install app/build/outputs/apk/debug/app-debug.apk
    podman run --rm -it alpine sh
    ```
 
-> **Note:** `ping` does not work (QEMU SLIRP doesn't support ICMP). Use `wget` or `curl` to test connectivity.
+> **Tip:** Use `ping`, `wget`, or `curl` to test connectivity.
 
 ## How It Works
 
