@@ -1,0 +1,198 @@
+#!/bin/sh
+# Podroid init — optimized for Android QEMU VM + Podman
+# Serial console (ttyAMA0) is the primary interface.
+
+# ── Core filesystems ──
+mount -t proc proc /proc -o noexec,nosuid,nodev
+mount -t sysfs sys /sys -o noexec,nosuid,nodev
+mount -t devtmpfs devtmpfs /dev -o exec,nosuid,mode=0755,size=2M 2>/dev/null || \
+    mount -t tmpfs tmpfs /dev -o exec,nosuid,mode=0755,size=2M
+mkdir -p /dev/pts /dev/shm /dev/mqueue /dev/net
+mount -t devpts devpts /dev/pts -o gid=5,mode=0620,noexec,nosuid 2>/dev/null
+mount -t tmpfs tmpfs /dev/shm -o noexec,nosuid,nodev,size=64m
+mount -t tmpfs tmpfs /tmp -o noexec,nosuid,nodev
+mount -t tmpfs tmpfs /run -o noexec,nosuid,nodev,mode=0755
+
+# ── cgroup2 (required by podman/crun) ──
+mkdir -p /sys/fs/cgroup
+mount -t cgroup2 cgroup2 /sys/fs/cgroup 2>/dev/null
+# Enable all available controllers for root
+if [ -f /sys/fs/cgroup/cgroup.subtree_control ]; then
+    for ctrl in cpuset cpu io memory hugetlb pids rdma misc; do
+        echo "+$ctrl" > /sys/fs/cgroup/cgroup.subtree_control 2>/dev/null
+    done
+fi
+
+# ── Busybox + basic dirs ──
+/bin/busybox --install -s 2>/dev/null
+mkdir -p /var/lib/containers/storage /var/log /var/tmp /root
+mkdir -p /run/lock /run/containers/storage /run/libpod
+chmod 700 /root
+chmod 1777 /tmp /var/tmp
+
+# ── Hostname ──
+echo "podroid" > /etc/hostname
+hostname podroid
+
+# ── Kernel modules ──
+KVER=$(uname -r)
+if [ -d "/lib/modules/$KVER" ]; then
+    depmod -a 2>/dev/null
+    # Virtio devices
+    modprobe virtio_net  2>/dev/null
+    modprobe virtio_blk  2>/dev/null
+    # Container essentials
+    modprobe fuse        2>/dev/null
+    modprobe tun         2>/dev/null
+    modprobe veth        2>/dev/null
+    modprobe bridge      2>/dev/null
+    modprobe br_netfilter 2>/dev/null
+    modprobe overlay     2>/dev/null
+    modprobe xt_addrtype 2>/dev/null
+    modprobe xt_conntrack 2>/dev/null
+    modprobe xt_nat      2>/dev/null
+    modprobe nf_nat      2>/dev/null
+    modprobe nf_conntrack 2>/dev/null
+    modprobe ip_tables   2>/dev/null
+fi
+
+# Create /dev/net/tun if missing (needed by slirp4netns)
+[ ! -c /dev/net/tun ] && mknod /dev/net/tun c 10 200 2>/dev/null
+
+# ── Networking ──
+echo "[init] Waiting for network..."
+NETIF=""
+for i in $(seq 1 10); do
+    NETIF=$(ip -o link show 2>/dev/null | awk -F': ' '{print $2}' | grep -v lo | head -1)
+    [ -n "$NETIF" ] && break
+    sleep 1
+done
+
+if [ -n "$NETIF" ]; then
+    echo "[init] Found: $NETIF"
+    ip link set dev "$NETIF" up
+    ip addr add 10.0.2.15/24 dev "$NETIF" 2>/dev/null
+    ip route add default via 10.0.2.2 dev "$NETIF" 2>/dev/null
+else
+    echo "[init] WARNING: No network interface found!"
+fi
+
+# DNS (QEMU's 10.0.2.3 forwarder doesn't work on Android)
+echo "nameserver 8.8.8.8" > /etc/resolv.conf
+echo "nameserver 1.1.1.1" >> /etc/resolv.conf
+
+# ── Sysctl for container networking ──
+sysctl -qw net.ipv4.ip_forward=1 2>/dev/null
+sysctl -qw net.ipv4.conf.all.forwarding=1 2>/dev/null
+sysctl -qw net.bridge.bridge-nf-call-iptables=1 2>/dev/null
+sysctl -qw net.bridge.bridge-nf-call-ip6tables=1 2>/dev/null
+sysctl -qw net.ipv4.ping_group_range="0 2147483647" 2>/dev/null
+sysctl -qw kernel.unprivileged_userns_clone=1 2>/dev/null
+# Increase inotify for podman
+sysctl -qw fs.inotify.max_user_instances=256 2>/dev/null
+sysctl -qw fs.inotify.max_user_watches=65536 2>/dev/null
+
+# ── Persistent storage ──
+for dev in /dev/vda /dev/vdb; do
+    [ -b "$dev" ] || continue
+    mount -t ext4 -o rw,noatime "$dev" /var/lib/containers 2>/dev/null || {
+        echo "[init] Formatting $dev..."
+        mkfs.ext4 -q -F "$dev" 2>/dev/null
+        mount -t ext4 -o rw,noatime "$dev" /var/lib/containers 2>/dev/null
+    }
+    # Ensure storage subdirs exist on persistent disk
+    mkdir -p /var/lib/containers/storage
+    break
+done
+
+# ── User/group config ──
+echo "root:100000:65536" > /etc/subuid
+echo "root:100000:65536" > /etc/subgid
+
+# ── Podman configuration (optimized for QEMU on Android) ──
+mkdir -p /etc/containers
+
+cat > /etc/containers/containers.conf <<'CONF'
+[containers]
+# Use cgroup2 + crun
+cgroups = "enabled"
+default_sysctls = []
+# Dont need userns inside VM (we are already root)
+userns = "host"
+
+[engine]
+# crun is lighter than runc
+runtime = "crun"
+# No pivot_root in initramfs
+no_pivot_root = true
+# Use slirp4netns for rootless networking
+network_cmd = "/usr/bin/slirp4netns"
+# Events logger
+events_logger = "file"
+
+[network]
+network_backend = "netavark"
+CONF
+
+cat > /etc/containers/storage.conf <<'CONF'
+[storage]
+driver = "overlay"
+runroot = "/run/containers/storage"
+graphroot = "/var/lib/containers/storage"
+
+[storage.options.overlay]
+mount_program = "/usr/bin/fuse-overlayfs"
+CONF
+
+cat > /etc/containers/registries.conf <<'CONF'
+unqualified-search-registries = ["docker.io", "quay.io"]
+CONF
+
+# ── crun config — disable pivot_root ──
+mkdir -p /etc/crun
+cat > /etc/crun/crun.conf <<'CONF'
+[global]
+no-pivot = true
+CONF
+
+# ── Environment ──
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+export HOME=/root
+export TERM=vt100
+export PODMAN_IGNORE_CGROUPSV1_WARNING=1
+export CONTAINERS_CONF=/etc/containers/containers.conf
+export CONTAINERS_STORAGE_CONF=/etc/containers/storage.conf
+export CONTAINERS_REGISTRIES_CONF=/etc/containers/registries.conf
+
+# ── Silence kernel messages on console ──
+dmesg -n 1 2>/dev/null
+
+# ── Banner ──
+IP=$(ip addr show "$NETIF" 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1)
+echo ""
+echo "=========================================="
+echo "  Podroid - Alpine Linux + Podman"
+echo "=========================================="
+echo "  IP:  ${IP:-no network}"
+echo "  DNS: 8.8.8.8"
+echo ""
+
+# Quick connectivity check (background, don't block boot)
+{
+    if wget -q -O /dev/null --timeout=8 http://dl-cdn.alpinelinux.org/alpine/MIRRORS.txt 2>/dev/null; then
+        echo "[init] Internet: OK"
+    else
+        echo "[init] Internet: unavailable (ping won't work, use wget/curl)"
+    fi
+} &
+
+echo "  Ready! Try: podman run --rm alpine echo hello"
+echo ""
+
+# ── Shell ──
+cd /root
+while true; do
+    printf "podroid:~# "
+    read -r cmd || continue
+    [ -n "$cmd" ] && eval "$cmd" 2>&1
+done

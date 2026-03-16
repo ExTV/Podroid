@@ -1,0 +1,42 @@
+# Build outputs
+/build/
+/app/build/
+*.apk
+*.aab
+
+# Gradle
+.gradle/
+local.properties
+
+# IDE
+/.idea/
+*.iml
+.DS_Store
+
+# Kotlin
+.kotlin/
+
+# Native build
+.externalNativeBuild/
+.cxx/
+
+# QEMU build artifacts (built separately)
+/qemu-src/
+/qemu-build/
+
+# Docker/initramfs build intermediates
+/alpine-rootfs/
+/config-temp/
+*.tar.gz
+config.log
+
+# Generated assets (built by docker-build-initramfs.sh)
+app/src/main/assets/vmlinuz-virt
+app/src/main/assets/initrd.img
+
+# Claude Code sessions
+.claude/
+
+# Misc
+*.tmp
+/captures/

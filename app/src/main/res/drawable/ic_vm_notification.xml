@@ -1,0 +1,29 @@
+<!--
+  Podroid — notification icon (simple terminal-style monitor)
+  Copyright (C) 2024 Podroid contributors
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- Monitor outline -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M20,18 L4,18 C2.9,18 2,17.1 2,16 L2,6 C2,4.9 2.9,4 4,4 L20,4 C21.1,4 22,4.9 22,6 L22,16 C22,17.1 21.1,18 20,18 Z M4,6 L4,16 L20,16 L20,6 L4,6 Z" />
+
+    <!-- Stand -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M14,18 L10,18 L9,21 L15,21 Z" />
+
+    <!-- Small cursor/indicator inside screen -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M7,9 L11,9 L11,10 L7,10 Z" />
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M7,12 L14,12 L14,13 L7,13 Z" />
+
+</vector>

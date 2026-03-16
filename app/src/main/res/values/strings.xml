@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Podroid - Rootless Podman for Android
+  Copyright (C) 2024 Podroid contributors
+-->
+<resources>
+    <string name="app_name">Podroid</string>
+
+    <!-- Notification -->
+    <string name="notification_vm_running">Podman running</string>
+    <string name="notification_action_stop">Stop</string>
+
+    <!-- Home screen -->
+    <string name="podroid_start">Start Podman</string>
+    <string name="podroid_stop">Stop Podman</string>
+    <string name="podroid_terminal">Web Terminal</string>
+    <string name="podroid_status_ready">Ready to start</string>
+    <string name="podroid_status_running">Podman is running</string>
+    <string name="podroid_status_starting">Starting Podman…</string>
+    <string name="podroid_open_terminal">Open Terminal</string>
+    <string name="podroid_copy_link">Copy Link</string>
+    <string name="podroid_link_copied">Link copied to clipboard</string>
+
+    <!-- Error messages -->
+    <string name="error_qemu_failed">QEMU failed to start</string>
+    <string name="error_qemu_not_found">QEMU binary not found</string>
+</resources>
