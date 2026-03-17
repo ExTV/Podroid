@@ -12,6 +12,7 @@ import android.system.Os
 import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
+import com.excp.podroid.data.repository.SettingsRepository
 import com.excp.podroid.engine.PodroidQemu
 import com.excp.podroid.engine.VmState
 import com.termux.terminal.TerminalEmulator
@@ -22,7 +23,10 @@ import com.termux.view.TerminalViewClient
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import java.io.OutputStream
 import javax.inject.Inject
 
@@ -30,9 +34,13 @@ import javax.inject.Inject
 class TerminalViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val qemu: PodroidQemu,
+    settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
     val vmState: StateFlow<VmState> = qemu.state
+    val bootStage: StateFlow<String> = qemu.bootStage
+    val terminalFontSize: StateFlow<Int> = settingsRepository.terminalFontSize
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 24)
 
     private var terminalView: TerminalView? = null
     private var emulator: TerminalEmulator? = null
@@ -50,8 +58,26 @@ class TerminalViewModel @Inject constructor(
         }
         override fun onTitleChanged(changedSession: TerminalSession) {}
         override fun onSessionFinished(finishedSession: TerminalSession) {}
-        override fun onCopyTextToClipboard(session: TerminalSession, text: String?) {}
-        override fun onPasteTextFromClipboard(session: TerminalSession?) {}
+        override fun onCopyTextToClipboard(session: TerminalSession, text: String?) {
+            if (text != null) {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Terminal", text))
+            }
+        }
+        override fun onPasteTextFromClipboard(session: TerminalSession?) {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            val clip = clipboard.primaryClip
+            if (clip != null && clip.itemCount > 0) {
+                val text = clip.getItemAt(0).coerceToText(context).toString()
+                val bytes = text.toByteArray()
+                try {
+                    qemuStdin?.write(bytes)
+                    qemuStdin?.flush()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to paste", e)
+                }
+            }
+        }
         override fun onBell(session: TerminalSession) {}
         override fun onColorsChanged(session: TerminalSession) {}
         override fun onTerminalCursorStateChange(state: Boolean) {}

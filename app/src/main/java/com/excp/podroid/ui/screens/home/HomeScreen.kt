@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.Button
@@ -149,6 +150,24 @@ fun HomeScreen(
                     text = if (isRunning || isStarting) "Stop Podman" else "Start Podman",
                     style = MaterialTheme.typography.titleMedium,
                 )
+            }
+
+            // Restart Button (only show when running)
+            if (isRunning) {
+                FilledTonalButton(
+                    onClick = { viewModel.restartVm() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Restart VM")
+                }
             }
 
             // Error message

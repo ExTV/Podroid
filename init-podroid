@@ -7,6 +7,7 @@
 if [ "$1" = "--main" ]; then
 
 # ── Core filesystems ──
+echo "[init] Mounting filesystems..."
 mount -t proc proc /proc -o noexec,nosuid,nodev
 mount -t sysfs sys /sys -o noexec,nosuid,nodev
 mount -t devtmpfs devtmpfs /dev -o exec,nosuid,mode=0755,size=2M 2>/dev/null || \
@@ -38,6 +39,7 @@ echo "podroid" > /etc/hostname
 hostname podroid
 
 # ── Kernel modules ──
+echo "[init] Loading kernel modules..."
 KVER=$(uname -r)
 if [ -d "/lib/modules/$KVER" ]; then
     depmod -a 2>/dev/null
@@ -82,6 +84,7 @@ fi
 echo "nameserver 8.8.8.8" > /etc/resolv.conf
 echo "nameserver 1.1.1.1" >> /etc/resolv.conf
 
+echo "[init] Configuring containers..."
 # ── Sysctl for container networking ──
 sysctl -qw net.ipv4.ip_forward=1 2>/dev/null
 sysctl -qw net.ipv4.conf.all.forwarding=1 2>/dev/null
@@ -143,7 +146,10 @@ fi
 # ── Environment ──
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 export HOME=/root
-export TERM=vt100
+export TERM=xterm-256color
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+export CHARSET=UTF-8
 export PODMAN_IGNORE_CGROUPSV1_WARNING=1
 export CONTAINERS_CONF=/etc/containers/containers.conf
 export CONTAINERS_STORAGE_CONF=/etc/containers/storage.conf
@@ -151,6 +157,7 @@ export CONTAINERS_REGISTRIES_CONF=/etc/containers/registries.conf
 
 # ── Console settings ──
 dmesg -n 1 2>/dev/null
+stty rows 24 cols 80 2>/dev/null
 
 # ── Graceful shutdown handler ──
 shutdown_handler() {
@@ -177,15 +184,13 @@ echo "  DNS:        8.8.8.8"
 echo "  Persistent: ${PERSISTENT}"
 echo ""
 
-# Quick connectivity check (background, don't block boot)
-{
-    if wget -q -O /dev/null --timeout=8 http://dl-cdn.alpinelinux.org/alpine/MIRRORS.txt 2>/dev/null; then
-        echo "[init] Internet: OK"
-    else
-        echo "[init] Internet: unavailable (ping won't work, use wget/curl)"
-    fi
-} &
-
+# Quick connectivity check (synchronous so output doesn't overlap shell prompt)
+if wget -q -O /dev/null --timeout=5 http://dl-cdn.alpinelinux.org/alpine/MIRRORS.txt 2>/dev/null; then
+    echo "  Internet:   OK"
+else
+    echo "  Internet:   unavailable"
+fi
+echo ""
 echo "  Ready! Try: podman run --rm alpine echo hello"
 echo ""
 
@@ -195,11 +200,15 @@ echo ""
 cat > /etc/profile <<'PROF'
 export HOME=/root
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-export TERM=linux
+export TERM=xterm-256color
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+export CHARSET=UTF-8
 export PODMAN_IGNORE_CGROUPSV1_WARNING=1
 export CONTAINERS_CONF=/etc/containers/containers.conf
 export CONTAINERS_STORAGE_CONF=/etc/containers/storage.conf
 export CONTAINERS_REGISTRIES_CONF=/etc/containers/registries.conf
+stty rows 24 cols 80 2>/dev/null
 cd /root
 PROF
 
@@ -209,7 +218,7 @@ grep -q '^root:' /etc/passwd 2>/dev/null || echo "root:x:0:0:root:/root:/bin/sh"
 # Use getty to spawn a proper login shell on the serial console.
 # getty sets up the controlling TTY correctly, enabling job control + Ctrl+C.
 while true; do
-    /sbin/getty -n -l /bin/sh 0 ttyAMA0 linux
+    /sbin/getty -n -l /bin/sh 0 ttyAMA0 xterm-256color
     sleep 1
 done
 fi

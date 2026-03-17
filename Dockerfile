@@ -46,7 +46,9 @@ RUN apk update && apk add --no-cache \
     curl \
     e2fsprogs \
     util-linux \
-    openrc
+    openrc \
+    ncurses-terminfo-base \
+    musl-locales
 
 # Podman/container config is written at boot by init-podroid
 

@@ -11,9 +11,11 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -27,11 +29,38 @@ class SettingsRepository @Inject constructor(
 
     companion object {
         val KEY_DARK_THEME = booleanPreferencesKey("dark_theme")
+        val KEY_VM_RAM = intPreferencesKey("vm_ram_mb")
+        val KEY_VM_CPUS = intPreferencesKey("vm_cpus")
+        val KEY_FONT_SIZE = intPreferencesKey("terminal_font_size")
     }
 
     val darkTheme: Flow<Boolean> = context.dataStore.data
         .map { it[KEY_DARK_THEME] ?: true }
 
+    val vmRamMb: Flow<Int> = context.dataStore.data
+        .map { it[KEY_VM_RAM] ?: 1024 }
+
+    val vmCpus: Flow<Int> = context.dataStore.data
+        .map { it[KEY_VM_CPUS] ?: 4 }
+
+    val terminalFontSize: Flow<Int> = context.dataStore.data
+        .map { it[KEY_FONT_SIZE] ?: 24 }
+
     suspend fun setDarkTheme(value: Boolean) =
         context.dataStore.edit { it[KEY_DARK_THEME] = value }
+
+    suspend fun setVmRamMb(value: Int) =
+        context.dataStore.edit { it[KEY_VM_RAM] = value }
+
+    suspend fun setVmCpus(value: Int) =
+        context.dataStore.edit { it[KEY_VM_CPUS] = value }
+
+    suspend fun setTerminalFontSize(value: Int) =
+        context.dataStore.edit { it[KEY_FONT_SIZE] = value }
+
+    suspend fun getVmRamMbSnapshot(): Int =
+        context.dataStore.data.map { it[KEY_VM_RAM] ?: 1024 }.first()
+
+    suspend fun getVmCpusSnapshot(): Int =
+        context.dataStore.data.map { it[KEY_VM_CPUS] ?: 4 }.first()
 }

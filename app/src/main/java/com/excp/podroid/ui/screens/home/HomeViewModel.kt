@@ -38,4 +38,13 @@ class HomeViewModel @Inject constructor(
     fun stopVm() {
         PodroidService.stop(context)
     }
+
+    /** Restart the VM (stop then start). */
+    fun restartVm() {
+        PodroidService.stop(context)
+        // Start after a brief delay to allow stop to complete
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            PodroidService.start(context)
+        }, 2000)
+    }
 }

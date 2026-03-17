@@ -22,6 +22,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -33,6 +35,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -48,6 +51,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.excp.podroid.BuildConfig
 import com.excp.podroid.data.repository.PortForwardRule
 import com.excp.podroid.engine.VmState
 
@@ -60,7 +64,15 @@ fun SettingsScreen(
     val darkTheme by viewModel.darkTheme.collectAsStateWithLifecycle(false)
     val portForwardRules by viewModel.portForwardRules.collectAsStateWithLifecycle()
     val vmState by viewModel.vmState.collectAsStateWithLifecycle()
+    val vmRamMb by viewModel.vmRamMb.collectAsStateWithLifecycle()
+    val vmCpus by viewModel.vmCpus.collectAsStateWithLifecycle()
+    val terminalFontSize by viewModel.terminalFontSize.collectAsStateWithLifecycle()
     var showAddDialog by remember { mutableStateOf(false) }
+    var showResetDialog by remember { mutableStateOf(false) }
+
+    val ramOptions = listOf(512, 1024, 2048, 4096)
+    val cpuOptions = listOf(1, 2, 4, 6, 8)
+    val vmNotRunning = vmState !is VmState.Running && vmState !is VmState.Starting
 
     Scaffold(
         topBar = {
@@ -91,6 +103,97 @@ fun SettingsScreen(
                 checked = darkTheme,
                 onCheckedChange = { viewModel.setDarkTheme(it) },
             )
+
+            Spacer(Modifier.height(16.dp))
+
+            // Terminal Section
+            SettingsSectionHeader("Terminal")
+
+            Text(
+                text = "Font size: $terminalFontSize",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Slider(
+                value = terminalFontSize.toFloat(),
+                onValueChange = { viewModel.setTerminalFontSize(it.toInt()) },
+                valueRange = 12f..40f,
+                steps = 13,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Spacer(Modifier.height(16.dp))
+
+            // VM Resources Section
+            SettingsSectionHeader("VM Resources")
+
+            if (!vmNotRunning) {
+                Text(
+                    text = "Stop the VM to change these settings",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+            }
+
+            Text(
+                text = "Memory: ${vmRamMb} MB",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ramOptions.forEach { ram ->
+                    FilledTonalButton(
+                        onClick = { viewModel.setVmRamMb(ram) },
+                        enabled = vmNotRunning,
+                        modifier = Modifier.weight(1f),
+                        colors = if (vmRamMb == ram) {
+                            androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary,
+                            )
+                        } else {
+                            androidx.compose.material3.ButtonDefaults.filledTonalButtonColors()
+                        },
+                    ) {
+                        Text(if (ram >= 1024) "${ram / 1024}G" else "${ram}M", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            Text(
+                text = "CPU cores: $vmCpus",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                cpuOptions.forEach { cpu ->
+                    FilledTonalButton(
+                        onClick = { viewModel.setVmCpus(cpu) },
+                        enabled = vmNotRunning,
+                        modifier = Modifier.weight(1f),
+                        colors = if (vmCpus == cpu) {
+                            androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary,
+                            )
+                        } else {
+                            androidx.compose.material3.ButtonDefaults.filledTonalButtonColors()
+                        },
+                    ) {
+                        Text("$cpu", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
 
             Spacer(Modifier.height(16.dp))
 
@@ -143,9 +246,48 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(16.dp))
 
+            // Diagnostics Section
+            SettingsSectionHeader("Diagnostics")
+
+            FilledTonalButton(
+                onClick = { viewModel.exportConsoleLogs() },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Default.Share, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Export Console Log")
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            FilledTonalButton(
+                onClick = { showResetDialog = true },
+                enabled = vmNotRunning,
+                modifier = Modifier.fillMaxWidth(),
+                colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                ),
+            ) {
+                Icon(Icons.Default.RestartAlt, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Reset VM")
+            }
+
+            if (!vmNotRunning) {
+                Text(
+                    text = "Stop the VM before resetting",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+
+            Spacer(Modifier.height(16.dp))
+
             SettingsSectionHeader("About")
 
-            SettingsInfoRow("Version", "1.0.0")
+            SettingsInfoRow("Version", BuildConfig.VERSION_NAME)
             SettingsInfoRow("QEMU", "10.2.1")
             SettingsInfoRow("Guest", "AArch64 (ARM64)")
             SettingsInfoRow("Distro", "Alpine Linux")
@@ -162,6 +304,29 @@ fun SettingsScreen(
             onAdd = { hostPort, guestPort, protocol ->
                 viewModel.addPortForward(hostPort, guestPort, protocol)
                 showAddDialog = false
+            },
+        )
+    }
+
+    if (showResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            title = { Text("Reset VM") },
+            text = {
+                Text("This will delete all persistent storage including installed packages, containers, and data. The VM will start fresh on next boot.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.resetVm()
+                    showResetDialog = false
+                }) {
+                    Text("Reset", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetDialog = false }) {
+                    Text("Cancel")
+                }
             },
         )
     }
