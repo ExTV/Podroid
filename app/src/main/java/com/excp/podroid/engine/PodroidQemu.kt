@@ -242,24 +242,25 @@ class PodroidQemu @Inject constructor(
 
     private fun detectBootStage(text: String) {
         when {
-            "Mounting persistent" in text || "Formatting" in text ->
-                _bootStage.value = "Mounting storage..."
-            "overlay" in text ->
-                _bootStage.value = "Setting up overlay..."
-            "Loading kernel modules" in text ->
-                _bootStage.value = "Loading kernel modules..."
-            "Configuring containers" in text ->
-                _bootStage.value = "Configuring containers..."
-            "Waiting for network" in text ->
-                _bootStage.value = "Waiting for network..."
-            "Found" in text && "eth" in text ->
-                _bootStage.value = "Network found"
-            "Starting SSH" in text ->
-                _bootStage.value = "Starting SSH..."
-            "internet " in text || "Internet:" in text ->
-                _bootStage.value = "Almost ready..."
+            // Check terminal conditions first — they may arrive in the same chunk as earlier stages
             "podman run" in text || "Ready!" in text ->
                 _bootStage.value = "Ready"
+            "internet " in text || "Internet:" in text ->
+                _bootStage.value = "Almost ready..."
+            "Starting SSH" in text ->
+                _bootStage.value = "Starting SSH..."
+            "Found" in text && "eth" in text ->
+                _bootStage.value = "Network found"
+            "Waiting for network" in text ->
+                _bootStage.value = "Waiting for network..."
+            "Configuring containers" in text ->
+                _bootStage.value = "Configuring containers..."
+            "Loading kernel modules" in text ->
+                _bootStage.value = "Loading kernel modules..."
+            "overlay" in text ->
+                _bootStage.value = "Setting up overlay..."
+            "Mounting persistent" in text || "Formatting" in text ->
+                _bootStage.value = "Mounting storage..."
         }
     }
 
