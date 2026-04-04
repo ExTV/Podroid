@@ -9,7 +9,6 @@ package com.excp.podroid
 import android.app.Application
 import dagger.hilt.android.HiltAndroidApp
 import java.io.File
-import java.io.RandomAccessFile
 
 /**
  * Application class for Podroid.
@@ -22,7 +21,6 @@ class PodroidApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         extractAssets()
-        ensureStorageImage()
     }
 
     private fun extractAssets() {
@@ -38,7 +36,11 @@ class PodroidApplication : Application() {
         val destFile = File(destDir, assetName)
 
         try {
-            // Always re-extract to ensure latest initrd/kernel is deployed
+            // Try to get the uncompressed asset size for a cheap up-to-date check.
+            // openFd() throws for compressed entries — fall back to always copying in that case.
+            val assetSize = try { assets.openFd(assetName).use { it.length } } catch (_: Exception) { -1L }
+            if (assetSize >= 0 && destFile.exists() && destFile.length() == assetSize) return
+
             assets.open(assetName).use { input ->
                 destFile.parentFile?.mkdirs()
                 destFile.outputStream().use { output ->
@@ -75,17 +77,5 @@ class PodroidApplication : Application() {
         }
     }
 
-    private fun ensureStorageImage() {
-        val storageFile = File(filesDir, "storage.img")
-        if (!storageFile.exists()) {
-            try {
-                // Create a 2GB sparse storage image for persistent container storage
-                RandomAccessFile(storageFile, "rw").use { raf ->
-                    raf.setLength(2L * 1024 * 1024 * 1024) // 2GB
-                }
-            } catch (e: Exception) {
-                // Failed to create storage image - Podman will work without persistence
-            }
-        }
-    }
+
 }

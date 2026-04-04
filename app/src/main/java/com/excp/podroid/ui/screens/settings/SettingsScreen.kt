@@ -23,6 +23,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -52,6 +53,21 @@ import com.excp.podroid.data.repository.PortForwardRule
 import com.excp.podroid.engine.VmState
 
 private val storageSizes = listOf(2, 4, 8, 16, 32, 64)
+
+/** hostPort → guestPort, protocol ("tcp"/"udp"/"both") */
+private data class PortPreset(val name: String, val ports: List<Triple<Int, Int, String>>, val note: String? = null)
+
+private val servicePresets = listOf(
+    PortPreset("Pi-hole",
+        listOf(Triple(5300, 53, "both"), Triple(8080, 80, "tcp")),
+        "DNS on :5300 (Android blocks ports <1024 for apps)"),
+    PortPreset("Nginx",
+        listOf(Triple(8080, 80, "tcp"), Triple(8443, 443, "tcp"))),
+    PortPreset("Gitea",
+        listOf(Triple(3000, 3000, "tcp"), Triple(2222, 22, "tcp"))),
+    PortPreset("Grafana",
+        listOf(Triple(3001, 3000, "tcp"))),
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -231,12 +247,52 @@ fun SettingsScreen(
             // ── Port Forwarding ───────────────────────────────────────
             SettingsSectionHeader("Port Forwarding")
 
+            val phoneIp = viewModel.phoneIp
             Text(
-                text = "Forward ports from the VM to your Android device. Rules apply immediately when the VM is running.",
+                text = "Phone IP: $phoneIp — point your devices here.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+            Text(
+                text = "Rules forward ports from your Android device into the VM. Active immediately when VM is running.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 8.dp),
             )
+
+            // Service presets
+            Text(
+                text = "Quick presets",
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                servicePresets.forEach { preset ->
+                    FilterChip(
+                        selected = false,
+                        onClick = {
+                            preset.ports.forEach { (host, guest, proto) ->
+                                viewModel.addPortForward(host, guest, proto)
+                            }
+                        },
+                        label = { Text(preset.name, style = MaterialTheme.typography.labelSmall) },
+                        modifier = Modifier,
+                    )
+                }
+            }
+            if (servicePresets.any { it.note != null }) {
+                Text(
+                    text = "⚠ Android blocks apps from binding ports < 1024. Pi-hole DNS is mapped to :5300.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
+                )
+            }
 
             if (portForwardRules.isEmpty()) {
                 Text(
@@ -319,7 +375,7 @@ fun SettingsScreen(
             SettingsSectionHeader("About")
 
             SettingsInfoRow("Version", BuildConfig.VERSION_NAME)
-            SettingsInfoRow("QEMU", "11.0.0-rc2")
+            SettingsInfoRow("QEMU", "11.0.0-rc2 (rebuilt)")
             SettingsInfoRow("Architecture", "AArch64 (ARM64)")
             SettingsInfoRow("Linux distro", "Alpine Linux 3.23")
             SettingsInfoRow("Container runtime", "Podman + crun")
@@ -412,6 +468,7 @@ private fun AddPortForwardDialog(
 ) {
     var hostPort by remember { mutableStateOf("") }
     var guestPort by remember { mutableStateOf("") }
+    var protocol by remember { mutableStateOf("tcp") }
     var error by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
@@ -437,6 +494,15 @@ private fun AddPortForwardDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("tcp", "udp", "both").forEach { proto ->
+                        FilterChip(
+                            selected = protocol == proto,
+                            onClick = { protocol = proto },
+                            label = { Text(proto.uppercase(), style = MaterialTheme.typography.labelSmall) },
+                        )
+                    }
+                }
                 if (error != null) {
                     Text(
                         text = error!!,
@@ -454,7 +520,7 @@ private fun AddPortForwardDialog(
                     error = "Enter valid port numbers (1–65535)"
                     return@TextButton
                 }
-                onAdd(hp, gp, "tcp")
+                onAdd(hp, gp, protocol)
             }) {
                 Text("Add")
             }

@@ -35,7 +35,7 @@ class PodroidService : Service() {
     @Inject lateinit var portForwardRepository: PortForwardRepository
     @Inject lateinit var settingsRepository: SettingsRepository
 
-    private val serviceScope = CoroutineScope(Job() + Dispatchers.Main)
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var launchJob: Job? = null
     private var notificationJob: Job? = null
     private var wakeLock: PowerManager.WakeLock? = null

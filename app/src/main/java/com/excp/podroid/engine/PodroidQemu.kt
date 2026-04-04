@@ -310,11 +310,14 @@ class PodroidQemu @Inject constructor(
     ): List<String> {
         val args = mutableListOf<String>()
 
-        args += "-M"; args += "virt"
+        // GICv3 reduces interrupt-related vCPU exits vs the default GICv2
+        args += "-M"; args += "virt,gic-version=3"
         args += "-cpu"; args += "max"
         args += "-smp"; args += "$cpus"
         args += "-m"; args += "$ramMb"
-        args += "-accel"; args += "tcg,thread=multi"
+        // thread=multi (MTTCG): each vCPU runs in its own host thread
+        // tb-size=256: cap JIT translation cache at 256MB — default 1024MB thrashes mobile RAM
+        args += "-accel"; args += "tcg,thread=multi,tb-size=256"
 
         val kernelPath = File(context.filesDir, "vmlinuz-virt")
         val initrdPath = File(context.filesDir, "initrd.img")
@@ -339,15 +342,33 @@ class PodroidQemu @Inject constructor(
 
         val storagePath = File(context.filesDir, "storage.img")
         if (storagePath.exists()) {
-            args += "-device"; args += "virtio-blk-pci,drive=drive1"
-            args += "-drive"; args += "file=${storagePath.absolutePath},if=none,id=drive1,format=raw"
+            // num-queues=cpus: with MTTCG each vCPU can drive its own I/O queue in parallel
+            args += "-device"; args += "virtio-blk-pci,drive=drive1,num-queues=$cpus"
+            // cache=writeback: use host OS page cache instead of direct I/O — major speedup
+            // for container workloads (image pulls, package installs, overlay writes)
+            // aio=threads: thread-based AIO, safe in Android app sandbox (no io_uring/libaio needed)
+            args += "-drive"; args += "file=${storagePath.absolutePath},if=none,id=drive1,format=raw,cache=writeback,aio=threads"
         }
 
-        // Downloads sharing via virtio-9p requires a QEMU build with virtfs enabled.
-        // The current binary does not have it — will be enabled once QEMU 11 is shipped.
+        // virtio-rng: feed host entropy to the guest so /dev/random never blocks.
+        // Without this, container crypto ops (SSH keygen, TLS, package signing) stall under TCG.
+        args += "-object"; args += "rng-random,id=rng0,filename=/dev/urandom"
+        args += "-device"; args += "virtio-rng-pci,rng=rng0"
+
+        // Downloads sharing via virtio-9p — tag must match init-podroid mount call
+        val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(
+            android.os.Environment.DIRECTORY_DOWNLOADS
+        )
+        if (android.os.Environment.isExternalStorageManager() && downloadsDir.exists()) {
+            args += "-fsdev"
+            args += "local,id=fsdev0,path=${downloadsDir.absolutePath},security_model=none"
+            args += "-device"
+            args += "virtio-9p-pci,fsdev=fsdev0,mount_tag=downloads"
+        }
 
         val netdevArg = buildString {
-            append("user,id=net0")
+            // ipv6=off: removes unused IPv6 processing overhead from SLIRP
+            append("user,id=net0,ipv6=off")
             for (rule in portForwards) {
                 append(",hostfwd=${rule.protocol}::${rule.hostPort}-:${rule.guestPort}")
             }

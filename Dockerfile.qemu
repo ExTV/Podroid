@@ -1,0 +1,303 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Podroid — QEMU 11.0.0-rc2 Android ARM64 builder
+#
+# Produces:
+#   libqemu-system-aarch64.so  — QEMU executable (PIE, packaged as .so)
+#   libslirp.so                — SLIRP user-mode networking library
+#   efi-virtio.rom             — VirtIO EFI ROM
+#   keymaps/                   — QEMU keymap files
+#
+# Features enabled:
+#   TCG, KVM, QMP, SLIRP user networking, virtio-9p (virtfs) for Downloads sharing
+# ─────────────────────────────────────────────────────────────────────────────
+
+FROM debian:bookworm AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget curl unzip xz-utils ca-certificates git bzip2 \
+    ninja-build python3 python3-pip \
+    pkg-config flex bison \
+    make cmake autoconf automake libtool \
+    libglib2.0-dev libglib2.0-bin \
+    gettext libintl-perl \
+    binutils-aarch64-linux-gnu \
+    patchelf \
+    && rm -rf /var/lib/apt/lists/*
+
+# Meson — use pip to get a recent version regardless of distro
+RUN pip3 install --break-system-packages meson 2>/dev/null || pip3 install meson
+
+# ── Android NDK r27c ──────────────────────────────────────────────────────────
+ENV NDK_VER=r27c
+RUN wget -q https://dl.google.com/android/repository/android-ndk-${NDK_VER}-linux.zip \
+        -O /tmp/ndk.zip \
+    && unzip -q /tmp/ndk.zip -d /opt \
+    && mv /opt/android-ndk-${NDK_VER} /opt/ndk \
+    && rm /tmp/ndk.zip
+
+ENV NDK=/opt/ndk
+ENV API=34
+ENV TARGET=aarch64-linux-android
+ENV LLVM=${NDK}/toolchains/llvm/prebuilt/linux-x86_64
+ENV CC="${LLVM}/bin/${TARGET}${API}-clang"
+ENV CXX="${LLVM}/bin/${TARGET}${API}-clang++"
+ENV AR="${LLVM}/bin/llvm-ar"
+ENV RANLIB="${LLVM}/bin/llvm-ranlib"
+ENV STRIP="${LLVM}/bin/llvm-strip"
+ENV NM="${LLVM}/bin/llvm-nm"
+ENV SYSROOT="${LLVM}/sysroot"
+
+ENV PREFIX=/opt/deps
+ENV PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig"
+ENV CFLAGS="--sysroot=${SYSROOT} -target ${TARGET}${API} -I${PREFIX}/include -fPIC -O2 -Wno-implicit-function-declaration"
+ENV CXXFLAGS="--sysroot=${SYSROOT} -target ${TARGET}${API} -I${PREFIX}/include -fPIC -O2"
+ENV LDFLAGS="--sysroot=${SYSROOT} -target ${TARGET}${API} -L${PREFIX}/lib"
+
+RUN mkdir -p ${PREFIX}/{lib,include,lib/pkgconfig}
+
+# ── pkg-config wrapper for cross target ───────────────────────────────────────
+# Meson cross builds need a dedicated pkg-config that only looks in our prefix.
+# QEMU configure sets cross-prefix=llvm- so meson looks for llvm-pkg-config.
+RUN printf '#!/bin/sh\nexport PKG_CONFIG_LIBDIR=/opt/deps/lib/pkgconfig\nexport PKG_CONFIG_PATH=\nexec pkg-config "$@"\n' \
+    > /usr/local/bin/aarch64-android-pkg-config \
+    && chmod +x /usr/local/bin/aarch64-android-pkg-config \
+    && ln -s /usr/local/bin/aarch64-android-pkg-config \
+             /opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-pkg-config
+
+# ── Meson cross file ──────────────────────────────────────────────────────────
+RUN cat > /opt/cross-android-aarch64.ini << 'EOF'
+[binaries]
+c       = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang'
+cpp     = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang++'
+ar      = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
+strip   = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
+ranlib  = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib'
+nm      = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm'
+pkg-config = '/usr/local/bin/aarch64-android-pkg-config'
+
+[properties]
+sys_root         = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot'
+pkg_config_libdir = ['/opt/deps/lib/pkgconfig']
+c_args       = ['--sysroot=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot',
+                '-target', 'aarch64-linux-android34',
+                '-I/opt/deps/include',
+                '-I/opt/deps/include/glib-2.0',
+                '-I/opt/deps/lib/glib-2.0/include',
+                '-fPIC', '-O2']
+cpp_args     = ['--sysroot=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot',
+                '-target', 'aarch64-linux-android34',
+                '-I/opt/deps/include',
+                '-I/opt/deps/include/glib-2.0',
+                '-I/opt/deps/lib/glib-2.0/include',
+                '-fPIC', '-O2']
+c_link_args  = ['--sysroot=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot',
+                '-target', 'aarch64-linux-android34',
+                '-L/opt/deps/lib']
+cpp_link_args = ['--sysroot=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot',
+                 '-target', 'aarch64-linux-android34',
+                 '-L/opt/deps/lib']
+
+[host_machine]
+system      = 'linux'
+cpu_family  = 'aarch64'
+cpu         = 'aarch64'
+endian      = 'little'
+EOF
+
+# ── pcre2 (static — required by glib) ────────────────────────────────────────
+RUN wget -q https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.44/pcre2-10.44.tar.gz \
+    && tar xf pcre2-10.44.tar.gz && cd pcre2-10.44 \
+    && ./configure \
+        --host=${TARGET} \
+        --prefix=${PREFIX} \
+        --enable-static \
+        --disable-shared \
+        --disable-pcre2grep-libz \
+        --disable-pcre2grep-libbz2 \
+        --disable-pcre2test-libreadline \
+        CC="${CC}" CFLAGS="${CFLAGS}" AR="${AR}" RANLIB="${RANLIB}" \
+    && make -j$(nproc) install \
+    && cd / && rm -rf pcre2-10.44*
+
+# ── libffi (static — required by glib for GObject) ───────────────────────────
+RUN wget -q https://github.com/libffi/libffi/releases/download/v3.4.6/libffi-3.4.6.tar.gz \
+    && tar xf libffi-3.4.6.tar.gz && cd libffi-3.4.6 \
+    && ./configure \
+        --host=${TARGET} \
+        --prefix=${PREFIX} \
+        --enable-static \
+        --disable-shared \
+        --disable-docs \
+        CC="${CC}" CFLAGS="${CFLAGS}" AR="${AR}" RANLIB="${RANLIB}" \
+    && make -j$(nproc) install \
+    && cd / && rm -rf libffi-3.4.6*
+
+# ── glib (static — core QEMU dependency) ─────────────────────────────────────
+RUN wget -q https://download.gnome.org/sources/glib/2.82/glib-2.82.5.tar.xz \
+    && tar xf glib-2.82.5.tar.xz && cd glib-2.82.5 \
+    && PKG_CONFIG_PATH=${PKG_CONFIG_PATH} \
+       meson setup _build \
+        --cross-file /opt/cross-android-aarch64.ini \
+        --prefix ${PREFIX} \
+        --default-library static \
+        --buildtype release \
+        -Dselinux=disabled \
+        -Dlibmount=disabled \
+        -Dxattr=false \
+        -Dtests=false \
+        -Ddocumentation=false \
+        -Dman-pages=disabled \
+        -Dintrospection=disabled \
+        -Dnls=disabled \
+    && ninja -C _build -j$(nproc) && ninja -C _build install \
+    && cd / && rm -rf glib-2.82.5*
+
+# ── pixman (static — required by QEMU even with -display none) ───────────────
+# 0.44+ is meson-only; use 0.42.2 which still has autotools
+RUN wget -q https://www.cairographics.org/releases/pixman-0.42.2.tar.gz \
+    && tar xf pixman-0.42.2.tar.gz && cd pixman-0.42.2 \
+    && ./configure \
+        --host=${TARGET} \
+        --prefix=${PREFIX} \
+        --enable-static \
+        --disable-shared \
+        --disable-arm-iwmmxt \
+        --disable-arm-simd \
+        --disable-arm-neon \
+        --disable-arm-a64-neon \
+        ac_cv_arm_a64_neon=no \
+        CC="${CC}" CFLAGS="${CFLAGS}" AR="${AR}" RANLIB="${RANLIB}" \
+    && make -j$(nproc) install \
+    && cd / && rm -rf pixman-0.42.2*
+
+# ── libslirp (shared — dynamic dep, matches how current binary links) ─────────
+RUN wget -q https://gitlab.freedesktop.org/slirp/libslirp/-/archive/v4.8.0/libslirp-v4.8.0.tar.gz \
+    && tar xf libslirp-v4.8.0.tar.gz && cd libslirp-v4.8.0 \
+    && PKG_CONFIG_LIBDIR=${PKG_CONFIG_PATH} \
+       PKG_CONFIG_PATH=${PKG_CONFIG_PATH} \
+       meson setup _build \
+        --cross-file /opt/cross-android-aarch64.ini \
+        --prefix ${PREFIX} \
+        --default-library shared \
+        --buildtype release \
+    && ninja -C _build -j$(nproc) && ninja -C _build install \
+    && cd / && rm -rf libslirp-v4.8.0* \
+    && patchelf --set-soname libslirp.so ${PREFIX}/lib/libslirp.so.0
+
+# ── Android stubs ──────────────────────────────────────────────────────────────
+# shm_open/shm_unlink are NOT exported by the NDK's libc stubs. QEMU's configure
+# detects them via the header declaration and compiles qemu_shm_alloc() with
+# shm_open() calls, then the linker fails with --no-undefined.
+# Fix: implement shm_open/shm_unlink via memfd_create (bionic API 26+). QEMU's
+# qemu_shm_alloc() creates a name, immediately shm_unlink()s it, then ftruncates
+# the fd — the exact semantics memfd_create provides.
+RUN cat > /tmp/shm_android.c << 'CEOF'
+/*
+ * Android shim: shm_open/shm_unlink -> memfd_create
+ *
+ * shm_open/shm_unlink are not exported by NDK libc stubs. QEMU's
+ * qemu_shm_alloc() creates a named shm object, immediately shm_unlink()s it,
+ * then ftruncates the fd — exactly what memfd_create provides (API 26+).
+ */
+#include <sys/syscall.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#ifndef MFD_CLOEXEC
+#define MFD_CLOEXEC 0x0001U
+#endif
+int shm_open(const char *name, int oflag, mode_t mode) {
+    return (int)syscall(__NR_memfd_create, name ? name : "shm", MFD_CLOEXEC);
+}
+int shm_unlink(const char *name) { (void)name; return 0; }
+CEOF
+RUN ${CC} ${CFLAGS} -c /tmp/shm_android.c -o /tmp/shm_android.o \
+    && ${AR} rcs ${PREFIX}/lib/librt.a /tmp/shm_android.o
+
+# ── libattr (xattr functions live in Android libc, but QEMU requires this lib) ─
+# Build attr-2.5.2 from source (tiny library, ~30 seconds)
+RUN wget -q https://download.savannah.gnu.org/releases/attr/attr-2.5.2.tar.gz \
+    && tar xf attr-2.5.2.tar.gz && cd attr-2.5.2 \
+    && ./configure \
+        --host=${TARGET} \
+        --prefix=${PREFIX} \
+        --enable-static \
+        --disable-shared \
+        --disable-nls \
+        CC="${CC}" CFLAGS="${CFLAGS}" AR="${AR}" RANLIB="${RANLIB}" \
+    && make -j$(nproc) install \
+    && cd / && rm -rf attr-2.5.2* \
+    && cp ${PREFIX}/lib/libattr.a \
+          ${SYSROOT}/usr/lib/aarch64-linux-android/libattr.a \
+    && ln -sf ${PREFIX}/lib/pkgconfig/libattr.pc \
+              ${PREFIX}/lib/pkgconfig/attr.pc \
+    && cp ${PREFIX}/lib/libattr.a \
+          ${SYSROOT}/usr/lib/aarch64-linux-android/34/libattr.a
+
+# ── QEMU 11.0.0-rc2 ──────────────────────────────────────────────────────────
+RUN wget -q https://download.qemu.org/qemu-11.0.0-rc2.tar.xz \
+    && tar xf qemu-11.0.0-rc2.tar.xz
+
+# Patch meson.build: force libattr find_library to use our cross-compiled prefix
+# Android: xattr functions live in libc. Force libattr = declare_dependency()
+# so QEMU compiles virtfs without needing an external -lattr.
+RUN python3 -c "c=open('qemu-11.0.0-rc2/meson.build').read(); old='libattr = not_found\nhave_old_libattr = false'; new='libattr = declare_dependency()\nhave_old_libattr = false'; c2=c.replace(old,new,1); open('qemu-11.0.0-rc2/meson.build','w').write(c2); print('patched' if c!=c2 else 'ERROR:no change')"
+
+# Android sys/stat.h defines st_atime_nsec etc. as macros which break QEMU's
+# 9p struct field declarations. Undefine them at the top of the header.
+RUN printf '#undef st_atime_nsec\n#undef st_mtime_nsec\n#undef st_ctime_nsec\n' \
+    | cat - qemu-11.0.0-rc2/fsdev/9p-marshal.h > /tmp/9p-marshal.h \
+    && mv /tmp/9p-marshal.h qemu-11.0.0-rc2/fsdev/9p-marshal.h
+
+RUN cd qemu-11.0.0-rc2 \
+    && PKG_CONFIG_PATH=${PKG_CONFIG_PATH} \
+       ./configure \
+        --cc="${CC}" \
+        --cxx="${CXX}" \
+        --host-cc="gcc" \
+        --cross-prefix="${LLVM}/bin/llvm-" \
+        --extra-cflags="${CFLAGS} -Wno-error=implicit-function-declaration -UCONFIG_POSIX_SHM" \
+        --extra-ldflags="${LDFLAGS} -L${SYSROOT}/usr/lib/aarch64-linux-android/${API} -Wl,-rpath-link,${PREFIX}/lib" \
+        --prefix=/opt/qemu-out \
+        --target-list=aarch64-softmmu \
+        --without-default-features \
+        --enable-tcg \
+        --enable-kvm \
+        --enable-system \
+        --enable-slirp \
+        --enable-virtfs \
+        --enable-pie \
+        --disable-docs \
+        --disable-gtk \
+        --disable-sdl \
+        --disable-opengl \
+        --disable-vnc \
+        --disable-capstone \
+        --disable-bpf \
+        --disable-cap-ng \
+        --disable-seccomp \
+        --disable-libiscsi \
+        --disable-libnfs \
+        --disable-libssh \
+        --disable-curl \
+        --disable-spice \
+        --disable-vde \
+        --disable-linux-io-uring \
+    && make -j$(nproc) \
+    && make install
+
+# ── Rename binary to .so for Android packaging ────────────────────────────────
+RUN cp /opt/qemu-out/bin/qemu-system-aarch64 \
+       /opt/qemu-out/libqemu-system-aarch64.so \
+    && ${STRIP} /opt/qemu-out/libqemu-system-aarch64.so \
+    && cp ${PREFIX}/lib/libslirp.so.0 /opt/qemu-out/libslirp.so \
+    && ${STRIP} /opt/qemu-out/libslirp.so
+
+# ── Final image with just the artifacts ───────────────────────────────────────
+FROM debian:bookworm-slim AS artifacts
+COPY --from=builder /opt/qemu-out/libqemu-system-aarch64.so /out/
+COPY --from=builder /opt/qemu-out/libslirp.so               /out/
+COPY --from=builder /opt/qemu-out/share/qemu/efi-virtio.rom  /out/qemu/
+COPY --from=builder /opt/qemu-out/share/qemu/keymaps/        /out/qemu/keymaps/

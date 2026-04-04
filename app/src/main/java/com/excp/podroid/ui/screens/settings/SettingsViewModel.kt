@@ -76,15 +76,29 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsRepository.setTerminalFontSize(value) }
     }
 
+    // "both" expands into separate TCP + UDP rules
     fun addPortForward(hostPort: Int, guestPort: Int, protocol: String = "tcp") {
-        val rule = PortForwardRule(hostPort, guestPort, protocol)
+        val protos = if (protocol == "both") listOf("tcp", "udp") else listOf(protocol)
         viewModelScope.launch {
-            portForwardRepository.addRule(rule)
-            if (podroidQemu.state.value is VmState.Running) {
-                podroidQemu.qmpClient.addPortForward(hostPort, guestPort, protocol)
+            protos.forEach { proto ->
+                val rule = PortForwardRule(hostPort, guestPort, proto)
+                portForwardRepository.addRule(rule)
+                if (podroidQemu.state.value is VmState.Running) {
+                    podroidQemu.qmpClient.addPortForward(hostPort, guestPort, proto)
+                }
             }
         }
     }
+
+    /** Current LAN IP of the Android device — shown next to port forward rules. */
+    val phoneIp: String
+        get() = try {
+            java.net.NetworkInterface.getNetworkInterfaces()
+                ?.asSequence()
+                ?.flatMap { it.inetAddresses.asSequence() }
+                ?.firstOrNull { !it.isLoopbackAddress && it is java.net.Inet4Address }
+                ?.hostAddress ?: "unknown"
+        } catch (_: Exception) { "unknown" }
 
     fun removePortForward(rule: PortForwardRule) {
         viewModelScope.launch {

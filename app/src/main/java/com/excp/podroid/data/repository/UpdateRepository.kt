@@ -25,16 +25,16 @@ class UpdateRepository @Inject constructor(
 
     suspend fun checkForUpdate(currentVersion: String): UpdateInfo? = withContext(Dispatchers.IO) {
         try {
-            val json = URL("https://api.github.com/repos/ExTV/Podroid/releases/latest")
-                .openConnection()
-                .apply {
-                    connectTimeout = 5000
-                    readTimeout = 5000
-                    setRequestProperty("Accept", "application/vnd.github+json")
-                }
-                .getInputStream()
-                .bufferedReader()
-                .readText()
+            val connection = URL("https://api.github.com/repos/ExTV/Podroid/releases/latest")
+                .openConnection() as java.net.HttpURLConnection
+            connection.connectTimeout = 5000
+            connection.readTimeout = 5000
+            connection.setRequestProperty("Accept", "application/vnd.github+json")
+            val json = try {
+                connection.inputStream.bufferedReader().use { it.readText() }
+            } finally {
+                connection.disconnect()
+            }
 
             val obj = JSONObject(json)
             val tag = obj.getString("tag_name").trimStart('v')
