@@ -7,6 +7,7 @@
  */
 package com.excp.podroid.service
 
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -85,7 +86,8 @@ class PodroidService : Service() {
                 PowerManager.PARTIAL_WAKE_LOCK,
                 "Podroid::VmWakeLock"
             ).apply {
-                acquire()
+                @SuppressLint("WakelockTimeout")
+                acquire() // VM must run indefinitely — timeout would kill it
             }
             Log.d(TAG, "WakeLock acquired")
         }
@@ -140,7 +142,11 @@ class PodroidService : Service() {
             }
 
             releaseWakeLock()
-            stopForeground(STOP_FOREGROUND_REMOVE)
+            if (android.os.Build.VERSION.SDK_INT >= 33) {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                } else {
+                    @Suppress("DEPRECATION") stopForeground(true)
+                }
             stopSelf()
         }
     }

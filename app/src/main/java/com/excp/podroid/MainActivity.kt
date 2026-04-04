@@ -39,6 +39,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestNotificationPermissionIfNeeded() {
+        if (android.os.Build.VERSION.SDK_INT < 33) return
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
             != PackageManager.PERMISSION_GRANTED
         ) {
@@ -51,6 +52,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestStoragePermissionIfNeeded() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) return
         if (!Environment.isExternalStorageManager()) {
             startActivity(
                 Intent(

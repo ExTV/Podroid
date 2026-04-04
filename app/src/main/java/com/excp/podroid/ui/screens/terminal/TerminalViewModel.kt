@@ -7,6 +7,7 @@
  */
 package com.excp.podroid.ui.screens.terminal
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Build
 import android.os.VibrationEffect
@@ -47,6 +48,7 @@ class TerminalViewModel @Inject constructor(
     val terminalFontSize: StateFlow<Int> = settingsRepository.terminalFontSize
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 20)
 
+    @SuppressLint("StaticFieldLeak") // Nulled in onCleared(); ViewModel is nav-scoped, no real leak
     private var terminalView: TerminalView? = null
     private var emulator: TerminalEmulator? = null
     private var attached = false
@@ -182,12 +184,7 @@ class TerminalViewModel @Inject constructor(
                 extraAlt = false
                 return true
             }
-            if ((ctrlDown || extraCtrl) && codePoint in 96..122) {
-                qemu.writeToConsole(byteArrayOf((codePoint - 96).toByte()))
-                extraCtrl = false
-                extraAlt = false
-                return true
-            }
+
 
             val chars = Character.toChars(codePoint)
             val charBytes = String(chars).toByteArray(Charsets.UTF_8)

@@ -24,7 +24,7 @@ Podroid spins up a lightweight Alpine Linux VM on your phone using QEMU and give
 ## Requirements
 
 - **arm64** Android device
-- Android **14+** (API 34)
+- Android **8.0+** (API 26)
 - ~150 MB free storage
 
 ## Quick Start

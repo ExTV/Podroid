@@ -82,8 +82,13 @@ echo "nameserver 8.8.8.8"  >> /etc/resolv.conf
 echo "nameserver 1.1.1.1"  >> /etc/resolv.conf
 
 # ── Downloads folder ─────────────────────────────────────────────────────────
+# msize=1048576: 1MB message size instead of the default 8KB — reduces round-trips
+#   128x for large files (400MB = 400 trips instead of 51200)
+# cache=loose: guest page-caches data already read; reads the same file twice
+#   without going back to the host
+# noatime: skip access time writes on every read
 mkdir -p /mnt/downloads
-if mount -t 9p -o trans=virtio,version=9p2000.L,rw downloads /mnt/downloads 2>/dev/null; then
+if mount -t 9p -o trans=virtio,version=9p2000.L,rw,msize=1048576,cache=loose,noatime downloads /mnt/downloads 2>/dev/null; then
     echo "[init] Downloads folder mounted at /mnt/downloads"
 fi
 

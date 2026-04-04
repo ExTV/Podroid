@@ -21,6 +21,9 @@
     <!-- Keep CPU awake while VM is running -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- Terminal bell haptic feedback (used by Termux terminal view) -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <!-- Foreground service for QEMU process -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
@@ -59,7 +62,6 @@
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|keyboardHidden|keyboard"
             android:exported="true"
-            android:label="@string/app_name"
             android:theme="@style/Theme.Podroid"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>

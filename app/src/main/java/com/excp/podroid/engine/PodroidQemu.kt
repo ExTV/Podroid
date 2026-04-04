@@ -8,6 +8,7 @@
  */
 package com.excp.podroid.engine
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.util.Log
 import com.excp.podroid.data.repository.PortForwardRule
@@ -28,6 +29,7 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
+@SuppressLint("StaticFieldLeak") // ApplicationContext — lives as long as the process, no leak
 @Singleton
 class PodroidQemu @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -359,7 +361,8 @@ class PodroidQemu @Inject constructor(
         val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(
             android.os.Environment.DIRECTORY_DOWNLOADS
         )
-        if (android.os.Environment.isExternalStorageManager() && downloadsDir.exists()) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R &&
+            android.os.Environment.isExternalStorageManager() && downloadsDir.exists()) {
             args += "-fsdev"
             args += "local,id=fsdev0,path=${downloadsDir.absolutePath},security_model=none"
             args += "-device"
