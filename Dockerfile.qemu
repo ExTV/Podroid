@@ -1,14 +1,21 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Podroid — QEMU 11.0.0-rc2 Android ARM64 builder
+# Podroid — QEMU 10.2.1 Android ARM64 builder
 #
 # Produces:
 #   libqemu-system-aarch64.so  — QEMU executable (PIE, packaged as .so)
-#   libslirp.so                — SLIRP user-mode networking library
 #   efi-virtio.rom             — VirtIO EFI ROM
 #   keymaps/                   — QEMU keymap files
 #
 # Features enabled:
-#   TCG, KVM, QMP, SLIRP user networking, virtio-9p (virtfs) for Downloads sharing
+#   TCG, KVM, QMP, SLIRP user networking (bundled), virtio-9p (virtfs) for
+#   Downloads sharing
+#
+# QEMU version pinned to 10.2.1.
+# Android 15+ on Pixel (Tensor) uses PAC (Pointer Authentication). QEMU's default
+# sigaltstack coroutine backend calls siglongjmp across alternate signal stacks,
+# which fails PAC validation and raises SIGILL (ESR PAC Exception).
+# Fix: --with-coroutine=ucontext uses swapcontext instead of siglongjmp, which
+# saves/restores the full register context correctly under PAC.
 # ─────────────────────────────────────────────────────────────────────────────
 
 FROM debian:bookworm AS builder
@@ -51,9 +58,10 @@ ENV SYSROOT="${LLVM}/sysroot"
 
 ENV PREFIX=/opt/deps
 ENV PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig"
-ENV CFLAGS="--sysroot=${SYSROOT} -target ${TARGET}${API} -I${PREFIX}/include -fPIC -O2 -Wno-implicit-function-declaration"
-ENV CXXFLAGS="--sysroot=${SYSROOT} -target ${TARGET}${API} -I${PREFIX}/include -fPIC -O2"
-ENV LDFLAGS="--sysroot=${SYSROOT} -target ${TARGET}${API} -L${PREFIX}/lib"
+# -march=armv8-a: disables SVE/SVE2 JIT paths that trip up on Pixel 10 (Tensor G5, ARMv9.2)
+ENV CFLAGS="--sysroot=${SYSROOT} -target ${TARGET}${API} -I${PREFIX}/include -fPIC -O2 -march=armv8-a -Wno-implicit-function-declaration"
+ENV CXXFLAGS="--sysroot=${SYSROOT} -target ${TARGET}${API} -I${PREFIX}/include -fPIC -O2 -march=armv8-a"
+ENV LDFLAGS="--sysroot=${SYSROOT} -target ${TARGET}${API} -L${PREFIX}/lib -Wl,-z,max-page-size=16384"
 
 RUN mkdir -p ${PREFIX}/{lib,include,lib/pkgconfig}
 
@@ -85,19 +93,21 @@ c_args       = ['--sysroot=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroo
                 '-I/opt/deps/include',
                 '-I/opt/deps/include/glib-2.0',
                 '-I/opt/deps/lib/glib-2.0/include',
-                '-fPIC', '-O2']
+                '-fPIC', '-O2', '-march=armv8-a']
 cpp_args     = ['--sysroot=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot',
                 '-target', 'aarch64-linux-android34',
                 '-I/opt/deps/include',
                 '-I/opt/deps/include/glib-2.0',
                 '-I/opt/deps/lib/glib-2.0/include',
-                '-fPIC', '-O2']
+                '-fPIC', '-O2', '-march=armv8-a']
 c_link_args  = ['--sysroot=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot',
                 '-target', 'aarch64-linux-android34',
-                '-L/opt/deps/lib']
+                '-L/opt/deps/lib',
+                '-Wl,-z,max-page-size=16384']
 cpp_link_args = ['--sysroot=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot',
                  '-target', 'aarch64-linux-android34',
-                 '-L/opt/deps/lib']
+                 '-L/opt/deps/lib',
+                 '-Wl,-z,max-page-size=16384']
 
 [host_machine]
 system      = 'linux'
@@ -172,52 +182,7 @@ RUN wget -q https://www.cairographics.org/releases/pixman-0.42.2.tar.gz \
     && make -j$(nproc) install \
     && cd / && rm -rf pixman-0.42.2*
 
-# ── libslirp (shared — dynamic dep, matches how current binary links) ─────────
-RUN wget -q https://gitlab.freedesktop.org/slirp/libslirp/-/archive/v4.8.0/libslirp-v4.8.0.tar.gz \
-    && tar xf libslirp-v4.8.0.tar.gz && cd libslirp-v4.8.0 \
-    && PKG_CONFIG_LIBDIR=${PKG_CONFIG_PATH} \
-       PKG_CONFIG_PATH=${PKG_CONFIG_PATH} \
-       meson setup _build \
-        --cross-file /opt/cross-android-aarch64.ini \
-        --prefix ${PREFIX} \
-        --default-library shared \
-        --buildtype release \
-    && ninja -C _build -j$(nproc) && ninja -C _build install \
-    && cd / && rm -rf libslirp-v4.8.0* \
-    && patchelf --set-soname libslirp.so ${PREFIX}/lib/libslirp.so.0
-
-# ── Android stubs ──────────────────────────────────────────────────────────────
-# shm_open/shm_unlink are NOT exported by the NDK's libc stubs. QEMU's configure
-# detects them via the header declaration and compiles qemu_shm_alloc() with
-# shm_open() calls, then the linker fails with --no-undefined.
-# Fix: implement shm_open/shm_unlink via memfd_create (bionic API 26+). QEMU's
-# qemu_shm_alloc() creates a name, immediately shm_unlink()s it, then ftruncates
-# the fd — the exact semantics memfd_create provides.
-RUN cat > /tmp/shm_android.c << 'CEOF'
-/*
- * Android shim: shm_open/shm_unlink -> memfd_create
- *
- * shm_open/shm_unlink are not exported by NDK libc stubs. QEMU's
- * qemu_shm_alloc() creates a named shm object, immediately shm_unlink()s it,
- * then ftruncates the fd — exactly what memfd_create provides (API 26+).
- */
-#include <sys/syscall.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#ifndef MFD_CLOEXEC
-#define MFD_CLOEXEC 0x0001U
-#endif
-int shm_open(const char *name, int oflag, mode_t mode) {
-    return (int)syscall(__NR_memfd_create, name ? name : "shm", MFD_CLOEXEC);
-}
-int shm_unlink(const char *name) { (void)name; return 0; }
-CEOF
-RUN ${CC} ${CFLAGS} -c /tmp/shm_android.c -o /tmp/shm_android.o \
-    && ${AR} rcs ${PREFIX}/lib/librt.a /tmp/shm_android.o
-
-# ── libattr (xattr functions live in Android libc, but QEMU requires this lib) ─
-# Build attr-2.5.2 from source (tiny library, ~30 seconds)
+# ── libattr (static — xattr support for virtfs/9p) ───────────────────────────
 RUN wget -q https://download.savannah.gnu.org/releases/attr/attr-2.5.2.tar.gz \
     && tar xf attr-2.5.2.tar.gz && cd attr-2.5.2 \
     && ./configure \
@@ -236,30 +201,106 @@ RUN wget -q https://download.savannah.gnu.org/releases/attr/attr-2.5.2.tar.gz \
     && cp ${PREFIX}/lib/libattr.a \
           ${SYSROOT}/usr/lib/aarch64-linux-android/34/libattr.a
 
-# ── QEMU 11.0.0-rc2 ──────────────────────────────────────────────────────────
-RUN wget -q https://download.qemu.org/qemu-11.0.0-rc2.tar.xz \
-    && tar xf qemu-11.0.0-rc2.tar.xz
+# ── QEMU 10.2.1 ──────────────────────────────────────────────────────────────
+RUN wget -q https://download.qemu.org/qemu-10.2.1.tar.xz \
+    && tar xf qemu-10.2.1.tar.xz
 
-# Patch meson.build: force libattr find_library to use our cross-compiled prefix
-# Android: xattr functions live in libc. Force libattr = declare_dependency()
-# so QEMU compiles virtfs without needing an external -lattr.
-RUN python3 -c "c=open('qemu-11.0.0-rc2/meson.build').read(); old='libattr = not_found\nhave_old_libattr = false'; new='libattr = declare_dependency()\nhave_old_libattr = false'; c2=c.replace(old,new,1); open('qemu-11.0.0-rc2/meson.build','w').write(c2); print('patched' if c!=c2 else 'ERROR:no change')"
+# Patch 1 (VirtuDroid android-no-librt): make librt optional.
+# Android Bionic does not have a separate librt; the functions are in libc.
+RUN sed -i "s/rt = cc.find_library('rt', required: true)/rt = cc.find_library('rt', required: false)/" \
+    qemu-10.2.1/meson.build
 
-# Android sys/stat.h defines st_atime_nsec etc. as macros which break QEMU's
-# 9p struct field declarations. Undefine them at the top of the header.
+# Patch 2 (VirtuDroid android-no-shm-open): use memfd_create instead of shm_open on Android.
+# shm_open is not exported by Android's NDK libc stubs; memfd_create (API 26+) gives
+# the same anonymous-shared-memory semantics that qemu_shm_alloc() needs.
+RUN python3 - << 'PYEOF'
+import re, sys
+path = 'qemu-10.2.1/util/oslib-posix.c'
+src = open(path).read()
+android_impl = r'''#ifdef __ANDROID__
+#include <sys/syscall.h>
+int qemu_shm_alloc(size_t size, Error **errp)
+{
+    int fd;
+
+    fd = syscall(__NR_memfd_create, "qemu-shm", 0U);
+    if (fd < 0) {
+        error_setg_errno(errp, errno, "memfd_create failed");
+        return -1;
+    }
+    if (ftruncate(fd, size) == -1) {
+        error_setg_errno(errp, errno,
+                         "failed to resize shared memory to %zu", size);
+        close(fd);
+        return -1;
+    }
+    return fd;
+}
+#else
+'''
+target = 'int qemu_shm_alloc(size_t size, Error **errp)'
+if android_impl.split('#else\n')[1].strip().startswith(target) and target in src:
+    sys.exit(0)  # already patched
+idx = src.find(target)
+if idx < 0:
+    print("ERROR: qemu_shm_alloc not found in oslib-posix.c", file=sys.stderr)
+    sys.exit(1)
+# Find end of function — match closing brace at column 0
+end_match = re.search(r'\n\}', src[idx:])
+if not end_match:
+    print("ERROR: could not find end of qemu_shm_alloc", file=sys.stderr)
+    sys.exit(1)
+end_pos = idx + end_match.end()
+new_src = src[:idx] + android_impl + src[idx:end_pos] + '\n#endif /* __ANDROID__ */' + src[end_pos:]
+open(path, 'w').write(new_src)
+print("Patched oslib-posix.c with Android memfd_create shm implementation")
+PYEOF
+
+# Patch meson.build: declare libattr as a found dependency without pkg-config lookup.
+# Android provides xattr functions in libc; virtfs/9p can use them without a
+# separate libattr-devel. We override the dependency check to unblock configure.
+RUN python3 - << 'PYEOF'
+import re
+path = 'qemu-10.2.1/meson.build'
+src = open(path).read()
+
+# QEMU 11.x pattern
+new = src.replace(
+    "libattr = not_found\nhave_old_libattr = false",
+    "libattr = declare_dependency()\nhave_old_libattr = false"
+)
+if new != src:
+    print("Patched libattr (11.x pattern)")
+else:
+    # QEMU 10.x: libattr detection via dependency()
+    new, n = re.subn(
+        r"(libattr\s*=\s*)dependency\('libattr'[^)]*\)",
+        r"\1declare_dependency()",
+        src
+    )
+    if n:
+        print(f"Patched libattr (10.x pattern, {n} substitution(s))")
+    else:
+        print("WARNING: could not find libattr pattern in meson.build — virtfs may fail")
+
+open(path, 'w').write(new)
+PYEOF
+
+# Android sys/stat.h defines st_atime_nsec etc. as macros which clash with
+# QEMU's 9p struct field declarations. Undefine them before the header.
 RUN printf '#undef st_atime_nsec\n#undef st_mtime_nsec\n#undef st_ctime_nsec\n' \
-    | cat - qemu-11.0.0-rc2/fsdev/9p-marshal.h > /tmp/9p-marshal.h \
-    && mv /tmp/9p-marshal.h qemu-11.0.0-rc2/fsdev/9p-marshal.h
+    | cat - qemu-10.2.1/fsdev/9p-marshal.h > /tmp/9p-marshal.h \
+    && mv /tmp/9p-marshal.h qemu-10.2.1/fsdev/9p-marshal.h
 
-RUN cd qemu-11.0.0-rc2 \
+RUN cd qemu-10.2.1 \
     && PKG_CONFIG_PATH=${PKG_CONFIG_PATH} \
        ./configure \
         --cc="${CC}" \
         --cxx="${CXX}" \
         --host-cc="gcc" \
         --cross-prefix="${LLVM}/bin/llvm-" \
-        --extra-cflags="${CFLAGS} -Wno-error=implicit-function-declaration -UCONFIG_POSIX_SHM" \
-        --extra-ldflags="${LDFLAGS} -L${SYSROOT}/usr/lib/aarch64-linux-android/${API} -Wl,-rpath-link,${PREFIX}/lib" \
+        --extra-cflags="-fPIC -DANDROID -march=armv8-a -I${PREFIX}/include -I${PREFIX}/include/glib-2.0 -I${PREFIX}/lib/glib-2.0/include -Wno-error=implicit-function-declaration" \
+        --extra-ldflags="-L${PREFIX}/lib -L${SYSROOT}/usr/lib/aarch64-linux-android/${API} -Wl,-rpath-link,${PREFIX}/lib -Wl,-z,max-page-size=16384" \
         --prefix=/opt/qemu-out \
         --target-list=aarch64-softmmu \
         --without-default-features \
@@ -269,14 +310,13 @@ RUN cd qemu-11.0.0-rc2 \
         --enable-slirp \
         --enable-virtfs \
         --enable-pie \
+        --disable-werror \
         --disable-docs \
         --disable-gtk \
         --disable-sdl \
         --disable-opengl \
         --disable-vnc \
         --disable-capstone \
-        --disable-bpf \
-        --disable-cap-ng \
         --disable-seccomp \
         --disable-libiscsi \
         --disable-libnfs \
@@ -285,18 +325,28 @@ RUN cd qemu-11.0.0-rc2 \
         --disable-spice \
         --disable-vde \
         --disable-linux-io-uring \
+        --with-coroutine=ucontext \
     && make -j$(nproc) \
     && make install
 
-# ── Rename binary to .so for Android packaging ────────────────────────────────
+# ── Rename binary to .so; fix libslirp soname for Android APK packaging ───────
+# Android APK packaging only extracts files matching lib*.so (no version suffix).
+# QEMU was compiled with libslirp.so.0 as the soname. We rename the library to
+# libslirp.so, update its soname, and update QEMU's NEEDED entry to match.
 RUN cp /opt/qemu-out/bin/qemu-system-aarch64 \
        /opt/qemu-out/libqemu-system-aarch64.so \
+    && cp /opt/qemu-out/lib/libslirp.so.0 \
+          /opt/qemu-out/libslirp.so \
+    && patchelf --set-soname libslirp.so /opt/qemu-out/libslirp.so \
+    && patchelf --replace-needed libslirp.so.0 libslirp.so \
+                /opt/qemu-out/libqemu-system-aarch64.so \
     && ${STRIP} /opt/qemu-out/libqemu-system-aarch64.so \
-    && cp ${PREFIX}/lib/libslirp.so.0 /opt/qemu-out/libslirp.so \
     && ${STRIP} /opt/qemu-out/libslirp.so
 
 # ── Final image with just the artifacts ───────────────────────────────────────
 FROM debian:bookworm-slim AS artifacts
+RUN apt-get update && apt-get install -y --no-install-recommends patchelf && rm -rf /var/lib/apt/lists/*
+RUN mkdir -p /out/qemu/keymaps
 COPY --from=builder /opt/qemu-out/libqemu-system-aarch64.so /out/
 COPY --from=builder /opt/qemu-out/libslirp.so               /out/
 COPY --from=builder /opt/qemu-out/share/qemu/efi-virtio.rom  /out/qemu/

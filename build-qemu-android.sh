@@ -1,7 +1,7 @@
 #!/bin/bash
 # ─────────────────────────────────────────────────────────────────────────────
 # build-qemu-android.sh
-# Builds QEMU 11.0.0-rc2 for Android ARM64 with virtfs support.
+# Builds QEMU 10.2.1 for Android ARM64 with virtfs support.
 # Replaces app/src/main/jniLibs/arm64-v8a/libqemu-system-aarch64.so
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
@@ -10,7 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 IMAGE="podroid-qemu-builder"
 CONTAINER="podroid-qemu-extract"
 
-echo "=== [1/4] Building QEMU 11.0.0-rc2 for Android ARM64 ==="
+echo "=== [1/4] Building QEMU 10.2.1 for Android ARM64 ==="
 echo "      This will take 20-40 minutes on first run."
 echo ""
 

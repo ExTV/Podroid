@@ -10,7 +10,7 @@ lifecycleRuntimeKtx = "2.9.0"
 lifecycleViewmodelCompose = "2.9.0"
 
 # Compose
-composeBom = "2025.05.00"
+composeBom = "2026.03.01"
 
 # Navigation
 navCompose = "2.9.7"
@@ -26,7 +26,7 @@ hiltNavCompose = "1.3.0"
 coroutines = "1.9.0"
 
 # DataStore
-datastore = "1.1.4"
+datastore = "1.2.1"
 
 # Termux terminal
 termux = "v0.118.1"

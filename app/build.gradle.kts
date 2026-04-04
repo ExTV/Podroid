@@ -23,8 +23,8 @@ android {
         applicationId = "com.excp.podroid"
         minSdk = 26
         targetSdk = 36
-        versionCode = 11
-        versionName = "1.0.8"
+        versionCode = 12
+        versionName = "1.0.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -80,6 +80,9 @@ android {
         // It must be extracted to disk so ProcessBuilder can execute it.
         jniLibs {
             useLegacyPackaging = true
+            // libtermux.so is rebuilt locally with 16KB page alignment (see build-termux-android.sh).
+            // pickFirsts makes Gradle prefer src/main/jniLibs/ over the copy inside the Termux AAR.
+            pickFirsts += "lib/arm64-v8a/libtermux.so"
         }
     }
 }
