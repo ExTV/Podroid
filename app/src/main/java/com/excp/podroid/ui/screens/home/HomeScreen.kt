@@ -2,6 +2,7 @@ package com.excp.podroid.ui.screens.home
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -109,20 +110,22 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             // Status icon
-            when {
-                isStarting -> CircularProgressIndicator(
-                    modifier = Modifier.size(72.dp),
-                    strokeWidth = 5.dp,
-                )
-                else -> Icon(
-                    imageVector = Icons.Default.Terminal,
-                    contentDescription = null,
-                    modifier = Modifier.size(72.dp),
-                    tint = if (isRunning)
-                        MaterialTheme.colorScheme.primary
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            Box(modifier = Modifier.size(72.dp), contentAlignment = Alignment.Center) {
+                when {
+                    isStarting -> CircularProgressIndicator(
+                        modifier = Modifier.size(72.dp),
+                        strokeWidth = 5.dp,
+                    )
+                    else -> Icon(
+                        imageVector = Icons.Default.Terminal,
+                        contentDescription = null,
+                        modifier = Modifier.size(72.dp),
+                        tint = if (isRunning)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             // Status text

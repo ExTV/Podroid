@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.excp.podroid.BuildConfig
+import com.excp.podroid.data.repository.SettingsRepository
 import com.excp.podroid.data.repository.UpdateInfo
 import com.excp.podroid.data.repository.UpdateRepository
 import com.excp.podroid.engine.PodroidQemu
@@ -24,6 +25,7 @@ import javax.inject.Inject
 class HomeViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val podroidQemu: PodroidQemu,
+    private val settingsRepository: SettingsRepository,
     private val updateRepository: UpdateRepository,
 ) : ViewModel() {
 
@@ -32,6 +34,9 @@ class HomeViewModel @Inject constructor(
 
     val bootStage: StateFlow<String> = podroidQemu.bootStage
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+
+    val storageAccessEnabled: StateFlow<Boolean> = settingsRepository.storageAccessEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     private val _updateInfo = MutableStateFlow<UpdateInfo?>(null)
     val updateInfo: StateFlow<UpdateInfo?> = _updateInfo.asStateFlow()
@@ -59,6 +64,12 @@ class HomeViewModel @Inject constructor(
 
     fun startPodroid() {
         PodroidService.start(context)
+    }
+
+    fun setStorageAccessEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setStorageAccessEnabled(enabled)
+        }
     }
 
     fun stopVm() {

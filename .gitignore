@@ -33,6 +33,8 @@ config.log
 # Generated assets (built by docker-build-initramfs.sh)
 app/src/main/assets/vmlinuz-virt
 app/src/main/assets/initrd.img
+app/src/main/jniLibs/arm64-v8a/libqemu-system-aarch64.so
+app/src/main/jniLibs/arm64-v8a/libslirp.so
 
 # Claude Code sessions
 .claude/

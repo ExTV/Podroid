@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Podroid — QEMU 10.2.1 Android ARM64 builder
+# Podroid — QEMU 11.0.0-rc2 Android ARM64 builder
 #
 # Produces:
 #   libqemu-system-aarch64.so  — QEMU executable (PIE, packaged as .so)
@@ -10,7 +10,7 @@
 #   TCG, KVM, QMP, SLIRP user networking (bundled), virtio-9p (virtfs) for
 #   Downloads sharing
 #
-# QEMU version pinned to 10.2.1.
+# QEMU version pinned via build arg.
 # Android 15+ on Pixel (Tensor) uses PAC (Pointer Authentication). QEMU's default
 # sigaltstack coroutine backend calls siglongjmp across alternate signal stacks,
 # which fails PAC validation and raises SIGILL (ESR PAC Exception).
@@ -19,6 +19,10 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 FROM debian:bookworm AS builder
+
+ARG QEMU_VERSION=11.0.0-rc2
+ENV QEMU_VERSION=${QEMU_VERSION}
+ENV QEMU_DIR=qemu-${QEMU_VERSION}
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -165,22 +169,25 @@ RUN wget -q https://download.gnome.org/sources/glib/2.82/glib-2.82.5.tar.xz \
     && cd / && rm -rf glib-2.82.5*
 
 # ── pixman (static — required by QEMU even with -display none) ───────────────
-# 0.44+ is meson-only; use 0.42.2 which still has autotools
-RUN wget -q https://www.cairographics.org/releases/pixman-0.42.2.tar.gz \
-    && tar xf pixman-0.42.2.tar.gz && cd pixman-0.42.2 \
-    && ./configure \
-        --host=${TARGET} \
-        --prefix=${PREFIX} \
-        --enable-static \
-        --disable-shared \
-        --disable-arm-iwmmxt \
-        --disable-arm-simd \
-        --disable-arm-neon \
-        --disable-arm-a64-neon \
-        ac_cv_arm_a64_neon=no \
-        CC="${CC}" CFLAGS="${CFLAGS}" AR="${AR}" RANLIB="${RANLIB}" \
-    && make -j$(nproc) install \
-    && cd / && rm -rf pixman-0.42.2*
+# Newer pixman releases are meson-only. Disable aarch64 NEON asm for Android
+# cross-builds; cairo's own CI carries the same workaround.
+RUN wget -q https://cairographics.org/releases/pixman-0.44.2.tar.xz \
+    && tar xf pixman-0.44.2.tar.xz && cd pixman-0.44.2 \
+    && PKG_CONFIG_LIBDIR=${PKG_CONFIG_PATH} \
+       PKG_CONFIG_PATH=${PKG_CONFIG_PATH} \
+       meson setup _build \
+        --cross-file /opt/cross-android-aarch64.ini \
+        --prefix ${PREFIX} \
+        --default-library static \
+        --buildtype release \
+        -Dtests=disabled \
+        -Dgtk=disabled \
+        -Dlibpng=disabled \
+        -Dopenmp=disabled \
+        -Da64-neon=disabled \
+    && ninja -C _build -j$(nproc) \
+    && ninja -C _build install \
+    && cd / && rm -rf pixman-0.44.2*
 
 # ── libattr (static — xattr support for virtfs/9p) ───────────────────────────
 RUN wget -q https://download.savannah.gnu.org/releases/attr/attr-2.5.2.tar.gz \
@@ -201,21 +208,50 @@ RUN wget -q https://download.savannah.gnu.org/releases/attr/attr-2.5.2.tar.gz \
     && cp ${PREFIX}/lib/libattr.a \
           ${SYSROOT}/usr/lib/aarch64-linux-android/34/libattr.a
 
-# ── QEMU 10.2.1 ──────────────────────────────────────────────────────────────
-RUN wget -q https://download.qemu.org/qemu-10.2.1.tar.xz \
-    && tar xf qemu-10.2.1.tar.xz
+# ── libucontext (static — provides getcontext/swapcontext on Android) ────────
+RUN git clone --depth=1 https://github.com/kaniini/libucontext.git /tmp/libucontext \
+    && make -C /tmp/libucontext \
+        ARCH=aarch64 \
+        CC="${CC}" \
+        AR="${AR}" \
+        RANLIB="${RANLIB}" \
+        CFLAGS="${CFLAGS}" \
+        LDFLAGS="${LDFLAGS}" \
+        BUILD_POSIX=no \
+        FREESTANDING=no \
+        EXPORT_UNPREFIXED=yes \
+    && install -Dm644 /tmp/libucontext/libucontext.a ${PREFIX}/lib/libucontext.a \
+    && install -Dm644 /tmp/libucontext/include/libucontext/libucontext.h ${PREFIX}/include/libucontext/libucontext.h \
+    && install -Dm644 /tmp/libucontext/arch/common/include/libucontext/bits.h ${PREFIX}/include/libucontext/bits.h \
+    && printf '%s\n' \
+        '#ifndef PODROID_UCONTEXT_SHIM_H' \
+        '#define PODROID_UCONTEXT_SHIM_H' \
+        '#include_next <ucontext.h>' \
+        '#include <libucontext/libucontext.h>' \
+        '#define getcontext  libucontext_getcontext' \
+        '#define makecontext libucontext_makecontext' \
+        '#define setcontext  libucontext_setcontext' \
+        '#define swapcontext libucontext_swapcontext' \
+        '#endif' \
+        > ${PREFIX}/include/ucontext.h \
+    && rm -rf /tmp/libucontext
+
+# ── QEMU ─────────────────────────────────────────────────────────────────────
+RUN wget -q https://download.qemu.org/${QEMU_DIR}.tar.xz \
+    && tar xf ${QEMU_DIR}.tar.xz
 
 # Patch 1 (VirtuDroid android-no-librt): make librt optional.
 # Android Bionic does not have a separate librt; the functions are in libc.
 RUN sed -i "s/rt = cc.find_library('rt', required: true)/rt = cc.find_library('rt', required: false)/" \
-    qemu-10.2.1/meson.build
+    ${QEMU_DIR}/meson.build
 
 # Patch 2 (VirtuDroid android-no-shm-open): use memfd_create instead of shm_open on Android.
 # shm_open is not exported by Android's NDK libc stubs; memfd_create (API 26+) gives
 # the same anonymous-shared-memory semantics that qemu_shm_alloc() needs.
 RUN python3 - << 'PYEOF'
 import re, sys
-path = 'qemu-10.2.1/util/oslib-posix.c'
+import os
+path = os.path.join(os.environ['QEMU_DIR'], 'util/oslib-posix.c')
 src = open(path).read()
 android_impl = r'''#ifdef __ANDROID__
 #include <sys/syscall.h>
@@ -261,7 +297,8 @@ PYEOF
 # separate libattr-devel. We override the dependency check to unblock configure.
 RUN python3 - << 'PYEOF'
 import re
-path = 'qemu-10.2.1/meson.build'
+import os
+path = os.path.join(os.environ['QEMU_DIR'], 'meson.build')
 src = open(path).read()
 
 # QEMU 11.x pattern
@@ -289,10 +326,10 @@ PYEOF
 # Android sys/stat.h defines st_atime_nsec etc. as macros which clash with
 # QEMU's 9p struct field declarations. Undefine them before the header.
 RUN printf '#undef st_atime_nsec\n#undef st_mtime_nsec\n#undef st_ctime_nsec\n' \
-    | cat - qemu-10.2.1/fsdev/9p-marshal.h > /tmp/9p-marshal.h \
-    && mv /tmp/9p-marshal.h qemu-10.2.1/fsdev/9p-marshal.h
+    | cat - ${QEMU_DIR}/fsdev/9p-marshal.h > /tmp/9p-marshal.h \
+    && mv /tmp/9p-marshal.h ${QEMU_DIR}/fsdev/9p-marshal.h
 
-RUN cd qemu-10.2.1 \
+RUN cd ${QEMU_DIR} \
     && PKG_CONFIG_PATH=${PKG_CONFIG_PATH} \
        ./configure \
         --cc="${CC}" \
@@ -300,7 +337,7 @@ RUN cd qemu-10.2.1 \
         --host-cc="gcc" \
         --cross-prefix="${LLVM}/bin/llvm-" \
         --extra-cflags="-fPIC -DANDROID -march=armv8-a -I${PREFIX}/include -I${PREFIX}/include/glib-2.0 -I${PREFIX}/lib/glib-2.0/include -Wno-error=implicit-function-declaration" \
-        --extra-ldflags="-L${PREFIX}/lib -L${SYSROOT}/usr/lib/aarch64-linux-android/${API} -Wl,-rpath-link,${PREFIX}/lib -Wl,-z,max-page-size=16384" \
+        --extra-ldflags="-L${PREFIX}/lib -L${SYSROOT}/usr/lib/aarch64-linux-android/${API} -Wl,-rpath-link,${PREFIX}/lib -Wl,-z,max-page-size=16384 ${PREFIX}/lib/libucontext.a" \
         --prefix=/opt/qemu-out \
         --target-list=aarch64-softmmu \
         --without-default-features \
@@ -326,7 +363,10 @@ RUN cd qemu-10.2.1 \
         --disable-vde \
         --disable-linux-io-uring \
         --with-coroutine=ucontext \
+    && python3 -c "import json, pathlib; p = pathlib.Path('build/meson-info/intro-buildoptions.json'); opts = {e['name']: e.get('value') for e in json.loads(p.read_text())}; assert p.exists(), p; assert opts.get('virtfs') == 'enabled', opts.get('virtfs'); assert opts.get('slirp') == 'enabled', opts.get('slirp'); assert opts.get('coroutine_backend') == 'ucontext', opts.get('coroutine_backend')" \
     && make -j$(nproc) \
+    && find build -path '*coroutine-ucontext*.o' -print -quit | grep -q . \
+    && ! find build -path '*coroutine-sigaltstack*.o' -print -quit | grep -q . \
     && make install
 
 # ── Rename binary to .so; fix libslirp soname for Android APK packaging ───────
@@ -339,9 +379,7 @@ RUN cp /opt/qemu-out/bin/qemu-system-aarch64 \
           /opt/qemu-out/libslirp.so \
     && patchelf --set-soname libslirp.so /opt/qemu-out/libslirp.so \
     && patchelf --replace-needed libslirp.so.0 libslirp.so \
-                /opt/qemu-out/libqemu-system-aarch64.so \
-    && ${STRIP} /opt/qemu-out/libqemu-system-aarch64.so \
-    && ${STRIP} /opt/qemu-out/libslirp.so
+                /opt/qemu-out/libqemu-system-aarch64.so
 
 # ── Final image with just the artifacts ───────────────────────────────────────
 FROM debian:bookworm-slim AS artifacts

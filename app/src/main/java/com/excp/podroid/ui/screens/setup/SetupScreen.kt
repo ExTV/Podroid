@@ -1,5 +1,10 @@
 package com.excp.podroid.ui.screens.setup
 
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.Settings
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -47,6 +52,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -61,11 +67,13 @@ fun SetupScreen(
     onSetupComplete: () -> Unit,
     viewModel: SetupViewModel = hiltViewModel(),
 ) {
+    val context = LocalContext.current
     var sliderPosition by remember { mutableFloatStateOf(0f) }
     var sshEnabled by remember { mutableStateOf(true) }
+    var storageAccessEnabled by remember { mutableStateOf(false) }
     val selectedGb = storageSizes[sliderPosition.toInt().coerceIn(0, storageSizes.lastIndex)]
     val setupComplete by viewModel.setupComplete.collectAsStateWithLifecycle()
-    val pagerState = rememberPagerState(pageCount = { 2 })
+    val pagerState = rememberPagerState(pageCount = { 3 })
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(setupComplete) {
@@ -80,7 +88,7 @@ fun SetupScreen(
         ) {
             // Step progress bar
             LinearProgressIndicator(
-                progress = { (pagerState.currentPage + 1) / 2f },
+                progress = { (pagerState.currentPage + 1) / 3f },
                 modifier = Modifier.fillMaxWidth(),
                 trackColor = MaterialTheme.colorScheme.surfaceVariant,
             )
@@ -102,7 +110,40 @@ fun SetupScreen(
                         sshEnabled = sshEnabled,
                         onSshToggle = { sshEnabled = it },
                         onBack = { scope.launch { pagerState.animateScrollToPage(0) } },
-                        onGetStarted = { viewModel.completeSetup(selectedGb, sshEnabled) },
+                        onNext = { scope.launch { pagerState.animateScrollToPage(2) } },
+                    )
+                    2 -> StorageAccessPage(
+                        storageAccessEnabled = storageAccessEnabled,
+                        onStorageAccessToggle = { enabled ->
+                            storageAccessEnabled = enabled
+                            if (enabled &&
+                                Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+                                !Environment.isExternalStorageManager()
+                            ) {
+                                context.startActivity(
+                                    Intent(
+                                        Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                                        Uri.parse("package:${context.packageName}"),
+                                    )
+                                )
+                            }
+                        },
+                        onOpenStorageAccessSettings = {
+                            context.startActivity(
+                                Intent(
+                                    Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                                    Uri.parse("package:${context.packageName}"),
+                                )
+                            )
+                        },
+                        onBack = { scope.launch { pagerState.animateScrollToPage(1) } },
+                        onGetStarted = {
+                            viewModel.completeSetup(
+                                storageSizeGb = selectedGb,
+                                sshEnabled = sshEnabled,
+                                storageAccessEnabled = storageAccessEnabled,
+                            )
+                        },
                     )
                 }
             }
@@ -115,7 +156,7 @@ fun SetupScreen(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                repeat(2) { index ->
+                repeat(3) { index ->
                     val isSelected = pagerState.currentPage == index
                     val dotWidth by animateDpAsState(
                         targetValue = if (isSelected) 24.dp else 8.dp,
@@ -282,7 +323,7 @@ private fun VmConfigPage(
     sshEnabled: Boolean,
     onSshToggle: (Boolean) -> Unit,
     onBack: () -> Unit,
-    onGetStarted: () -> Unit,
+    onNext: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -404,7 +445,157 @@ private fun VmConfigPage(
             Spacer(Modifier.height(16.dp))
         }
 
-        // Fixed back + get started buttons
+        // Fixed back + next buttons
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            FilledTonalButton(
+                onClick = onBack,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(56.dp),
+                shape = RoundedCornerShape(16.dp),
+            ) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Back", style = MaterialTheme.typography.titleMedium)
+            }
+            Button(
+                onClick = onNext,
+                modifier = Modifier
+                    .weight(2f)
+                    .height(56.dp),
+                shape = RoundedCornerShape(16.dp),
+            ) {
+                Text(
+                    "Next",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.width(8.dp))
+                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
+            }
+        }
+    }
+}
+
+@Composable
+private fun StorageAccessPage(
+    storageAccessEnabled: Boolean,
+    onStorageAccessToggle: (Boolean) -> Unit,
+    onOpenStorageAccessSettings: () -> Unit,
+    onBack: () -> Unit,
+    onGetStarted: () -> Unit,
+) {
+    val canManageAllFiles = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+    val hasStoragePermission = !canManageAllFiles || Environment.isExternalStorageManager()
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Spacer(Modifier.height(40.dp))
+
+            Icon(
+                imageVector = Icons.Default.Security,
+                contentDescription = null,
+                modifier = Modifier.size(64.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+
+            Spacer(Modifier.height(20.dp))
+
+            Text(
+                text = "Downloads Sharing",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            Text(
+                text = "Optional access to your Downloads folder inside the VM.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+
+            Spacer(Modifier.height(32.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                ),
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Enable Downloads sharing",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = "Shares the Android Downloads folder with the VM over virtio-9p.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Switch(
+                            checked = storageAccessEnabled,
+                            onCheckedChange = onStorageAccessToggle,
+                        )
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    Text(
+                        text = "On some devices this may crash the VM.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+
+                    if (storageAccessEnabled && canManageAllFiles && !hasStoragePermission) {
+                        Spacer(Modifier.height(16.dp))
+                        Button(
+                            onClick = onOpenStorageAccessSettings,
+                            shape = RoundedCornerShape(12.dp),
+                        ) {
+                            Text("Grant storage access")
+                        }
+                    } else if (storageAccessEnabled && canManageAllFiles) {
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = if (hasStoragePermission) "All files access granted." else "All files access not granted.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()

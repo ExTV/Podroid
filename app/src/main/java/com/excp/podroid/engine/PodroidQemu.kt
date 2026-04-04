@@ -361,8 +361,13 @@ class PodroidQemu @Inject constructor(
         val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(
             android.os.Environment.DIRECTORY_DOWNLOADS
         )
+        val storageAccessEnabled = kotlinx.coroutines.runBlocking {
+            settingsRepository.getStorageAccessEnabledSnapshot()
+        }
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R &&
-            android.os.Environment.isExternalStorageManager() && downloadsDir.exists()) {
+            storageAccessEnabled &&
+            android.os.Environment.isExternalStorageManager() &&
+            downloadsDir.exists()) {
             args += "-fsdev"
             args += "local,id=fsdev0,path=${downloadsDir.absolutePath},security_model=none"
             args += "-device"

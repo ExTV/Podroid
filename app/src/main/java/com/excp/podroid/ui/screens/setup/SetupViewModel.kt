@@ -18,11 +18,12 @@ class SetupViewModel @Inject constructor(
     private val _setupComplete = MutableStateFlow(false)
     val setupComplete: StateFlow<Boolean> = _setupComplete.asStateFlow()
 
-    fun completeSetup(storageSizeGb: Int, sshEnabled: Boolean) {
+    fun completeSetup(storageSizeGb: Int, sshEnabled: Boolean, storageAccessEnabled: Boolean) {
         viewModelScope.launch {
             // Write all settings fully before signalling completion
             settingsRepository.setStorageSizeGb(storageSizeGb)
             settingsRepository.setSshEnabled(sshEnabled)
+            settingsRepository.setStorageAccessEnabled(storageAccessEnabled)
             settingsRepository.markSetupDone()
             _setupComplete.value = true
         }

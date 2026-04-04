@@ -33,6 +33,7 @@ class SettingsRepository @Inject constructor(
         val KEY_VM_CPUS       = intPreferencesKey("vm_cpus")
         val KEY_FONT_SIZE     = intPreferencesKey("terminal_font_size")
         val KEY_STORAGE_GB    = intPreferencesKey("storage_gb")
+        val KEY_STORAGE_ACCESS_ENABLED = booleanPreferencesKey("storage_access_enabled")
         val KEY_SETUP_DONE    = booleanPreferencesKey("setup_done")
         val KEY_SSH_ENABLED   = booleanPreferencesKey("ssh_enabled")
     }
@@ -51,6 +52,9 @@ class SettingsRepository @Inject constructor(
 
     val storageSizeGb: Flow<Int> = context.dataStore.data
         .map { it[KEY_STORAGE_GB] ?: 2 }
+
+    val storageAccessEnabled: Flow<Boolean> = context.dataStore.data
+        .map { it[KEY_STORAGE_ACCESS_ENABLED] ?: false }
 
     val isSetupDone: Flow<Boolean> = context.dataStore.data
         .map { it[KEY_SETUP_DONE] ?: false }
@@ -73,6 +77,9 @@ class SettingsRepository @Inject constructor(
     suspend fun setStorageSizeGb(value: Int) =
         context.dataStore.edit { it[KEY_STORAGE_GB] = value }
 
+    suspend fun setStorageAccessEnabled(value: Boolean) =
+        context.dataStore.edit { it[KEY_STORAGE_ACCESS_ENABLED] = value }
+
     suspend fun markSetupDone() =
         context.dataStore.edit { it[KEY_SETUP_DONE] = true }
 
@@ -90,6 +97,9 @@ class SettingsRepository @Inject constructor(
 
     suspend fun getStorageSizeGbSnapshot(): Int =
         context.dataStore.data.map { it[KEY_STORAGE_GB] ?: 2 }.first()
+
+    suspend fun getStorageAccessEnabledSnapshot(): Boolean =
+        context.dataStore.data.map { it[KEY_STORAGE_ACCESS_ENABLED] ?: false }.first()
 
     suspend fun isSetupDoneSnapshot(): Boolean =
         context.dataStore.data.map { it[KEY_SETUP_DONE] ?: false }.first()

@@ -375,7 +375,7 @@ fun SettingsScreen(
             SettingsSectionHeader("About")
 
             SettingsInfoRow("Version", BuildConfig.VERSION_NAME)
-            SettingsInfoRow("QEMU", "11.0.0-rc2 (rebuilt)")
+            SettingsInfoRow("QEMU", BuildConfig.QEMU_VERSION)
             SettingsInfoRow("Architecture", "AArch64 (ARM64)")
             SettingsInfoRow("Linux distro", "Alpine Linux 3.23")
             SettingsInfoRow("Container runtime", "Podman + crun")

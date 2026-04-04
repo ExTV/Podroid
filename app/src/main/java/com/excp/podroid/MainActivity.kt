@@ -1,12 +1,8 @@
 package com.excp.podroid
 
 import android.Manifest
-import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Bundle
-import android.os.Environment
-import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -28,7 +24,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestNotificationPermissionIfNeeded()
-        requestStoragePermissionIfNeeded()
         enableEdgeToEdge()
         setContent {
             val darkTheme by settingsRepository.darkTheme.collectAsState(initial = true)
@@ -47,18 +42,6 @@ class MainActivity : ComponentActivity() {
                 this,
                 arrayOf(Manifest.permission.POST_NOTIFICATIONS),
                 0,
-            )
-        }
-    }
-
-    private fun requestStoragePermissionIfNeeded() {
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) return
-        if (!Environment.isExternalStorageManager()) {
-            startActivity(
-                Intent(
-                    Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                    Uri.parse("package:$packageName"),
-                )
             )
         }
     }
