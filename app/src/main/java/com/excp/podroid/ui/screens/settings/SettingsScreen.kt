@@ -1,6 +1,10 @@
 package com.excp.podroid.ui.screens.settings
 
+import android.content.res.AssetManager
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,6 +13,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -16,8 +22,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -40,17 +48,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.excp.podroid.BuildConfig
 import com.excp.podroid.data.repository.PortForwardRule
 import com.excp.podroid.engine.VmState
+import kotlinx.coroutines.launch
 
 private val storageSizes = listOf(2, 4, 8, 16, 32, 64)
 
@@ -81,10 +95,16 @@ fun SettingsScreen(
     val vmRamMb by viewModel.vmRamMb.collectAsStateWithLifecycle()
     val vmCpus by viewModel.vmCpus.collectAsStateWithLifecycle()
     val terminalFontSize by viewModel.terminalFontSize.collectAsStateWithLifecycle()
+    val terminalColorTheme by viewModel.terminalColorTheme.collectAsStateWithLifecycle()
+    val terminalFont by viewModel.terminalFont.collectAsStateWithLifecycle()
     val storageSizeGb by viewModel.storageSizeGb.collectAsStateWithLifecycle()
     val sshEnabled by viewModel.sshEnabled.collectAsStateWithLifecycle(false)
     var showAddDialog by remember { mutableStateOf(false) }
     var showResetDialog by remember { mutableStateOf(false) }
+    var showColorThemeDialog by remember { mutableStateOf(false) }
+    var showFontDialog by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     val ramOptions = listOf(512, 1024, 2048, 4096)
     val cpuOptions = listOf(1, 2, 4, 6, 8)
@@ -137,6 +157,34 @@ fun SettingsScreen(
                 steps = 13,
                 modifier = Modifier.fillMaxWidth(),
             )
+
+            Spacer(Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilledTonalButton(
+                    onClick = { showColorThemeDialog = true },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(Icons.Default.Palette, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+                    Text(
+                        if (terminalColorTheme == "default") "Theme" else "Theme ✓",
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+                FilledTonalButton(
+                    onClick = { showFontDialog = true },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(Icons.Default.TextFields, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+                    Text(
+                        if (terminalFont == "default") "Font" else "Font ✓",
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            }
 
             Spacer(Modifier.height(16.dp))
 
@@ -383,6 +431,109 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(32.dp))
         }
+    }
+
+    if (showColorThemeDialog) {
+        val themes: List<String> = remember {
+            listOf("default") + (context.assets.list("colors")?.toList()
+                ?.filter { it.endsWith(".properties") }
+                ?.mapNotNull { it?.removeSuffix(".properties") }
+                ?.sorted() ?: emptyList())
+        }
+        val currentTheme = terminalColorTheme
+        AlertDialog(
+            onDismissRequest = { showColorThemeDialog = false },
+            title = { Text("Color Theme") },
+            text = {
+                LazyColumn(modifier = Modifier.height(400.dp)) {
+                    items(themes) { theme: String ->
+                        val isSelected = theme == currentTheme
+                        Text(
+                            text = theme.replace('-', ' ').replaceFirstChar { it.uppercase() },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    scope.launch {
+                                        if (theme == "default") {
+                                            java.io.File(context.filesDir, "colors.properties").delete()
+                                        } else {
+                                            context.assets.open("colors/$theme.properties").use { inp ->
+                                                java.io.File(context.filesDir, "colors.properties").outputStream()
+                                                    .use { out -> inp.copyTo(out) }
+                                            }
+                                        }
+                                        viewModel.setTerminalColorTheme(theme)
+                                    }
+                                    showColorThemeDialog = false
+                                }
+                                .background(
+                                    if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                                    else Color.Transparent
+                                )
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                                    else MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showColorThemeDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (showFontDialog) {
+        val fonts: List<String> = remember {
+            listOf("default") + (context.assets.list("fonts")?.toList()
+                ?.filter { it.endsWith(".ttf") }
+                ?.mapNotNull { it?.removeSuffix(".ttf") }
+                ?.sorted() ?: emptyList())
+        }
+        val currentFont = terminalFont
+        AlertDialog(
+            onDismissRequest = { showFontDialog = false },
+            title = { Text("Terminal Font") },
+            text = {
+                LazyColumn(modifier = Modifier.height(400.dp)) {
+                    items(fonts) { font: String ->
+                        val isSelected = font == currentFont
+                        Text(
+                            text = font.replace('-', ' ').replaceFirstChar { it.uppercase() },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    scope.launch {
+                                        if (font == "default") {
+                                            java.io.File(context.filesDir, "font.ttf").delete()
+                                        } else {
+                                            context.assets.open("fonts/$font.ttf").use { inp ->
+                                                java.io.File(context.filesDir, "font.ttf").outputStream()
+                                                    .use { out -> inp.copyTo(out) }
+                                            }
+                                        }
+                                        viewModel.setTerminalFont(font)
+                                    }
+                                    showFontDialog = false
+                                }
+                                .background(
+                                    if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                                    else Color.Transparent
+                                )
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontFamily = FontFamily.Monospace,
+                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                                    else MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showFontDialog = false }) { Text("Cancel") }
+            },
+        )
     }
 
     if (showAddDialog) {

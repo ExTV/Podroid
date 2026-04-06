@@ -11,6 +11,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -36,6 +37,8 @@ class SettingsRepository @Inject constructor(
         val KEY_STORAGE_ACCESS_ENABLED = booleanPreferencesKey("storage_access_enabled")
         val KEY_SETUP_DONE    = booleanPreferencesKey("setup_done")
         val KEY_SSH_ENABLED   = booleanPreferencesKey("ssh_enabled")
+        val KEY_TERMINAL_COLOR_THEME = stringPreferencesKey("terminal_color_theme")
+        val KEY_TERMINAL_FONT        = stringPreferencesKey("terminal_font")
     }
 
     val darkTheme: Flow<Boolean> = context.dataStore.data
@@ -62,6 +65,13 @@ class SettingsRepository @Inject constructor(
     val sshEnabled: Flow<Boolean> = context.dataStore.data
         .map { it[KEY_SSH_ENABLED] ?: false }
 
+    // Terminal appearance flows
+    val terminalColorTheme: Flow<String> = context.dataStore.data
+        .map { it[KEY_TERMINAL_COLOR_THEME] ?: "default" }
+
+    val terminalFont: Flow<String> = context.dataStore.data
+        .map { it[KEY_TERMINAL_FONT] ?: "default" }
+
     suspend fun setDarkTheme(value: Boolean) =
         context.dataStore.edit { it[KEY_DARK_THEME] = value }
 
@@ -86,6 +96,13 @@ class SettingsRepository @Inject constructor(
     suspend fun setSshEnabled(value: Boolean) =
         context.dataStore.edit { it[KEY_SSH_ENABLED] = value }
 
+    // Terminal appearance setters
+    suspend fun setTerminalColorTheme(value: String) =
+        context.dataStore.edit { it[KEY_TERMINAL_COLOR_THEME] = value }
+
+    suspend fun setTerminalFont(value: String) =
+        context.dataStore.edit { it[KEY_TERMINAL_FONT] = value }
+
     suspend fun getSshEnabledSnapshot(): Boolean =
         context.dataStore.data.map { it[KEY_SSH_ENABLED] ?: false }.first()
 
@@ -103,4 +120,11 @@ class SettingsRepository @Inject constructor(
 
     suspend fun isSetupDoneSnapshot(): Boolean =
         context.dataStore.data.map { it[KEY_SETUP_DONE] ?: false }.first()
+
+    // Terminal appearance snapshots
+    suspend fun getTerminalColorThemeSnapshot(): String =
+        context.dataStore.data.map { it[KEY_TERMINAL_COLOR_THEME] ?: "default" }.first()
+
+    suspend fun getTerminalFontSnapshot(): String =
+        context.dataStore.data.map { it[KEY_TERMINAL_FONT] ?: "default" }.first()
 }

@@ -11,6 +11,7 @@ package com.excp.podroid.ui.screens.terminal
 import android.app.Activity
 import android.graphics.Typeface
 import android.view.WindowManager
+import com.termux.terminal.TerminalColors
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -60,6 +61,33 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.excp.podroid.engine.VmState
 import com.termux.view.TerminalView
 
+private fun parseColor(hex: String): Int {
+    val clean = hex.removePrefix("#")
+    val color = when (clean.length) {
+        3 -> {
+            val r = clean[0].digitToIntOrNull(16) ?: return android.graphics.Color.BLACK
+            val g = clean[1].digitToIntOrNull(16) ?: return android.graphics.Color.BLACK
+            val b = clean[2].digitToIntOrNull(16) ?: return android.graphics.Color.BLACK
+            android.graphics.Color.rgb(r * 17, g * 17, b * 17)
+        }
+        6 -> {
+            val r = clean.substring(0, 2).toInt(16)
+            val g = clean.substring(2, 4).toInt(16)
+            val b = clean.substring(4, 6).toInt(16)
+            android.graphics.Color.rgb(r, g, b)
+        }
+        8 -> {
+            val a = clean.substring(0, 2).toInt(16)
+            val r = clean.substring(2, 4).toInt(16)
+            val g = clean.substring(4, 6).toInt(16)
+            val b = clean.substring(6, 8).toInt(16)
+            android.graphics.Color.argb(a, r, g, b)
+        }
+        else -> android.graphics.Color.BLACK
+    }
+    return color
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TerminalScreen(
@@ -83,7 +111,6 @@ fun TerminalScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
             .windowInsetsPadding(WindowInsets.navigationBars)
             .windowInsetsPadding(WindowInsets.ime)
     ) {
@@ -192,9 +219,26 @@ fun TerminalScreen(
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                     AndroidView(
                         factory = { ctx ->
+                            val colorFile = java.io.File(ctx.filesDir, "colors.properties")
+                            val bgColor = if (colorFile.exists()) {
+                                try {
+                                    val props = java.util.Properties()
+                                    colorFile.inputStream().use { props.load(it) }
+                                    TerminalColors.COLOR_SCHEME.updateWith(props)
+                                    val bgHex = props["background"] as? String
+                                    if (bgHex != null) parseColor(bgHex) else android.graphics.Color.BLACK
+                                } catch (_: Exception) { android.graphics.Color.BLACK }
+                            } else {
+                                android.graphics.Color.BLACK
+                            }
+                            val fontFile = java.io.File(ctx.filesDir, "font.ttf")
+                            val typeface = if (fontFile.exists()) {
+                                try { Typeface.createFromFile(fontFile) } catch (_: Exception) { Typeface.MONOSPACE }
+                            } else { Typeface.MONOSPACE }
                             TerminalView(ctx, null).apply {
+                                setBackgroundColor(bgColor)
                                 setTextSize(fontSize)
-                                setTypeface(Typeface.MONOSPACE)
+                                setTypeface(typeface)
                                 keepScreenOn = true
                                 isFocusable = true
                                 isFocusableInTouchMode = true

@@ -45,6 +45,12 @@ class SettingsViewModel @Inject constructor(
     val terminalFontSize: StateFlow<Int> = settingsRepository.terminalFontSize
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 20)
 
+    val terminalColorTheme: StateFlow<String> = settingsRepository.terminalColorTheme
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "default")
+
+    val terminalFont: StateFlow<String> = settingsRepository.terminalFont
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "default")
+
     val storageSizeGb: StateFlow<Int> = settingsRepository.storageSizeGb
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 2)
 
@@ -74,6 +80,14 @@ class SettingsViewModel @Inject constructor(
 
     fun setTerminalFontSize(value: Int) {
         viewModelScope.launch { settingsRepository.setTerminalFontSize(value) }
+    }
+
+    fun setTerminalColorTheme(value: String) {
+        viewModelScope.launch { settingsRepository.setTerminalColorTheme(value) }
+    }
+
+    fun setTerminalFont(value: String) {
+        viewModelScope.launch { settingsRepository.setTerminalFont(value) }
     }
 
     // "both" expands into separate TCP + UDP rules
