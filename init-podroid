@@ -244,6 +244,12 @@ export CONTAINERS_CONF=/etc/containers/containers.conf
 export CONTAINERS_STORAGE_CONF=/etc/containers/storage.conf
 export CONTAINERS_REGISTRIES_CONF=/etc/containers/registries.conf
 stty -ixon -ixoff -iexten -echoctl 2>/dev/null
+# Disable checkwinsize so ash never queries cursor position (CSI 6n / DSR 6n).
+# Responses to these queries were previously filtered by podroid-bridge, which
+# broke nvim's TUI initialization. With filtering removed, ash still sends the
+# queries but no longer matters — however disabling checkwinsize entirely avoids
+# the one-time "ESC[row;colR" garbage from appearing on the first prompt.
+set +o checkwinsize 2>/dev/null
 cd /root
 PROF
 
