@@ -68,7 +68,6 @@ fun TerminalScreen(
 ) {
     val context = LocalContext.current
     val vmState by viewModel.vmState.collectAsState()
-    val bootStage by viewModel.bootStage.collectAsState()
     val fontSize by viewModel.terminalFontSize.collectAsState()
 
     DisposableEffect(Unit) {
@@ -121,30 +120,6 @@ fun TerminalScreen(
                 }
             }
 
-            is VmState.Starting -> {
-                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(32.dp),
-                    ) {
-                        CircularProgressIndicator(color = Color(0xFF4FC3F7), strokeWidth = 3.dp)
-                        Spacer(modifier = Modifier.height(24.dp))
-                        Text("Starting VM...", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            bootStage.ifEmpty { "Initializing..." },
-                            color = Color(0xFF4FC3F7), fontSize = 14.sp,
-                        )
-                        Spacer(modifier = Modifier.height(24.dp))
-                        LinearProgressIndicator(
-                            modifier = Modifier.fillMaxWidth(0.7f).height(4.dp).clip(RoundedCornerShape(2.dp)),
-                            color = Color(0xFF4FC3F7),
-                            trackColor = Color(0xFF333333),
-                        )
-                    }
-                }
-            }
-
             is VmState.Error -> {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -169,7 +144,7 @@ fun TerminalScreen(
                 }
             }
 
-            is VmState.Paused, is VmState.Saving, is VmState.Resuming -> {
+            is VmState.Starting, is VmState.Paused, is VmState.Saving, is VmState.Resuming -> {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator(color = Color(0xFF4FC3F7), strokeWidth = 3.dp)
@@ -191,7 +166,8 @@ fun TerminalScreen(
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                     val view = viewModel.getOrCreateTerminalView()
 
-                    DisposableEffect(view) {
+                    DisposableEffect(vmState) {
+                        viewModel.resetOnRestart()
                         viewModel.attachView(view)
                         viewModel.createSession()
                         view.setTerminalViewClient(viewModel.viewClient)
@@ -220,31 +196,6 @@ fun TerminalScreen(
                         update = { v -> v.setTextSize(fontSize) },
                         modifier = Modifier.fillMaxSize(),
                     )
-
-                    // Boot progress overlay while VM is still initializing
-                    if (bootStage.isNotEmpty() && bootStage != "Ready") {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .align(Alignment.BottomCenter)
-                                .background(Color(0xDD000000))
-                                .padding(12.dp),
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center,
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                CircularProgressIndicator(
-                                    color = Color(0xFF4FC3F7),
-                                    strokeWidth = 2.dp,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(bootStage, color = Color(0xFF4FC3F7), fontSize = 13.sp)
-                            }
-                        }
-                    }
                 }
             }
         }

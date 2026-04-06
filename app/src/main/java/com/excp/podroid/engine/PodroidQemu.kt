@@ -354,6 +354,12 @@ class PodroidQemu @Inject constructor(
         ioScope?.cancel()
         ioScope = null
         process = null
+        _terminalSession = null
+        _terminalSessionAttached = false
+        consoleBuilder.clear()
+        _consoleText.value = ""
+        File(serialSockPath).delete()
+        File(ctrlSockPath).delete()
         _bootStage.value = ""
     }
 

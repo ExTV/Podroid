@@ -106,14 +106,16 @@ class PodroidService : Service() {
         notificationJob?.cancel()
         notificationJob = serviceScope.launch {
             launch {
-                podroidQemu.bootStage.collect { stage ->
-                    val status = when {
-                        stage == "Ready" || podroidQemu.state.value is VmState.Running && stage.isEmpty() ->
-                            "VM is running"
-                        stage.isNotEmpty() -> stage
-                        else -> "Starting VM..."
+                podroidQemu.state.collect { state ->
+                    when (state) {
+                        is VmState.Running -> updateNotification("VM is running")
+                        is VmState.Starting -> {
+                            val stage = podroidQemu.bootStage.value
+                            updateNotification(stage.ifEmpty { "Starting VM..." })
+                        }
+                        is VmState.Stopped, is VmState.Idle, is VmState.Error -> return@collect
+                        else -> {}
                     }
-                    updateNotification(status)
                 }
             }
             launch {
