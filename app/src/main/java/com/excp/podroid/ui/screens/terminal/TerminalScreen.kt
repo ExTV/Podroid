@@ -192,8 +192,8 @@ fun TerminalScreen(
                     val view = viewModel.getOrCreateTerminalView()
 
                     DisposableEffect(view) {
-                        viewModel.createSession()
                         viewModel.attachView(view)
+                        viewModel.createSession()
                         view.setTerminalViewClient(viewModel.viewClient)
                         val sess = viewModel.session
                         if (sess != null) {
