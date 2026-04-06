@@ -35,6 +35,7 @@ app/src/main/assets/vmlinuz-virt
 app/src/main/assets/initrd.img
 app/src/main/jniLibs/arm64-v8a/libqemu-system-aarch64.so
 app/src/main/jniLibs/arm64-v8a/libslirp.so
+app/src/main/jniLibs/arm64-v8a/libpodroid-bridge.so
 
 # Claude Code sessions
 .claude/
@@ -45,3 +46,4 @@ skill.md
 # Misc
 *.tmp
 /captures/
+app/src/main/jniLibs/
