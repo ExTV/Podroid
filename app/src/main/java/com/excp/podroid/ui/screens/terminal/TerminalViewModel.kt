@@ -279,6 +279,15 @@ class TerminalViewModel @Inject constructor(
     }
 
     /**
+     * Force-create a new session. Called when the VM restarts to replace the
+     * stale session from the previous run with a fresh one.
+     */
+    fun resetOnRestart() {
+        attached = false
+        session = null
+    }
+
+    /**
      * Triggered by the layout listener in TerminalScreen when the view dimensions
      * change (initial layout, keyboard open/close, rotation).
      *
