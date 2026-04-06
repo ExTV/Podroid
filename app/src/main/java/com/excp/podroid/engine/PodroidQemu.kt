@@ -148,17 +148,26 @@ class PodroidQemu @Inject constructor(
             // Boot monitor — connects to serial.sock once QEMU creates it
             scope.launch { monitorBootSerial(proc) }
 
-            // Wait briefly, then confirm QEMU is alive
-            Thread.sleep(2000)
-            if (proc.isAlive) {
-                Log.d(TAG, "QEMU is running")
+            val startMs = System.currentTimeMillis()
+            val timeoutMs = 10_000L
+            while (System.currentTimeMillis() - startMs < timeoutMs) {
+                if (!proc.isAlive) {
+                    val exitCode = proc.exitValue()
+                    Log.e(TAG, "QEMU died during startup, exit code: $exitCode")
+                    _state.value = VmState.Error("QEMU exited with code $exitCode")
+                    cleanup()
+                    return
+                }
+                if (File(serialSockPath).exists() && File(qmpSocketPath).exists()) {
+                    Log.d(TAG, "QEMU is running (sockets ready after ${System.currentTimeMillis() - startMs}ms)")
+                    _state.value = VmState.Running
+                    break
+                }
+                Thread.sleep(200)
+            }
+            if (_state.value != VmState.Running) {
+                Log.w(TAG, "Socket timeout — proceeding anyway")
                 _state.value = VmState.Running
-            } else {
-                val exitCode = proc.waitFor()
-                Log.e(TAG, "QEMU died immediately, exit code: $exitCode")
-                _state.value = VmState.Error("QEMU exited with code $exitCode")
-                cleanup()
-                return
             }
 
             // Block until QEMU exits (keeps the calling service coroutine alive)

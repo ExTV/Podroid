@@ -47,7 +47,7 @@ RUN apk update && apk add --no-cache \
     e2fsprogs \
     util-linux \
     openrc \
-    openssh \
+    dropbear \
     ncurses-terminfo-base \
     musl-locales
 
