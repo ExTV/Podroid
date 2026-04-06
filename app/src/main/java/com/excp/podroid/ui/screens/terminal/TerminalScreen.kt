@@ -44,8 +44,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -217,61 +219,59 @@ fun TerminalScreen(
 
             is VmState.Running -> {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    val terminalView = remember(vmState) {
+                        val colorFile = java.io.File(context.filesDir, "colors.properties")
+                        val bgColor = if (colorFile.exists()) {
+                            try {
+                                val props = java.util.Properties()
+                                colorFile.inputStream().use { props.load(it) }
+                                TerminalColors.COLOR_SCHEME.updateWith(props)
+                                val bgHex = props["background"] as? String
+                                if (bgHex != null) parseColor(bgHex) else android.graphics.Color.BLACK
+                            } catch (_: Exception) { android.graphics.Color.BLACK }
+                        } else {
+                            android.graphics.Color.BLACK
+                        }
+                        val fontFile = java.io.File(context.filesDir, "font.ttf")
+                        val typeface = if (fontFile.exists()) {
+                            try { Typeface.createFromFile(fontFile) } catch (_: Exception) { Typeface.MONOSPACE }
+                        } else { Typeface.MONOSPACE }
+                        TerminalView(context, null).apply {
+                            setBackgroundColor(bgColor)
+                            setTextSize(fontSize)
+                            setTypeface(typeface)
+                            keepScreenOn = true
+                            isFocusable = true
+                            isFocusableInTouchMode = true
+                        }
+                    }
+
+                    LaunchedEffect(terminalView) {
+                        viewModel.createSession()
+                        viewModel.attachView(terminalView)
+                        terminalView.setTerminalViewClient(viewModel.viewClient)
+                        val sess = viewModel.session
+                        if (sess != null) {
+                            terminalView.mTermSession = sess
+                            terminalView.mEmulator = sess.emulator
+                        }
+                        terminalView.requestFocus()
+                    }
+
+                    LaunchedEffect(terminalView) {
+                        val view = terminalView
+                        view.addOnLayoutChangeListener { v, left, top, right, bottom,
+                                                    oldLeft, oldTop, oldRight, oldBottom ->
+                            val w = right - left
+                            val h = bottom - top
+                            if (w <= 0 || h <= 0) return@addOnLayoutChangeListener
+                            if (w == oldRight - oldLeft && h == oldBottom - oldTop) return@addOnLayoutChangeListener
+                            (v as TerminalView).updateSize()
+                        }
+                    }
+
                     AndroidView(
-                        factory = { ctx ->
-                            val colorFile = java.io.File(ctx.filesDir, "colors.properties")
-                            val bgColor = if (colorFile.exists()) {
-                                try {
-                                    val props = java.util.Properties()
-                                    colorFile.inputStream().use { props.load(it) }
-                                    TerminalColors.COLOR_SCHEME.updateWith(props)
-                                    val bgHex = props["background"] as? String
-                                    if (bgHex != null) parseColor(bgHex) else android.graphics.Color.BLACK
-                                } catch (_: Exception) { android.graphics.Color.BLACK }
-                            } else {
-                                android.graphics.Color.BLACK
-                            }
-                            val fontFile = java.io.File(ctx.filesDir, "font.ttf")
-                            val typeface = if (fontFile.exists()) {
-                                try { Typeface.createFromFile(fontFile) } catch (_: Exception) { Typeface.MONOSPACE }
-                            } else { Typeface.MONOSPACE }
-                            TerminalView(ctx, null).apply {
-                                setBackgroundColor(bgColor)
-                                setTextSize(fontSize)
-                                setTypeface(typeface)
-                                keepScreenOn = true
-                                isFocusable = true
-                                isFocusableInTouchMode = true
-
-                                viewModel.createSession()
-                                viewModel.attachView(this)
-                                setTerminalViewClient(viewModel.viewClient)
-
-                                val sess = viewModel.session ?: return@apply
-                                mTermSession = sess
-                                mEmulator = sess.emulator
-
-                                requestFocus()
-
-                                /*
-                                 * Layout listener — fires on initial layout and when the keyboard
-                                 * opens/closes. TerminalView.updateSize() uses the renderer's
-                                 * exact font metrics, calculates cols/rows, calls
-                                 * session.updateSize() which:
-                                 *   1. Resizes the terminal emulator buffer
-                                 *   2. Calls ioctl(TIOCSWINSZ) on the PTY master
-                                 *   3. SIGWINCH → bridge → "RESIZE rows cols" → ctrl.sock → VM
-                                 */
-                                addOnLayoutChangeListener { v, left, top, right, bottom,
-                                                            oldLeft, oldTop, oldRight, oldBottom ->
-                                    val w = right - left
-                                    val h = bottom - top
-                                    if (w <= 0 || h <= 0) return@addOnLayoutChangeListener
-                                    if (w == oldRight - oldLeft && h == oldBottom - oldTop) return@addOnLayoutChangeListener
-                                    (v as TerminalView).updateSize()
-                                }
-                            }
-                        },
+                        factory = { terminalView },
                         update = { view ->
                             view.setTextSize(fontSize)
                         },
