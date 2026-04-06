@@ -23,11 +23,14 @@ package com.excp.podroid.ui.screens.terminal
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Color
+import android.graphics.Typeface
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
+import com.termux.terminal.TerminalColors
 import android.view.KeyEvent
 import android.view.MotionEvent
 import androidx.lifecycle.ViewModel
@@ -59,9 +62,70 @@ class TerminalViewModel @Inject constructor(
     val terminalFontSize: StateFlow<Int> = settingsRepository.terminalFontSize
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 20)
 
-    @SuppressLint("StaticFieldLeak") // nulled in onCleared(); ViewModel is nav-scoped
+    @SuppressLint("StaticFieldLeak") // created once per ViewModel lifetime; ViewModel is nav-scoped
     private var terminalView: TerminalView? = null
     private var attached = false
+
+    fun getOrCreateTerminalView(): TerminalView {
+        terminalView?.let { return it }
+
+        val colorFile = java.io.File(context.filesDir, "colors.properties")
+        val bgColor = if (colorFile.exists()) {
+            try {
+                val props = java.util.Properties()
+                colorFile.inputStream().use { props.load(it) }
+                TerminalColors.COLOR_SCHEME.updateWith(props)
+                val bgHex = props["background"] as? String
+                if (bgHex != null) parseColor(bgHex) else android.graphics.Color.BLACK
+            } catch (_: Exception) { android.graphics.Color.BLACK }
+        } else {
+            android.graphics.Color.BLACK
+        }
+
+        val fontFile = java.io.File(context.filesDir, "font.ttf")
+        val typeface = if (fontFile.exists()) {
+            try { Typeface.createFromFile(fontFile) } catch (_: Exception) { Typeface.MONOSPACE }
+        } else { Typeface.MONOSPACE }
+
+        val view = TerminalView(context, null).apply {
+            setBackgroundColor(bgColor)
+            setTextSize(terminalFontSize.value)
+            setTypeface(typeface)
+            keepScreenOn = true
+            isFocusable = true
+            isFocusableInTouchMode = true
+        }
+        terminalView = view
+        return view
+    }
+
+    private fun parseColor(hex: String): Int {
+        val clean = hex.removePrefix("#")
+        return when (clean.length) {
+            3 -> {
+                val r = clean[0].digitToIntOrNull(16) ?: return android.graphics.Color.BLACK
+                val g = clean[1].digitToIntOrNull(16) ?: return android.graphics.Color.BLACK
+                val b = clean[2].digitToIntOrNull(16) ?: return android.graphics.Color.BLACK
+                android.graphics.Color.rgb(r * 17, g * 17, b * 17)
+            }
+            6 -> {
+                android.graphics.Color.rgb(
+                    clean.substring(0, 2).toInt(16),
+                    clean.substring(2, 4).toInt(16),
+                    clean.substring(4, 6).toInt(16)
+                )
+            }
+            8 -> {
+                android.graphics.Color.argb(
+                    clean.substring(0, 2).toInt(16),
+                    clean.substring(2, 4).toInt(16),
+                    clean.substring(4, 6).toInt(16),
+                    clean.substring(6, 8).toInt(16)
+                )
+            }
+            else -> android.graphics.Color.BLACK
+        }
+    }
 
     var session: TerminalSession? = null
         private set

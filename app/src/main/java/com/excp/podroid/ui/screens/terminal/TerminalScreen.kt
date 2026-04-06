@@ -11,7 +11,6 @@ package com.excp.podroid.ui.screens.terminal
 import android.app.Activity
 import android.graphics.Typeface
 import android.view.WindowManager
-import com.termux.terminal.TerminalColors
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -44,10 +43,8 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -62,33 +59,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.excp.podroid.engine.VmState
 import com.termux.view.TerminalView
-
-private fun parseColor(hex: String): Int {
-    val clean = hex.removePrefix("#")
-    val color = when (clean.length) {
-        3 -> {
-            val r = clean[0].digitToIntOrNull(16) ?: return android.graphics.Color.BLACK
-            val g = clean[1].digitToIntOrNull(16) ?: return android.graphics.Color.BLACK
-            val b = clean[2].digitToIntOrNull(16) ?: return android.graphics.Color.BLACK
-            android.graphics.Color.rgb(r * 17, g * 17, b * 17)
-        }
-        6 -> {
-            val r = clean.substring(0, 2).toInt(16)
-            val g = clean.substring(2, 4).toInt(16)
-            val b = clean.substring(4, 6).toInt(16)
-            android.graphics.Color.rgb(r, g, b)
-        }
-        8 -> {
-            val a = clean.substring(0, 2).toInt(16)
-            val r = clean.substring(2, 4).toInt(16)
-            val g = clean.substring(4, 6).toInt(16)
-            val b = clean.substring(6, 8).toInt(16)
-            android.graphics.Color.argb(a, r, g, b)
-        }
-        else -> android.graphics.Color.BLACK
-    }
-    return color
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -219,62 +189,35 @@ fun TerminalScreen(
 
             is VmState.Running -> {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    val terminalView = remember(vmState) {
-                        val colorFile = java.io.File(context.filesDir, "colors.properties")
-                        val bgColor = if (colorFile.exists()) {
-                            try {
-                                val props = java.util.Properties()
-                                colorFile.inputStream().use { props.load(it) }
-                                TerminalColors.COLOR_SCHEME.updateWith(props)
-                                val bgHex = props["background"] as? String
-                                if (bgHex != null) parseColor(bgHex) else android.graphics.Color.BLACK
-                            } catch (_: Exception) { android.graphics.Color.BLACK }
-                        } else {
-                            android.graphics.Color.BLACK
-                        }
-                        val fontFile = java.io.File(context.filesDir, "font.ttf")
-                        val typeface = if (fontFile.exists()) {
-                            try { Typeface.createFromFile(fontFile) } catch (_: Exception) { Typeface.MONOSPACE }
-                        } else { Typeface.MONOSPACE }
-                        TerminalView(context, null).apply {
-                            setBackgroundColor(bgColor)
-                            setTextSize(fontSize)
-                            setTypeface(typeface)
-                            keepScreenOn = true
-                            isFocusable = true
-                            isFocusableInTouchMode = true
-                        }
-                    }
+                    val view = viewModel.getOrCreateTerminalView()
 
-                    LaunchedEffect(terminalView) {
+                    DisposableEffect(view) {
                         viewModel.createSession()
-                        viewModel.attachView(terminalView)
-                        terminalView.setTerminalViewClient(viewModel.viewClient)
+                        viewModel.attachView(view)
+                        view.setTerminalViewClient(viewModel.viewClient)
                         val sess = viewModel.session
                         if (sess != null) {
-                            terminalView.mTermSession = sess
-                            terminalView.mEmulator = sess.emulator
+                            view.mTermSession = sess
+                            view.mEmulator = sess.emulator
                         }
-                        terminalView.requestFocus()
-                    }
-
-                    LaunchedEffect(terminalView) {
-                        val view = terminalView
-                        view.addOnLayoutChangeListener { v, left, top, right, bottom,
-                                                    oldLeft, oldTop, oldRight, oldBottom ->
+                        view.requestFocus()
+                        val listener = android.view.View.OnLayoutChangeListener { v, left, top, right, bottom,
+                                                         oldLeft, oldTop, oldRight, oldBottom ->
                             val w = right - left
                             val h = bottom - top
-                            if (w <= 0 || h <= 0) return@addOnLayoutChangeListener
-                            if (w == oldRight - oldLeft && h == oldBottom - oldTop) return@addOnLayoutChangeListener
+                            if (w <= 0 || h <= 0) return@OnLayoutChangeListener
+                            if (w == oldRight - oldLeft && h == oldBottom - oldTop) return@OnLayoutChangeListener
                             (v as TerminalView).updateSize()
+                        }
+                        view.addOnLayoutChangeListener(listener)
+                        onDispose {
+                            view.removeOnLayoutChangeListener(listener)
                         }
                     }
 
                     AndroidView(
-                        factory = { terminalView },
-                        update = { view ->
-                            view.setTextSize(fontSize)
-                        },
+                        factory = { view },
+                        update = { v -> v.setTextSize(fontSize) },
                         modifier = Modifier.fillMaxSize(),
                     )
 
