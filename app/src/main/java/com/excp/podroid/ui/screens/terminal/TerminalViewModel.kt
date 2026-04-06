@@ -35,8 +35,6 @@ import androidx.lifecycle.viewModelScope
 import com.excp.podroid.data.repository.SettingsRepository
 import com.excp.podroid.engine.PodroidQemu
 import com.excp.podroid.engine.VmState
-import com.termux.terminal.TerminalEmulator
-import com.termux.terminal.TerminalOutput
 import com.termux.terminal.TerminalSession
 import com.termux.terminal.TerminalSessionClient
 import com.termux.view.TerminalView
@@ -250,33 +248,6 @@ class TerminalViewModel @Inject constructor(
         // call triggers initializeEmulator(). Force it now so the bridge process
         // starts and the PTY file descriptor is allocated.
         sess.updateSize(80, 24)
-
-        // Busybox ash sends \033[6n (cursor position query) on every prompt.
-        // The Termux TerminalEmulator responds with \033[row;colR via TerminalOutput
-        // → bridge stdin → serial → VM ttyAMA0. Due to bridge round-trip latency,
-        // the response arrives after ash's readline has timed out waiting for it,
-        // so ash treats it as keyboard input and displays "^[[16;5R" garbage.
-        //
-        // Fix: replace the session's emulator with one whose TerminalOutput is a
-        // no-op — all emulator responses are dropped. Keyboard input is unaffected
-        // because it flows through session.write() → PTY master (separate path).
-        try {
-            val noOpOutput = object : TerminalOutput() {
-                override fun write(data: ByteArray, offset: Int, count: Int) {}
-                override fun titleChanged(oldTitle: String?, newTitle: String?) {}
-                override fun onCopyTextToClipboard(text: String?) {}
-                override fun onPasteTextFromClipboard() {}
-                override fun onBell() {}
-                override fun onColorsChanged() {}
-            }
-            val displayEmulator = TerminalEmulator(noOpOutput, 80, 24, 2000, sessionClient)
-            val field = TerminalSession::class.java.getDeclaredField("mEmulator")
-            field.isAccessible = true
-            field.set(sess, displayEmulator)
-            Log.d(TAG, "Emulator output replaced — CPR responses will be dropped")
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not replace emulator output: ${e.message}")
-        }
 
         session = sess
         Log.d(TAG, "Bridge session created — PTY connected to ${qemu.serialSockPath}")

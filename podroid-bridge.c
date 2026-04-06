@@ -74,6 +74,42 @@ static int write_all(int fd, const char *buf, int n) {
     return 0;
 }
 
+/*
+ * filter_csi6n — strip CSI 6n responses from VM data.
+ *
+ * CSI 6n is the emulator's response to the shell's DA1 query (\033[6n).
+ * The response format is \033[<row>;<col>R, e.g. \033[16;5R.
+ *
+ * When this response reaches ash via the PTY, ash reads it as keyboard input
+ * and prints "^[[16;5R" garbage. Filtering it here prevents that.
+ *
+ * CSI 6n is the ONLY response we filter — all other CSI sequences pass
+ * through normally (mouse tracking, title changes, etc.).
+ */
+static int filter_csi6n(char *buf, int n) {
+    char *src = buf;
+    char *dst = buf;
+    int i = 0;
+    while (i < n) {
+        if (i < n - 2 && buf[i] == '\033' && buf[i + 1] == '[') {
+            /* Check for CSI 6n: ESC [ <digits> ; <digits> R */
+            int j = i + 2;
+            while (j < n && buf[j] >= '0' && buf[j] <= '9') j++;
+            if (j < n && buf[j] == ';') {
+                int k = j + 1;
+                while (k < n && buf[k] >= '0' && buf[k] <= '9') k++;
+                if (k < n && buf[k] == 'R') {
+                    /* Matched CSI 6n — skip it */
+                    i = k + 1;
+                    continue;
+                }
+            }
+        }
+        *dst++ = buf[i++];
+    }
+    return dst - buf;
+}
+
 int main(int argc, char *argv[]) {
     if (argc < 3) {
         fprintf(stderr, "Usage: %s <serial.sock> <ctrl.sock>\n", argv[0]);
@@ -145,11 +181,12 @@ int main(int argc, char *argv[]) {
             if (write_all(serial_fd, buf, n) < 0) break;
         }
 
-        /* Serial → screen */
+        /* Serial → screen (filter CSI 6n garbage before forwarding to PTY) */
         if (FD_ISSET(serial_fd, &rfds)) {
             int n = read(serial_fd, buf, sizeof(buf));
             if (n <= 0) break;
-            if (write_all(STDOUT_FILENO, buf, n) < 0) break;
+            int filtered = filter_csi6n(buf, n);
+            if (write_all(STDOUT_FILENO, buf, filtered) < 0) break;
         }
     }
 
