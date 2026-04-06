@@ -24,6 +24,8 @@ import android.net.LocalSocket
 import android.net.LocalSocketAddress
 import android.util.Log
 import com.excp.podroid.data.repository.PortForwardRule
+import com.termux.terminal.TerminalSession
+import com.termux.terminal.TerminalSessionClient
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,6 +50,12 @@ class PodroidQemu @Inject constructor(
     val consoleText: StateFlow<String> = _consoleText.asStateFlow()
 
     private val _bootStage = MutableStateFlow("")
+
+    private var _terminalSession: TerminalSession? = null
+    private var _terminalSessionAttached = false
+
+    val terminalSession: TerminalSession? get() = _terminalSession
+    val terminalSessionAttached: Boolean get() = _terminalSessionAttached
     val bootStage: StateFlow<String> = _bootStage.asStateFlow()
 
     @Volatile
@@ -84,6 +92,40 @@ class PodroidQemu @Inject constructor(
             try { sock.shutdownOutput() } catch (_: Exception) {}
             try { sock.close() } catch (_: Exception) {}
         }
+    }
+
+    fun createTerminalSession(client: TerminalSessionClient): TerminalSession {
+        if (_terminalSession != null && _terminalSessionAttached) {
+            return _terminalSession!!
+        }
+
+        releaseSerial()
+        Thread.sleep(500)
+
+        val bridgeExe = File(context.applicationInfo.nativeLibraryDir, "libpodroid-bridge.so")
+        if (!bridgeExe.exists()) {
+            throw IllegalStateException("podroid-bridge not found at ${bridgeExe.absolutePath}")
+        }
+
+        val sess = TerminalSession(
+            bridgeExe.absolutePath,
+            context.filesDir.absolutePath,
+            arrayOf(bridgeExe.absolutePath, serialSockPath, ctrlSockPath),
+            null,
+            2000,
+            client,
+        )
+
+        sess.updateSize(80, 24)
+
+        _terminalSession = sess
+        _terminalSessionAttached = true
+        Log.d(TAG, "Terminal session created in Qemu singleton")
+        return sess
+    }
+
+    fun attachTerminalView() {
+        _terminalSessionAttached = true
     }
 
     fun start() = start(emptyList())

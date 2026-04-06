@@ -207,32 +207,10 @@ class TerminalViewModel @Inject constructor(
 
     fun createSession() {
         if (attached) return
-        attached = true
 
-        qemu.releaseSerial()
-        Thread.sleep(500)
-
-        val bridgeExe = File(context.applicationInfo.nativeLibraryDir, "libpodroid-bridge.so")
-        if (!bridgeExe.exists()) {
-            Log.e(TAG, "podroid-bridge not found at ${bridgeExe.absolutePath}")
-            return
-        }
-
-        val sess = TerminalSession(
-            bridgeExe.absolutePath,
-            context.filesDir.absolutePath,
-            arrayOf(bridgeExe.absolutePath, qemu.serialSockPath, qemu.ctrlSockPath),
-            null,
-            2000,
-            sessionClient,
-        )
-        // TerminalSession defers subprocess creation until the first updateSize()
-        // call triggers initializeEmulator(). Force it now so the bridge process
-        // starts and the PTY file descriptor is allocated.
-        sess.updateSize(80, 24)
-
+        val sess = qemu.createTerminalSession(sessionClient)
         session = sess
-        Log.d(TAG, "Bridge session created — PTY connected to ${qemu.serialSockPath}")
+        attached = true
     }
 
     /**
