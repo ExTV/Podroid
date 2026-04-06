@@ -260,20 +260,33 @@ stty -ixon -ixoff -iexten -echoctl 2>/dev/null
 cd /root
 PROF
 
-# ── Silent resize helper ─────────────────────────────────────────────────────
-cat > /usr/local/bin/sz <<'SZ'
-#!/bin/sh
-stty rows "$1" cols "$2" 2>/dev/null
-printf '\033[1A\033[2K'
-SZ
-chmod +x /usr/local/bin/sz
+# ── Resize control daemon ─────────────────────────────────────────────────────
+# Reads "RESIZE rows cols\n" from /dev/hvc0 (virtio-console, mapped from
+# ctrl.sock on the Android side by podroid-bridge on SIGWINCH).
+# stty on /dev/ttyAMA0 calls TIOCSWINSZ; the Linux kernel automatically
+# sends SIGWINCH to the foreground process group — nvim/htop/btop resize
+# correctly without any stdin injection.
+(
+    for i in $(seq 1 30); do
+        [ -c /dev/hvc0 ] && break
+        sleep 1
+    done
+    [ -c /dev/hvc0 ] || exit 0
+    while IFS= read -r line; do
+        case "$line" in
+            RESIZE\ *)
+                set -- $line
+                stty rows "$2" cols "$3" < /dev/ttyAMA0 2>/dev/null
+                ;;
+        esac
+    done < /dev/hvc0
+) &
 
 # ── Login wrapper ─────────────────────────────────────────────────────────────
 cat > /usr/local/bin/podroid-login <<'LOGIN'
 #!/bin/sh
 . /etc/profile
 cat /etc/motd
-resize >/dev/null 2>&1
 exec /bin/sh
 LOGIN
 chmod +x /usr/local/bin/podroid-login

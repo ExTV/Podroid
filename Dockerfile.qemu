@@ -369,6 +369,15 @@ RUN cd ${QEMU_DIR} \
     && ! find build -path '*coroutine-sigaltstack*.o' -print -quit | grep -q . \
     && make install
 
+# ── podroid-bridge — serial socket ↔ PTY relay with SIGWINCH→RESIZE ──────────
+# Compiled as a PIE executable, renamed to .so so Android extracts it from APK.
+COPY podroid-bridge.c /tmp/podroid-bridge.c
+RUN ${CC} ${CFLAGS} -fPIE -pie \
+        ${LDFLAGS} \
+        /tmp/podroid-bridge.c \
+        -o /opt/qemu-out/podroid-bridge \
+    && cp /opt/qemu-out/podroid-bridge /opt/qemu-out/libpodroid-bridge.so
+
 # ── Rename binary to .so; fix libslirp soname for Android APK packaging ───────
 # Android APK packaging only extracts files matching lib*.so (no version suffix).
 # QEMU was compiled with libslirp.so.0 as the soname. We rename the library to
@@ -387,5 +396,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends patchelf && rm 
 RUN mkdir -p /out/qemu/keymaps
 COPY --from=builder /opt/qemu-out/libqemu-system-aarch64.so /out/
 COPY --from=builder /opt/qemu-out/libslirp.so               /out/
+COPY --from=builder /opt/qemu-out/libpodroid-bridge.so       /out/
 COPY --from=builder /opt/qemu-out/share/qemu/efi-virtio.rom  /out/qemu/
 COPY --from=builder /opt/qemu-out/share/qemu/keymaps/        /out/qemu/keymaps/

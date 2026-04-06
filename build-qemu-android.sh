@@ -41,6 +41,7 @@ ASSETS="${SCRIPT_DIR}/app/src/main/assets"
 # Extract binaries
 docker cp "${CONTAINER}:/out/libqemu-system-aarch64.so" "${JNILIBS}/libqemu-system-aarch64.so"
 docker cp "${CONTAINER}:/out/libslirp.so"               "${JNILIBS}/libslirp.so"
+docker cp "${CONTAINER}:/out/libpodroid-bridge.so"      "${JNILIBS}/libpodroid-bridge.so"
 
 # Extract ROM and keymaps
 docker cp "${CONTAINER}:/out/qemu/efi-virtio.rom"        "${ASSETS}/qemu/efi-virtio.rom"
@@ -93,6 +94,7 @@ echo "=== [4/4] Done! ==="
 echo ""
 echo "  libqemu-system-aarch64.so → ${JNILIBS}/"
 echo "  libslirp.so               → ${JNILIBS}/"
+echo "  libpodroid-bridge.so      → ${JNILIBS}/"
 echo "  ROM + keymaps             → ${ASSETS}/qemu/"
 echo ""
 echo "  Now run: ./gradlew assembleDebug"

@@ -2,13 +2,14 @@
  * Podroid - Rootless Podman for Android
  * Copyright (C) 2024 Podroid contributors
  *
- * Terminal screen using Termux TerminalView for full VT100/xterm emulation.
+ * Terminal screen using Termux TerminalView wired to the podroid-bridge
+ * binary via a real TerminalSession PTY. No reflection, no emulator
+ * injection. Window resize propagates through the normal PTY/SIGWINCH path.
  */
 package com.excp.podroid.ui.screens.terminal
 
 import android.app.Activity
 import android.graphics.Typeface
-import android.util.Log
 import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -57,7 +58,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.excp.podroid.engine.VmState
-import com.termux.terminal.TerminalSession
 import com.termux.view.TerminalView
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -105,28 +105,17 @@ fun TerminalScreen(
                     )
                 }
             },
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = Color(0xFF1A1A1A),
-            ),
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF1A1A1A)),
         )
 
         when (vmState) {
             is VmState.Idle, is VmState.Stopped -> {
-                Box(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    contentAlignment = Alignment.Center,
-                ) {
+                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("VM Not Running", color = Color.Red, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                         Text(
-                            text = "VM Not Running",
-                            color = Color.Red,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Text(
-                            text = "Start the VM from Home screen first",
-                            color = Color.Gray,
-                            fontSize = 14.sp,
+                            "Start the VM from Home screen first",
+                            color = Color.Gray, fontSize = 14.sp,
                             modifier = Modifier.padding(top = 8.dp),
                         )
                     }
@@ -134,37 +123,22 @@ fun TerminalScreen(
             }
 
             is VmState.Starting -> {
-                Box(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    contentAlignment = Alignment.Center,
-                ) {
+                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.padding(32.dp),
                     ) {
-                        CircularProgressIndicator(
-                            color = Color(0xFF4FC3F7),
-                            strokeWidth = 3.dp,
-                        )
+                        CircularProgressIndicator(color = Color(0xFF4FC3F7), strokeWidth = 3.dp)
                         Spacer(modifier = Modifier.height(24.dp))
-                        Text(
-                            text = "Starting VM...",
-                            color = Color.White,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
+                        Text("Starting VM...", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = bootStage.ifEmpty { "Initializing..." },
-                            color = Color(0xFF4FC3F7),
-                            fontSize = 14.sp,
+                            bootStage.ifEmpty { "Initializing..." },
+                            color = Color(0xFF4FC3F7), fontSize = 14.sp,
                         )
                         Spacer(modifier = Modifier.height(24.dp))
                         LinearProgressIndicator(
-                            modifier = Modifier
-                                .fillMaxWidth(0.7f)
-                                .height(4.dp)
-                                .clip(RoundedCornerShape(2.dp)),
+                            modifier = Modifier.fillMaxWidth(0.7f).height(4.dp).clip(RoundedCornerShape(2.dp)),
                             color = Color(0xFF4FC3F7),
                             trackColor = Color(0xFF333333),
                         )
@@ -173,30 +147,19 @@ fun TerminalScreen(
             }
 
             is VmState.Error -> {
-                Box(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    contentAlignment = Alignment.Center,
-                ) {
+                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Error", color = Color.Red, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                         Text(
-                            text = "Error",
-                            color = Color.Red,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Text(
-                            text = (vmState as VmState.Error).message,
-                            color = Color.Gray,
-                            fontSize = 14.sp,
+                            (vmState as VmState.Error).message,
+                            color = Color.Gray, fontSize = 14.sp,
                             modifier = Modifier.padding(top = 8.dp, start = 16.dp, end = 16.dp),
                             textAlign = TextAlign.Center,
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "Tap to Retry",
-                            color = Color(0xFF4FC3F7),
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
+                            "Tap to Retry",
+                            color = Color(0xFF4FC3F7), fontSize = 14.sp, fontWeight = FontWeight.Bold,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(Color(0xFF333333))
@@ -208,26 +171,18 @@ fun TerminalScreen(
             }
 
             is VmState.Paused, is VmState.Saving, is VmState.Resuming -> {
-                Box(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    contentAlignment = Alignment.Center,
-                ) {
+                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(
-                            color = Color(0xFF4FC3F7),
-                            strokeWidth = 3.dp,
-                        )
+                        CircularProgressIndicator(color = Color(0xFF4FC3F7), strokeWidth = 3.dp)
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = when (vmState) {
-                                is VmState.Paused -> "VM Paused"
-                                is VmState.Saving -> "Saving state..."
+                            when (vmState) {
+                                is VmState.Paused   -> "VM Paused"
+                                is VmState.Saving   -> "Saving state..."
                                 is VmState.Resuming -> "Resuming..."
-                                else -> ""
+                                else                -> ""
                             },
-                            color = Color.White,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
+                            color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold,
                         )
                     }
                 }
@@ -254,11 +209,22 @@ fun TerminalScreen(
 
                                 requestFocus()
 
-                                // Use layout listener to sync size once the view is actually measured
-                                addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
-                                    val tv = v as TerminalView
-                                    val s = viewModel.session ?: return@addOnLayoutChangeListener
-                                    syncTerminalSize(tv, s, viewModel)
+                                /*
+                                 * Layout listener — fires on initial layout and when the keyboard
+                                 * opens/closes. TerminalView.updateSize() uses the renderer's
+                                 * exact font metrics, calculates cols/rows, calls
+                                 * session.updateSize() which:
+                                 *   1. Resizes the terminal emulator buffer
+                                 *   2. Calls ioctl(TIOCSWINSZ) on the PTY master
+                                 *   3. SIGWINCH → bridge → "RESIZE rows cols" → ctrl.sock → VM
+                                 */
+                                addOnLayoutChangeListener { v, left, top, right, bottom,
+                                                            oldLeft, oldTop, oldRight, oldBottom ->
+                                    val w = right - left
+                                    val h = bottom - top
+                                    if (w <= 0 || h <= 0) return@addOnLayoutChangeListener
+                                    if (w == oldRight - oldLeft && h == oldBottom - oldTop) return@addOnLayoutChangeListener
+                                    (v as TerminalView).updateSize()
                                 }
                             }
                         },
@@ -268,7 +234,7 @@ fun TerminalScreen(
                         modifier = Modifier.fillMaxSize(),
                     )
 
-                    // Boot progress overlay — shown while VM is still initializing
+                    // Boot progress overlay while VM is still initializing
                     if (bootStage.isNotEmpty() && bootStage != "Ready") {
                         Box(
                             modifier = Modifier
@@ -288,11 +254,7 @@ fun TerminalScreen(
                                     modifier = Modifier.size(16.dp),
                                 )
                                 Spacer(modifier = Modifier.width(12.dp))
-                                Text(
-                                    text = bootStage,
-                                    color = Color(0xFF4FC3F7),
-                                    fontSize = 13.sp,
-                                )
+                                Text(bootStage, color = Color(0xFF4FC3F7), fontSize = 13.sp)
                             }
                         }
                     }
@@ -305,36 +267,6 @@ fun TerminalScreen(
             ctrlActive = viewModel.extraCtrl,
             altActive = viewModel.extraAlt,
         )
-    }
-}
-
-private fun syncTerminalSize(
-    view: TerminalView,
-    session: TerminalSession,
-    viewModel: TerminalViewModel,
-) {
-    if (view.width <= 0 || view.height <= 0) return
-    try {
-        val renderer = view.javaClass.getDeclaredField("mRenderer")
-            .apply { isAccessible = true }.get(view) ?: return
-        val rendererClass = renderer.javaClass
-        val fw = rendererClass.getDeclaredField("mFontWidth")
-            .apply { isAccessible = true }.getFloat(renderer)
-        val fls = rendererClass.getDeclaredField("mFontLineSpacing")
-            .apply { isAccessible = true }.getInt(renderer)
-        val flsa = rendererClass.getDeclaredField("mFontLineSpacingAndAscent")
-            .apply { isAccessible = true }.getInt(renderer)
-
-        if (fw <= 0) return
-
-        val cols = (view.width / fw).toInt().coerceAtLeast(4)
-        val rows = ((view.height - flsa) / fls).coerceAtLeast(4)
-
-        // TerminalView auto-resizes its emulator on layout, so just sync
-        // the dimensions to QEMU (updateSize deduplicates and sends stty).
-        viewModel.updateSize(cols, rows)
-    } catch (e: Exception) {
-        Log.w("TerminalScreen", "Resize failed: ${e.message}")
     }
 }
 
