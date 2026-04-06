@@ -131,18 +131,6 @@ fun SettingsScreen(
         ) {
             Spacer(Modifier.height(8.dp))
 
-            // ── Display ──────────────────────────────────────────────
-            SettingsSectionHeader("Appearance")
-
-            SettingsSwitchRow(
-                title = "Dark theme",
-                subtitle = "Use a dark color scheme",
-                checked = darkTheme,
-                onCheckedChange = { viewModel.setDarkTheme(it) },
-            )
-
-            Spacer(Modifier.height(16.dp))
-
             // ── Terminal ─────────────────────────────────────────────
             SettingsSectionHeader("Terminal")
 
@@ -267,16 +255,7 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(8.dp))
 
-            // SSH
-            SettingsSwitchRow(
-                title = "Enable SSH",
-                subtitle = if (sshEnabled)
-                    "ssh root@<phone-ip> -p 9922  |  password: podroid"
-                else
-                    "Access the VM over your local network via SSH",
-                checked = sshEnabled,
-                onCheckedChange = { viewModel.setSshEnabled(it) },
-            )
+
 
             Spacer(Modifier.height(4.dp))
 
@@ -294,8 +273,8 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            // ── Port Forwarding ───────────────────────────────────────
-            SettingsSectionHeader("Port Forwarding")
+            // ── Network ───────────────────────────────────────────────
+            SettingsSectionHeader("Network")
 
             val phoneIp = viewModel.phoneIp
             Text(
@@ -304,6 +283,12 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.padding(bottom = 4.dp),
+            )
+            SettingsSwitchRow(
+                title = "Enable SSH",
+                subtitle = if (sshEnabled) "ssh root@<phone-ip> -p 9922  |  password: podroid" else "Access the VM over your local network via SSH",
+                checked = sshEnabled,
+                onCheckedChange = { viewModel.setSshEnabled(it) },
             )
             Text(
                 text = "Rules forward ports from your Android device into the VM. Active immediately when VM is running.",
@@ -382,7 +367,15 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            // ── Diagnostics ───────────────────────────────────────────
+            SettingsSectionHeader("Appearance")
+            SettingsSwitchRow(
+                title = "Dark theme",
+                subtitle = "Use a dark color scheme",
+                checked = darkTheme,
+                onCheckedChange = { viewModel.setDarkTheme(it) },
+            )
+            Spacer(Modifier.height(16.dp))
+
             SettingsSectionHeader("Diagnostics")
 
             FilledTonalButton(
