@@ -67,6 +67,7 @@ class TerminalViewModel @Inject constructor(
     private var attached = false
 
     fun getOrCreateTerminalView(): TerminalView {
+        Log.d(TAG, "getOrCreateTerminalView called, current view: $terminalView, this: ${System.identityHashCode(this)}")
         terminalView?.let { return it }
 
         val colorFile = java.io.File(context.filesDir, "colors.properties")

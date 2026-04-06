@@ -1,7 +1,6 @@
 package com.excp.podroid.ui.navigation
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -14,7 +13,7 @@ import com.excp.podroid.ui.screens.home.HomeScreen
 import com.excp.podroid.ui.screens.settings.SettingsScreen
 import com.excp.podroid.ui.screens.setup.SetupScreen
 import com.excp.podroid.ui.screens.terminal.TerminalScreen
-import javax.inject.Inject
+import com.excp.podroid.ui.screens.terminal.TerminalViewModel
 
 object Routes {
     const val SETUP    = "setup"
@@ -30,11 +29,13 @@ fun PodroidNavGraph(
 ) {
     val isSetupDone by settingsRepository.isSetupDone.collectAsState(initial = null)
 
-    // Wait until we know whether setup is done before deciding the start destination
+    // Scoped to PodroidNavGraph composable — survives all navigation including popUpTo(0)
+    val terminalViewModel: TerminalViewModel = hiltViewModel()
+
     val startDestination = when (isSetupDone) {
         true  -> Routes.HOME
         false -> Routes.SETUP
-        null  -> return // still loading — render nothing to avoid flicker
+        null  -> return
     }
 
     NavHost(
@@ -64,6 +65,7 @@ fun PodroidNavGraph(
 
         composable(Routes.TERMINAL) {
             TerminalScreen(
+                viewModel = terminalViewModel,
                 onNavigateBack = {
                     if (!navController.popBackStack(Routes.HOME, inclusive = false)) {
                         navController.navigate(Routes.HOME) {
