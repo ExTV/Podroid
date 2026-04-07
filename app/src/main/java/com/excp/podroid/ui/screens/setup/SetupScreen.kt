@@ -1,11 +1,17 @@
 package com.excp.podroid.ui.screens.setup
 
+import android.Manifest
+import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.Settings
+import androidx.activity.ComponentActivity
 import androidx.compose.animation.core.animateDpAsState
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -77,7 +83,21 @@ fun SetupScreen(
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(setupComplete) {
-        if (setupComplete) onSetupComplete()
+        if (setupComplete) {
+            onSetupComplete()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                val activity = context as? ComponentActivity ?: return@LaunchedEffect
+                if (ContextCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED
+                ) {
+                    ActivityCompat.requestPermissions(
+                        activity,
+                        arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                        0,
+                    )
+                }
+            }
+        }
     }
 
     Scaffold { innerPadding ->

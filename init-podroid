@@ -210,7 +210,7 @@ STORAGE_GB=$(df -BG / 2>/dev/null | awk 'NR==2 {gsub(/G/,"",$2); print $2}')
 
 SSH_LINE=""
 if [ "$SSH_ENABLED" = "1" ]; then
-    SSH_LINE="  ssh root@${ANDROID_IP} -p 9922  (pass: podroid, dropbear)"
+    SSH_LINE="  ssh root@${ANDROID_IP} -p 9922  (pass: podroid)"
 fi
 
 cat > /etc/motd <<MOTD

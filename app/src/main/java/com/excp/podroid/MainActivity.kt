@@ -23,26 +23,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        requestNotificationPermissionIfNeeded()
         enableEdgeToEdge()
         setContent {
             val darkTheme by settingsRepository.darkTheme.collectAsState(initial = true)
             PodroidTheme(darkTheme = darkTheme) {
                 PodroidNavGraph(settingsRepository = settingsRepository)
             }
-        }
-    }
-
-    private fun requestNotificationPermissionIfNeeded() {
-        if (android.os.Build.VERSION.SDK_INT < 33) return
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                0,
-            )
         }
     }
 }
