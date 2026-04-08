@@ -109,14 +109,19 @@ App -> Foreground Service -> QEMU TCG VM -> Alpine Linux
 
 ## Building from Source
 
+Requires Docker and Android NDK.
+
 ```sh
-# 1. Build VM initramfs and kernel (requires Docker)
+# 1. Build VM initramfs and kernel (requires Docker with multi-arch)
 ./docker-build-initramfs.sh
 
 # 2. Build QEMU + terminal bridge (requires Docker)
 ./build-qemu-android.sh
 
-# 3. Build the APK
+# 3. Rebuild Termux terminal library with 16KB page alignment (requires NDK)
+./build-termux-android.sh
+
+# 4. Build the APK
 ./gradlew assembleDebug
 ```
 
