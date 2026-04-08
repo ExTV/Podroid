@@ -322,6 +322,9 @@ arrows, HOME, END, PGUP, PGDN, F1-F12, -, /, |
 # Build QEMU + bridge (requires Docker)
 ./build-qemu-android.sh
 
+# Build Termux terminal lib with 16KB page alignment (requires NDK)
+./build-termux-android.sh
+
 # Build APK
 ./gradlew assembleDebug
 
@@ -479,7 +482,7 @@ No stdin injection. No debounce. nvim/htop/btop resize automatically.
 ## Dockerfile.qemu - QEMU Build Details
 
 ### Build Dependencies
-- NDK r27c (Android API 34)
+- NDK r27c (Android API 28) — QEMU builds against API 28 sysroot to avoid symbols not available in Android 9-11 (like copy_file_range)
 - Cross-compile from debian:bookworm
 - Dependencies: pcre2, libffi, glib 2.82.5, pixman 0.44.2, libattr, **libucontext**
 
