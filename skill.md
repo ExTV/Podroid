@@ -1,6 +1,6 @@
 # Podroid AI Context
 
-> **Last updated:** 2026-04-06
+> **Last updated:** 2026-04-08
 > **Purpose:** Complete project context for AI-assisted development without re-explaining structure every prompt.
 
 ---
@@ -10,7 +10,7 @@
 **Podroid** is an Android app that runs Linux containers (Podman) on arm64 Android devices without root required. It spins up a lightweight Alpine Linux VM using QEMU and provides a built-in serial terminal.
 
 - **Package:** `com.excp.podroid`
-- **Min SDK:** 26 (Android 8.0)
+- **Min SDK:** 28 (Android 9.0)
 - **Target SDK:** 36
 - **Architecture:** AArch64 only
 - **License:** GNU GPL v2.0
@@ -488,7 +488,7 @@ Android Bionic lacks proper `ucontext.h`. Built from [kaniini/libucontext](https
 
 ### QEMU Patches Applied
 1. **librt optional** — Bionic has librt functions in libc, not a separate library
-2. **memfd_create shim** — `qemu_shm_alloc` uses `syscall(__NR_memfd_create)` instead of `shm_open` (API 26+)
+2. **memfd_create shim** — `qemu_shm_alloc` uses `syscall(__NR_memfd_create)` instead of `shm_open` (API 28+)
 3. **libattr stub** — `libattr = declare_dependency()` bypasses pkg-config detection (xattr in Bionic's libc)
 4. **st_\*_nsec undef** — Undefines `st_atime_nsec` etc. macros from Android's sys/stat.h that clash with 9p struct fields
 
@@ -579,43 +579,25 @@ Automated build → install → boot test script:
 
 ### Known Issues (Investigation Notes)
 
-#### Issue #10: QEMU copy_file_range on Android 12
+#### Issue #10: QEMU copy_file_range on Android 12 (FIXED)
 
-**Problem:** QEMU crashes on devices with Android 12 (kernel 5.x) with error:
+**Problem:** QEMU crashes on devices with Android 12 (OnePlus 7 Pro, kernel 5.x) with error:
 ```
 cannot locate symbol "copy_file_range" referenced by libqemu-system-aarch64.so
 ```
 
-**Root Cause Analysis:**
-1. QEMU's `block/file-posix.c` contains a fallback implementation of `copy_file_range`:
-   ```c
-   #ifndef HAVE_COPY_FILE_RANGE
-   static ssize_t copy_file_range(...) {
-   #ifdef __NR_copy_file_range
-       return syscall(__NR_copy_file_range, ...);
-   #else
-       errno = ENOSYS;
-       return -1;
-   #endif
-   }
-   #endif
-   ```
-2. The fallback is only compiled when `HAVE_COPY_FILE_RANGE` is NOT defined
-3. QEMU's build system (Meson) auto-detects and defines this macro when glibc has the function
-4. Our Android NDK toolchain links against glibc (via NDK sysroot), so the macro gets defined
-5. This causes the fallback to NOT be compiled, and QEMU references the glibc symbol instead
+**Root Cause:**
+- Built against Android 34 (API 34) sysroot
+- glibc in API 34 has `copy_file_range` symbol, but Android 12's Bionic doesn't
+- Linker fails to resolve the symbol at runtime
 
-**Attempted Fixes (Both Failed):**
-1. `-DHAVE_COPY_FILE_RANGE=0` — This DEFINES the macro to value 0, which makes `#ifndef` FALSE, so fallback is still NOT compiled
-2. No flag (leave undefined) — QEMU build system still auto-defines the macro via Meson detection
-3. `-UHAVE_COPY_FILE_RANGE` — Doesn't work because Meson re-adds the define during build
+**Fix Applied (v1.1.1):**
+1. Changed `app/build.gradle.kts`: minSdk 26 → 28, targetSdk 36
+2. Changed `Dockerfile.qemu`: API 34 → 28
+3. QEMU now builds against Android 28 sysroot which doesn't have `copy_file_range`
+4. Uses only Bionic functions available in API 28
 
-**Why the Fallback Should Work:**
-- The fallback uses `syscall(__NR_copy_file_range, ...)` directly
-- The syscall number 285 exists in Linux kernel headers (since ~2019)
-- On Android 12 kernels (5.4+), the syscall may not be implemented, but at least the symbol reference wouldn't be external
-
-**Investigation Status:** Ongoing - waiting for user response about what fix worked for them.
+**Note:** This raises the minimum Android version from 8.0 (API 26) to 9.0 (API 28).
 
 ---
 
