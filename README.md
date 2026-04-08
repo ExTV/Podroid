@@ -5,7 +5,7 @@
     <img src="https://img.shields.io/github/v/release/ExTV/Podroid?include_prereleases&label=Latest%20Release" alt="Latest Release">
   </a>
   <a href="https://github.com/ExTV/Podroid/blob/main/LICENSE">
-    <img src="https://img.shields.io/github/license/ExTV/Podroid?color=blue" alt="License">
+    <img src="https://img.shields.io/github/license/ExTV/Podroid?color=blue&style=flat" alt="License">
   </a>
   <a href="https://github.com/ExTV/Podroid">
     <img src="https://img.shields.io/github/last-commit/ExTV/Podroid/main?color=green" alt="Last Commit">
@@ -72,7 +72,7 @@ podman run -d -p 8080:80 nginx
 | | |
 |---|---|
 | **Device** | arm64 Android (most phones from 2018+) |
-| **Android** | 8.0+ (API 26) |
+| **Android** | 9.0+ (API 28) |
 | **Storage** | ~150 MB app + VM disk size |
 
 ---
