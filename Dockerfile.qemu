@@ -49,7 +49,7 @@ RUN wget -q https://dl.google.com/android/repository/android-ndk-${NDK_VER}-linu
     && rm /tmp/ndk.zip
 
 ENV NDK=/opt/ndk
-ENV API=34
+ENV API=28
 ENV TARGET=aarch64-linux-android
 ENV LLVM=${NDK}/toolchains/llvm/prebuilt/linux-x86_64
 ENV CC="${LLVM}/bin/${TARGET}${API}-clang"
@@ -66,8 +66,8 @@ ENV PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig"
 #    instead of relying on the host C library. The stub uses syscall() directly,
 #    which works on older kernels (Android 12) as long as the syscall number exists.
 # -U__NR_copy_file_range: Undefine the syscall check so the fallback is used
-ENV CFLAGS="--sysroot=${SYSROOT} -target ${TARGET}${API} -I${PREFIX}/include -fPIC -O2 -march=armv8-a -Wno-implicit-function-declaration -DHAVE_COPY_FILE_RANGE=0"
-ENV CXXFLAGS="--sysroot=${SYSROOT} -target ${TARGET}${API} -I${PREFIX}/include -fPIC -O2 -march=armv8-a -DHAVE_COPY_FILE_RANGE=0"
+ENV CFLAGS="--sysroot=${SYSROOT} -target ${TARGET}${API} -I${PREFIX}/include -fPIC -O2 -march=armv8-a -Wno-implicit-function-declaration"
+ENV CXXFLAGS="--sysroot=${SYSROOT} -target ${TARGET}${API} -I${PREFIX}/include -fPIC -O2 -march=armv8-a"
 ENV LDFLAGS="--sysroot=${SYSROOT} -target ${TARGET}${API} -L${PREFIX}/lib -Wl,-z,max-page-size=16384"
 
 RUN mkdir -p ${PREFIX}/{lib,include,lib/pkgconfig}
@@ -84,8 +84,8 @@ RUN printf '#!/bin/sh\nexport PKG_CONFIG_LIBDIR=/opt/deps/lib/pkgconfig\nexport 
 # ── Meson cross file ──────────────────────────────────────────────────────────
 RUN cat > /opt/cross-android-aarch64.ini << 'EOF'
 [binaries]
-c       = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang'
-cpp     = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang++'
+c       = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android28-clang'
+cpp     = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android28-clang++'
 ar      = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
 strip   = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
 ranlib  = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib'
@@ -96,23 +96,23 @@ pkg-config = '/usr/local/bin/aarch64-android-pkg-config'
 sys_root         = '/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot'
 pkg_config_libdir = ['/opt/deps/lib/pkgconfig']
 c_args       = ['--sysroot=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot',
-                '-target', 'aarch64-linux-android34',
+                '-target', 'aarch64-linux-android28',
                 '-I/opt/deps/include',
                 '-I/opt/deps/include/glib-2.0',
                 '-I/opt/deps/lib/glib-2.0/include',
                 '-fPIC', '-O2', '-march=armv8-a']
 cpp_args     = ['--sysroot=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot',
-                '-target', 'aarch64-linux-android34',
+                '-target', 'aarch64-linux-android28',
                 '-I/opt/deps/include',
                 '-I/opt/deps/include/glib-2.0',
                 '-I/opt/deps/lib/glib-2.0/include',
                 '-fPIC', '-O2', '-march=armv8-a']
 c_link_args  = ['--sysroot=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot',
-                '-target', 'aarch64-linux-android34',
+                '-target', 'aarch64-linux-android28',
                 '-L/opt/deps/lib',
                 '-Wl,-z,max-page-size=16384']
 cpp_link_args = ['--sysroot=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot',
-                 '-target', 'aarch64-linux-android34',
+                 '-target', 'aarch64-linux-android28',
                  '-L/opt/deps/lib',
                  '-Wl,-z,max-page-size=16384']
 
@@ -209,7 +209,7 @@ RUN wget -q https://download.savannah.gnu.org/releases/attr/attr-2.5.2.tar.gz \
     && ln -sf ${PREFIX}/lib/pkgconfig/libattr.pc \
               ${PREFIX}/lib/pkgconfig/attr.pc \
     && cp ${PREFIX}/lib/libattr.a \
-          ${SYSROOT}/usr/lib/aarch64-linux-android/34/libattr.a
+          ${SYSROOT}/usr/lib/aarch64-linux-android/${API}/libattr.a
 
 # ── libucontext (static — provides getcontext/swapcontext on Android) ────────
 RUN git clone --depth=1 https://github.com/kaniini/libucontext.git /tmp/libucontext \

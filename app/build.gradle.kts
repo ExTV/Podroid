@@ -23,7 +23,7 @@ android {
 
     defaultConfig {
         applicationId = "com.excp.podroid"
-        minSdk = 26
+        minSdk = 28
         targetSdk = 36
         versionCode = 13
         versionName = "1.1.1"
