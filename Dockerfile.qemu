@@ -62,9 +62,12 @@ ENV SYSROOT="${LLVM}/sysroot"
 
 ENV PREFIX=/opt/deps
 ENV PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig"
-# -march=armv8-a: disables SVE/SVE2 JIT paths that trip up on Pixel 10 (Tensor G5, ARMv9.2)
-ENV CFLAGS="--sysroot=${SYSROOT} -target ${TARGET}${API} -I${PREFIX}/include -fPIC -O2 -march=armv8-a -Wno-implicit-function-declaration"
-ENV CXXFLAGS="--sysroot=${SYSROOT} -target ${TARGET}${API} -I${PREFIX}/include -fPIC -O2 -march=armv8-a"
+# -DHAVE_COPY_FILE_RANGE=0: Force QEMU to use its fallback copy_file_range stub
+#    instead of relying on the host C library. The stub uses syscall() directly,
+#    which works on older kernels (Android 12) as long as the syscall number exists.
+# -U__NR_copy_file_range: Undefine the syscall check so the fallback is used
+ENV CFLAGS="--sysroot=${SYSROOT} -target ${TARGET}${API} -I${PREFIX}/include -fPIC -O2 -march=armv8-a -Wno-implicit-function-declaration -DHAVE_COPY_FILE_RANGE=0"
+ENV CXXFLAGS="--sysroot=${SYSROOT} -target ${TARGET}${API} -I${PREFIX}/include -fPIC -O2 -march=armv8-a -DHAVE_COPY_FILE_RANGE=0"
 ENV LDFLAGS="--sysroot=${SYSROOT} -target ${TARGET}${API} -L${PREFIX}/lib -Wl,-z,max-page-size=16384"
 
 RUN mkdir -p ${PREFIX}/{lib,include,lib/pkgconfig}
