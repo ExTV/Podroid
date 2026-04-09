@@ -99,8 +99,10 @@ class PodroidQemu @Inject constructor(
             return _terminalSession!!
         }
 
+        // Release the boot monitor connection so QEMU re-listens on serial.sock.
+        // No sleep needed — podroid-bridge has its own connect retry loop
+        // (50 × 200ms = up to 10s), so the handoff is race-free.
         releaseSerial()
-        Thread.sleep(500)
 
         val bridgeExe = File(context.applicationInfo.nativeLibraryDir, "libpodroid-bridge.so")
         if (!bridgeExe.exists()) {
@@ -154,9 +156,12 @@ class PodroidQemu @Inject constructor(
         _consoleText.value = ""
         _bootStage.value = "Starting QEMU..."
 
-        // Clean up stale sockets from a previous run
+        // Clean up stale sockets from a previous run. qmp.sock must be
+        // included — a leftover file from a crashed QEMU prevents the new
+        // process from binding its QMP server socket.
         File(serialSockPath).delete()
         File(ctrlSockPath).delete()
+        File(qmpSocketPath).delete()
 
         try {
             val cmd = buildCommand(qemuExe, portForwards, ramMb, cpus, sshEnabled, androidIp)
@@ -208,8 +213,9 @@ class PodroidQemu @Inject constructor(
                 Thread.sleep(200)
             }
             if (_state.value != VmState.Running) {
-                Log.w(TAG, "Socket timeout — proceeding anyway")
-                _state.value = VmState.Running
+                Log.e(TAG, "Socket timeout — QEMU sockets not ready after ${timeoutMs}ms")
+                proc.destroyForcibly()
+                throw RuntimeException("QEMU failed to create sockets within ${timeoutMs / 1000}s")
             }
 
 

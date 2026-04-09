@@ -12,13 +12,14 @@ import com.excp.podroid.engine.VmState
 import com.excp.podroid.service.PodroidService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
 @HiltViewModel
@@ -79,7 +80,16 @@ class HomeViewModel @Inject constructor(
     fun restartVm() {
         PodroidService.stop(context)
         viewModelScope.launch {
-            delay(2000)
+            // Wait for the VM to actually stop before starting again.
+            // A fixed delay could race QEMU shutdown — await the terminal
+            // state instead, with a safety timeout.
+            withTimeoutOrNull(10_000) {
+                podroidQemu.state.first { state ->
+                    state is VmState.Stopped ||
+                        state is VmState.Idle ||
+                        state is VmState.Error
+                }
+            }
             PodroidService.start(context)
         }
     }

@@ -15,10 +15,13 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import com.excp.podroid.MainActivity
 import com.excp.podroid.R
 import com.excp.podroid.data.repository.PortForwardRepository
@@ -51,7 +54,20 @@ class PodroidService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> {
-                startForeground(NOTIFICATION_ID, buildNotification("Starting VM..."))
+                // Android 14+ (API 34) requires the foregroundServiceType argument
+                // when the manifest declares foregroundServiceType="specialUse";
+                // otherwise Android throws MissingForegroundServiceTypeException.
+                val fgType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                } else {
+                    0
+                }
+                ServiceCompat.startForeground(
+                    this,
+                    NOTIFICATION_ID,
+                    buildNotification("Starting VM..."),
+                    fgType,
+                )
                 acquireWakeLock()
                 launchPodroid()
             }
@@ -119,16 +135,31 @@ class PodroidService : Service() {
                 }
             }
             launch {
+                // Terminal states: release resources and shut down the service.
+                // Error must be included here — otherwise a failed boot leaves the
+                // wakelock held and the foreground notification stuck on "Starting...".
+                //
+                // StateFlow replays its current value on subscription, so this
+                // collector fires immediately with whatever state is already set.
+                // At service-start time the current state is Idle (QEMU hasn't
+                // been launched yet), which used to match this branch and
+                // instantly release the wakelock we just acquired. Guard with
+                // a "seenActive" flag so cleanup only runs on a real
+                // active → terminal transition.
+                var seenActive = false
                 podroidQemu.state.collect { state ->
                     when (state) {
-                        is VmState.Stopped, is VmState.Idle -> {
-                            releaseWakeLock()
-                            if (android.os.Build.VERSION.SDK_INT >= 33) {
-                                stopForeground(STOP_FOREGROUND_REMOVE)
-                            } else {
-                                @Suppress("DEPRECATION") stopForeground(true)
+                        is VmState.Starting, is VmState.Running -> seenActive = true
+                        is VmState.Stopped, is VmState.Idle, is VmState.Error -> {
+                            if (seenActive) {
+                                releaseWakeLock()
+                                if (Build.VERSION.SDK_INT >= 33) {
+                                    stopForeground(STOP_FOREGROUND_REMOVE)
+                                } else {
+                                    @Suppress("DEPRECATION") stopForeground(true)
+                                }
+                                stopSelf()
                             }
-                            stopSelf()
                         }
                         else -> {}
                     }

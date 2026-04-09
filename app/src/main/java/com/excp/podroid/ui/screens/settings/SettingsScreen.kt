@@ -388,8 +388,14 @@ fun SettingsScreen(
             ) {
                 Icon(Icons.Default.Share, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text("Export Console Log")
+                Text("Export Diagnostic Log")
             }
+            Text(
+                text = "Shares log.txt with app info, settings, VM state, app logcat, and QEMU console output. Attach this when reporting bugs.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
 
             Spacer(Modifier.height(8.dp))
 
