@@ -85,6 +85,9 @@ fun PodroidNavGraph(
                         }
                     }
                 },
+                onThemeOrFontChanged = {
+                    terminalViewModel.invalidateTerminalView()
+                },
             )
         }
     }

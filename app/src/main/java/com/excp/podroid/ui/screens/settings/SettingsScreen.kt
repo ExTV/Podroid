@@ -87,6 +87,7 @@ private val servicePresets = listOf(
 @Composable
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
+    onThemeOrFontChanged: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val darkTheme by viewModel.darkTheme.collectAsStateWithLifecycle(false)
@@ -140,7 +141,10 @@ fun SettingsScreen(
             )
             Slider(
                 value = terminalFontSize.toFloat(),
-                onValueChange = { viewModel.setTerminalFontSize(it.toInt()) },
+                onValueChange = { 
+                    viewModel.setTerminalFontSize(it.toInt())
+                    onThemeOrFontChanged()
+                },
                 valueRange = 12f..40f,
                 steps = 13,
                 modifier = Modifier.fillMaxWidth(),
@@ -458,6 +462,7 @@ fun SettingsScreen(
                                             }
                                         }
                                         viewModel.setTerminalColorTheme(theme)
+                                        onThemeOrFontChanged()
                                     }
                                     showColorThemeDialog = false
                                 }
@@ -509,6 +514,7 @@ fun SettingsScreen(
                                             }
                                         }
                                         viewModel.setTerminalFont(font)
+                                        onThemeOrFontChanged()
                                     }
                                     showFontDialog = false
                                 }

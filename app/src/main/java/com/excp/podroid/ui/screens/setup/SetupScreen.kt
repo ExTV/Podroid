@@ -264,7 +264,7 @@ private fun StoragePage(
                 value = sliderPosition,
                 onValueChange = onSliderChange,
                 valueRange = 0f..(storageSizes.lastIndex.toFloat()),
-                steps = storageSizes.size - 2,
+                steps = 4,
                 modifier = Modifier.fillMaxWidth(),
             )
 

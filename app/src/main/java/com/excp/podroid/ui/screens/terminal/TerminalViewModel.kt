@@ -62,6 +62,20 @@ class TerminalViewModel @Inject constructor(
     val terminalFontSize: StateFlow<Int> = settingsRepository.terminalFontSize
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 20)
 
+    val terminalColorTheme: StateFlow<String> = settingsRepository.terminalColorTheme
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "default")
+
+    val terminalFont: StateFlow<String> = settingsRepository.terminalFont
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "default")
+
+    /**
+     * Forces recreation of the terminal view on next call.
+     * Call when theme/font/size settings change.
+     */
+    fun invalidateTerminalView() {
+        terminalView = null
+    }
+
     @SuppressLint("StaticFieldLeak") // created once per ViewModel lifetime; ViewModel is nav-scoped
     private var terminalView: TerminalView? = null
     private var attached = false
