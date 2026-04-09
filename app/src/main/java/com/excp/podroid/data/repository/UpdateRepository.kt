@@ -2,6 +2,7 @@ package com.excp.podroid.data.repository
 
 import android.content.Context
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -22,9 +23,18 @@ class UpdateRepository @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
     private val dismissedKey = stringPreferencesKey("dismissed_update_version")
+    private val lastCheckKey = longPreferencesKey("update_check_timestamp")
+    private val cacheValidityMs = 24 * 60 * 60 * 1000L
 
     suspend fun checkForUpdate(currentVersion: String): UpdateInfo? = withContext(Dispatchers.IO) {
         try {
+            val now = System.currentTimeMillis()
+            val lastCheck = context.dataStore.data.first()[lastCheckKey] ?: 0L
+
+            if (now - lastCheck < cacheValidityMs) {
+                return@withContext null
+            }
+
             val connection = URL("https://api.github.com/repos/ExTV/Podroid/releases/latest")
                 .openConnection() as java.net.HttpURLConnection
             connection.connectTimeout = 5000
@@ -39,6 +49,8 @@ class UpdateRepository @Inject constructor(
             val obj = JSONObject(json)
             val tag = obj.getString("tag_name").trimStart('v')
             val url = obj.getString("html_url")
+
+            context.dataStore.edit { it[lastCheckKey] = now }
 
             if (isNewer(tag, currentVersion)) UpdateInfo(tag, url) else null
         } catch (_: Exception) {

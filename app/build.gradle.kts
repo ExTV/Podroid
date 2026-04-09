@@ -25,8 +25,8 @@ android {
         applicationId = "com.excp.podroid"
         minSdk = 28
         targetSdk = 36
-        versionCode = 13
-        versionName = "1.1.1"
+        versionCode = 14
+        versionName = "1.1.2"
         buildConfigField("String", "QEMU_VERSION", "\"$podroidQemuVersion\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

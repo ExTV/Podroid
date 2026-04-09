@@ -67,7 +67,10 @@ fun PodroidNavGraph(
             TerminalScreen(
                 viewModel = terminalViewModel,
                 onNavigateBack = {
-                    if (!navController.popBackStack(Routes.HOME, inclusive = false)) {
+                    // Only pop if we're not already at HOME to avoid the warning
+                    if (navController.currentDestination?.route == Routes.TERMINAL) {
+                        navController.popBackStack()
+                    } else if (!navController.popBackStack(Routes.HOME, inclusive = false)) {
                         navController.navigate(Routes.HOME) {
                             popUpTo(0) { inclusive = true }
                         }
@@ -79,7 +82,9 @@ fun PodroidNavGraph(
         composable(Routes.SETTINGS) {
             SettingsScreen(
                 onNavigateBack = {
-                    if (!navController.popBackStack(Routes.HOME, inclusive = false)) {
+                    if (navController.currentDestination?.route == Routes.SETTINGS) {
+                        navController.popBackStack()
+                    } else if (!navController.popBackStack(Routes.HOME, inclusive = false)) {
                         navController.navigate(Routes.HOME) {
                             popUpTo(0) { inclusive = true }
                         }
