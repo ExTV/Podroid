@@ -131,7 +131,7 @@ podman ps -a
 
 ```bash
 # Clone the repository
-git clone https://github.com/ExTV/Podroid.git
+git clone https://github.com/nano-chmod-x/-_Podroid.git
 cd Podroid
 
 # 1. Build VM initramfs and kernel
