@@ -70,6 +70,7 @@ RUN printf '%s\n' \
     'CONFIG_FUSE_FS=y' \
     'CONFIG_EXT4_FS_SECURITY=y' \
     'CONFIG_SQUASHFS_XATTR=y' \
+    'CONFIG_SQUASHFS_ZSTD=y' \
     'CONFIG_IKCONFIG=y' \
     'CONFIG_IKCONFIG_PROC=y' \
     'CONFIG_IP_NF_RAW=y' \
@@ -120,7 +121,7 @@ RUN cd linux-${KERNEL_VERSION} \
                   NETFILTER_XT_TARGET_MASQUERADE NF_NAT_MASQUERADE \
                   NFT_COMPAT NFT_MASQ NFT_NAT \
                   VETH TUN NF_TABLES NF_NAT NETFILTER OVERLAY_FS FUSE_FS \
-                  EXT4_FS_SECURITY SQUASHFS_XATTR \
+                  EXT4_FS_SECURITY SQUASHFS_XATTR SQUASHFS_ZSTD \
                   IKCONFIG IKCONFIG_PROC; do \
            grep -q "^CONFIG_${opt}=y\$" .config \
                || { echo "FATAL: CONFIG_${opt} is not =y after merge" >&2; \

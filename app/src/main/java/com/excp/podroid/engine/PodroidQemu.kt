@@ -526,7 +526,10 @@ class PodroidQemu @Inject constructor(
 
         val rootfsImg = File(context.filesDir, "alpine-rootfs.squashfs")
         if (rootfsImg.exists()) {
-            args += "-device"; args += "virtio-blk-pci,drive=drive2,num-queues=${config.cpus}"
+            // Dedicated iothread for the read-only squashfs so its decompression
+            // reads don't queue behind storage.img writes on iothread0.
+            args += "-object"; args += "iothread,id=iothread1"
+            args += "-device"; args += "virtio-blk-pci,drive=drive2,num-queues=${config.cpus},iothread=iothread1"
             args += "-drive";  args += "file=${rootfsImg.absolutePath},if=none,id=drive2,format=raw,readonly=on,cache=writeback,aio=threads"
         }
 

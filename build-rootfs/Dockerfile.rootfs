@@ -19,7 +19,7 @@ COPY build-rootfs.sh /work/build-rootfs.sh
 RUN chmod +x /work/build-rootfs.sh && /work/build-rootfs.sh
 
 RUN mksquashfs /work/rootfs /work/alpine-rootfs.squashfs \
-    -comp gzip -all-root -noappend
+    -comp zstd -Xcompression-level 19 -all-root -noappend
 # (No -no-xattrs: rootless podman's newuidmap/newgidmap need their
 # file capabilities preserved; they're stored as security.capability xattr.)
 
