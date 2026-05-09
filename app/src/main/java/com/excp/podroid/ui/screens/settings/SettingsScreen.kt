@@ -412,7 +412,6 @@ fun SettingsScreen(
                 SettingsInfoRow("QEMU", BuildConfig.QEMU_VERSION)
                 SettingsInfoRow("Architecture", "AArch64 (ARM64)")
                 SettingsInfoRow("Linux distro", "Alpine Linux 3.23")
-                SettingsInfoRow("Container runtime", "Podman + crun")
                 SettingsInfoRow("Storage", "$storageSizeGb GB persistent overlay")
             }
 

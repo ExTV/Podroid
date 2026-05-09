@@ -389,7 +389,7 @@ private fun VmConfigPage(
                     color = MaterialTheme.colorScheme.primary,
                 )
                 Spacer(Modifier.height(12.dp))
-                SetupInfoRow(label = "CPU", value = "1 core")
+                SetupInfoRow(label = "CPU", value = "2 cores")
                 Spacer(Modifier.height(6.dp))
                 SetupInfoRow(label = "RAM", value = "512 MB")
             }
