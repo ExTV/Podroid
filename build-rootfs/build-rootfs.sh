@@ -42,7 +42,10 @@ apk -X "https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_BRANCH}/main" \
     gzip \
     tigervnc \
     pulseaudio \
-    pulseaudio-utils
+    pulseaudio-utils \
+    font-misc-misc \
+    font-cursor-misc \
+    ttf-dejavu
 
 # Apply file capabilities to newuidmap/newgidmap. apk's package install often
 # does this, but we set them explicitly so the squashfs ships with the

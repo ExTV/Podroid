@@ -93,9 +93,9 @@ fun X11Screen(
     var svHeight by remember { mutableStateOf(1) }
 
     // Letterbox / pillarbox destination rect inside the SurfaceView, recomputed
-    // whenever the view size changes. Touch handler uses this to map screen
-    // coords back into the framebuffer's 1280x720 space, so taps on the black
-    // bars don't generate phantom mouse events.
+    // whenever the view size changes. Pinned to the TOP (dY = 0) so the soft
+    // keyboard never overlaps the framebuffer — the black bar lives below.
+    // Horizontally still centered (pillarbox) in landscape orientation.
     val (dstX, dstY, dstW, dstH) = remember(svWidth, svHeight) {
         val fbW = X11Constants.FB_WIDTH.toFloat()
         val fbH = X11Constants.FB_HEIGHT.toFloat()
@@ -105,7 +105,7 @@ fun X11Screen(
         val dW = (fbW * scale).toInt().coerceAtLeast(1)
         val dH = (fbH * scale).toInt().coerceAtLeast(1)
         val dX = ((viewW - dW) / 2f).toInt()
-        val dY = ((viewH - dH) / 2f).toInt()
+        val dY = 0
         IntArray4(dX, dY, dW, dH)
     }
 
