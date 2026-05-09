@@ -69,3 +69,9 @@ app/src/main/jniLibs/
 /srv/
 /sys/
 /tmp/
+
+# Release signing keystore — never commit
+/podroid-release.jks
+
+# Visual companion (brainstorming sessions)
+.superpowers/

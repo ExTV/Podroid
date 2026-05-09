@@ -25,8 +25,8 @@ android {
         applicationId = "com.excp.podroid"
         minSdk = 28
         targetSdk = 36
-        versionCode = 20
-        versionName = "1.1.8"
+        versionCode = 21
+        versionName = "1.1.9"
         buildConfigField("String", "QEMU_VERSION", "\"$podroidQemuVersion\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -34,6 +34,18 @@ android {
         // Only build for arm64-v8a — we target AArch64 Android devices exclusively
         ndk {
             abiFilters += "arm64-v8a"
+        }
+    }
+
+    signingConfigs {
+        create("release") {
+            val storePath = (project.findProperty("PODROID_RELEASE_STORE_FILE") as? String)
+            if (storePath != null && file(storePath).exists()) {
+                storeFile     = file(storePath)
+                storePassword = project.findProperty("PODROID_RELEASE_STORE_PASSWORD") as? String
+                keyAlias      = project.findProperty("PODROID_RELEASE_KEY_ALIAS")      as? String
+                keyPassword   = project.findProperty("PODROID_RELEASE_KEY_PASSWORD")   as? String
+            }
         }
     }
 
@@ -45,6 +57,7 @@ android {
             versionNameSuffix = "-debug"
         }
         release {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
