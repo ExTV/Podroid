@@ -16,6 +16,7 @@
 package com.excp.podroid.engine.avf
 
 import android.content.Context
+import android.system.Os
 import android.util.Log
 import com.excp.podroid.data.repository.PortForwardRule
 import com.excp.podroid.data.repository.SettingsRepository
@@ -492,7 +493,7 @@ class AvfEngine @Inject constructor(
                     sharedPath = downloads,
                     tag = "downloads",
                     hostUid = android.os.Process.myUid(),
-                    hostGid = android.os.Process.myUid(),
+                    hostGid = Os.getgid(),
                     guestUid = 1000,
                     guestGid = 100,
                     mask = 0x0007,
