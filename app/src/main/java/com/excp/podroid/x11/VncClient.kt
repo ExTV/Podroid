@@ -124,8 +124,33 @@ object VncClient {
      */
     fun readFramebufferUpdate(inp: InputStream, targetArgb: IntArray, stride: Int) {
         val din = DataInputStream(inp)
-        val msgType = din.readUnsignedByte()
-        require(msgType == MSG_FRAMEBUFFER_UPDATE) { "unexpected msg $msgType" }
+        // RFB servers interleave non-rect messages (Bell, ColourMap, ClipBoard)
+        // with FramebufferUpdates. Older versions of this client `require`'d
+        // type==0 and bailed on type 3 (ServerCutText, clipboard share) which
+        // Xvnc sends opportunistically — that's the "unexpected msg 3" the
+        // user saw mid-Firefox-video. Skip the bytes for each non-fatal type
+        // and loop until a FramebufferUpdate actually arrives.
+        var msgType: Int
+        while (true) {
+            msgType = din.readUnsignedByte()
+            when (msgType) {
+                MSG_FRAMEBUFFER_UPDATE -> break  // fall through to rect parsing
+                1 -> {  // SetColourMapEntries: pad(1) + first(2) + n(2) + n*6
+                    din.skipBytes(1)
+                    din.readUnsignedShort()
+                    val n = din.readUnsignedShort()
+                    din.skipBytes(n * 6)
+                }
+                2 -> { /* Bell: no body */ }
+                3 -> {  // ServerCutText: pad(3) + length(4) + text[length]
+                    din.skipBytes(3)
+                    val len = din.readInt()
+                    if (len in 0..(1 shl 20)) din.skipBytes(len)
+                    else throw java.io.IOException("ServerCutText absurd length=$len")
+                }
+                else -> throw java.io.IOException("unexpected RFB server msg type $msgType")
+            }
+        }
         din.skipBytes(1)
         val numRects = din.readUnsignedShort()
 

@@ -18,6 +18,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.io.DataInputStream
 import java.net.InetSocketAddress
 import java.net.Socket
 import kotlin.coroutines.coroutineContext
@@ -26,6 +27,12 @@ class AudioStreamer(private val host: String = "127.0.0.1") {
 
     companion object {
         private const val TAG = "AudioStreamer"
+        // 16-bit stereo PCM = 4 bytes / frame; 4096 is a multiple of 4 so
+        // readFully(buf, 0, BUF_BYTES) always yields whole frames. Mis-
+        // aligned reads (raw `read()` returning e.g. 4093 bytes) feed
+        // AudioTrack a half-frame, after which every subsequent sample is
+        // shifted by 1–3 bytes — the audible result was the clicking the
+        // user reported in Firefox video playback.
         private const val BUF_BYTES = 4096
     }
 
@@ -49,12 +56,18 @@ class AudioStreamer(private val host: String = "127.0.0.1") {
                 try {
                     Socket().use { s ->
                         s.connect(InetSocketAddress(host, X11Constants.AUDIO_PORT), 2000)
-                        val inp = s.getInputStream()
+                        // Disable Nagle — audio frames are tiny and latency-
+                        // sensitive; coalescing them adds jitter that AudioTrack
+                        // resamples to fill, producing audible artefacts.
+                        s.tcpNoDelay = true
+                        val din = DataInputStream(s.getInputStream())
                         val buf = ByteArray(BUF_BYTES)
                         while (coroutineContext.isActive) {
-                            val n = inp.read(buf)
-                            if (n <= 0) break
-                            track.write(buf, 0, n)
+                            // readFully → exactly BUF_BYTES (= integer frames).
+                            // Throws EOFException on socket close → catch outer
+                            // reconnects.
+                            din.readFully(buf, 0, BUF_BYTES)
+                            track.write(buf, 0, BUF_BYTES)
                         }
                     }
                 } catch (e: Exception) {
