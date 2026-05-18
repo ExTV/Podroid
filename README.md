@@ -88,6 +88,36 @@ RAM and CPU changes take effect on the next start; everything else is hot.
 
 **Settings → Export Diagnostic Log** bundles app info, current settings, VM state, app logcat and the full QEMU console output into a single `log.txt` and shares it via the standard Android share sheet. Attach this to bug reports; it's almost always enough to diagnose a boot or container issue without ADB.
 
+## Troubleshooting
+
+### "QEMU crashed (SIGKILL)" / VM dies when I switch to another app
+
+On Android 12+ the system aggressively reaps **phantom processes** — any native subprocess (here, QEMU + the bridge) spawned by an app that isn't visible as a standard Android process. Even with our foreground service keeping the app alive, the phantom children do not inherit that importance and get killed when the parent app goes to the background or under memory pressure.
+
+Symptoms:
+- VM was running, you switched to another app for a minute, came back to "VM stopped" or `Error(QEMU crashed (SIGKILL))`.
+- Diagnostic log shows `QEMU exited: 137` and `Process PhantomProcessRecord {... libqemu-system-aarch64.so/...} died`.
+
+Disable the phantom-process killer with **one** of the following.
+
+**Via ADB** (PC connected to the phone):
+
+```bash
+adb shell "/system/bin/device_config set_sync_disabled_for_tests persistent"
+adb shell "/system/bin/device_config put activity_manager max_phantom_processes 2147483647"
+adb shell settings put global settings_enable_monitor_phantom_procs false
+```
+
+**Via root** (Termux or any on-device terminal emulator with `su`):
+
+```bash
+su -c /system/bin/device_config set_sync_disabled_for_tests persistent
+su -c /system/bin/device_config put activity_manager max_phantom_processes 2147483647
+su -c setprop persist.sys.fflag.override.settings_enable_monitor_phantom_procs false
+```
+
+Either approach persists across reboots. The change affects only apps that spawn native children (Podroid, Termux proot, etc.); standard apps are unaffected.
+
 ## Requirements
 
 | | |
