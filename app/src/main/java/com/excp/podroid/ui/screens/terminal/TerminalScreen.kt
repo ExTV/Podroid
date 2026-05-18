@@ -2,6 +2,7 @@ package com.excp.podroid.ui.screens.terminal
 
 import android.app.Activity
 import android.view.WindowManager
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -54,6 +55,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DesktopWindows
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.BoxScope
@@ -78,6 +80,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -112,6 +115,13 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.excp.podroid.engine.VmState
 import com.excp.podroid.ui.components.AdaptiveContainer
+import com.excp.podroid.ui.components.PodroidGhostButton
+import com.excp.podroid.ui.components.PodroidListRow
+import com.excp.podroid.ui.components.PodroidSectionLabel
+import com.excp.podroid.ui.components.PodroidSwitch
+import com.excp.podroid.ui.components.PodroidTopBar
+import com.excp.podroid.ui.components.podroidChipColors
+import com.excp.podroid.ui.theme.PodroidTokens
 import com.termux.view.TerminalView
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -181,8 +191,8 @@ fun TerminalScreen(
             .windowInsetsPadding(WindowInsets.navigationBars)
             .windowInsetsPadding(WindowInsets.ime)
     ) {
-        TopAppBar(
-            title = { Text("Terminal") },
+        PodroidTopBar(
+            title = "Terminal",
             navigationIcon = {
                 IconButton(onClick = {
                     val imm = context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
@@ -199,8 +209,9 @@ fun TerminalScreen(
                 IconButton(onClick = onNavigateToX11) {
                     Icon(Icons.Default.DesktopWindows, contentDescription = "X11 screen")
                 }
+                Spacer(Modifier.width(PodroidTokens.Spacing.XS))
                 IconButton(onClick = { viewModel.openQuickSettings() }) {
-                    Text("⚙", fontSize = 18.sp)
+                    Icon(Icons.Default.Tune, contentDescription = "Quick settings")
                 }
             },
         )
@@ -210,16 +221,15 @@ fun TerminalScreen(
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            "VM Not Running",
-                            color = MaterialTheme.colorScheme.error,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
+                            text = "Stopped",
+                            style = MaterialTheme.typography.displayLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
                         )
+                        Spacer(Modifier.height(PodroidTokens.Spacing.SM))
                         Text(
-                            "Start the VM from Home screen first",
+                            "Start the VM from the Home screen first.",
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 14.sp,
-                            modifier = Modifier.padding(top = 8.dp),
                         )
                     }
                 }
@@ -227,33 +237,38 @@ fun TerminalScreen(
 
             is VmState.Error -> {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(horizontal = PodroidTokens.Spacing.XL),
+                    ) {
                         Text(
-                            "Error",
+                            text = "Error",
+                            style = MaterialTheme.typography.displayLarge,
                             color = MaterialTheme.colorScheme.error,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
                         )
+                        Spacer(Modifier.height(PodroidTokens.Spacing.SM))
                         Text(
                             (vmState as VmState.Error).message,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 14.sp,
-                            modifier = Modifier.padding(top = 8.dp, start = 16.dp, end = 16.dp),
                             textAlign = TextAlign.Center,
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        FilledTonalButton(onClick = onNavigateBack) {
-                            Text("Tap to Retry")
-                        }
+                        Spacer(Modifier.height(PodroidTokens.Spacing.LG))
+                        PodroidGhostButton(
+                            text = "Back to Home",
+                            onClick = onNavigateBack,
+                            modifier = Modifier.fillMaxWidth(0.6f),
+                        )
                     }
                 }
             }
 
             is VmState.Starting -> {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(
-                        color = MaterialTheme.colorScheme.primary,
-                        strokeWidth = 3.dp,
+                    Text(
+                        text = "Starting…",
+                        style = MaterialTheme.typography.displayLarge,
+                        color = MaterialTheme.colorScheme.tertiary,
                     )
                 }
             }
@@ -427,7 +442,10 @@ private fun TerminalSurface(
                 val tv = v as TerminalView
                 tv.setLayoutSettling(true)
                 pending = scope.launch {
-                    kotlinx.coroutines.delay(150)
+                    // 64 ms ≈ 4 VSYNCs — enough to coalesce a keyboard-slide
+                    // burst (~25 layout events over the 200 ms slide animation)
+                    // without leaving the prompt visibly lagging behind.
+                    kotlinx.coroutines.delay(64)
                     // Just tv.updateSize() — it has the correct row math
                     // (subtracts mFontLineSpacingAndAscent). Calling
                     // forceUpdateSizeFromView too caused a row-count race:
@@ -460,42 +478,36 @@ private fun ExtraKeysRow(
     ctrlActive: Boolean,
     altActive: Boolean,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 4.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        KeyButton("ESC", onKey)
-        KeyButton("TAB", onKey)
-        KeyButton("CTRL", onKey, isActive = ctrlActive)
-        KeyButton("\u2190", onKey, sendKey = "LEFT",  repeatable = true)
-        KeyButton("\u2191", onKey, sendKey = "UP",    repeatable = true)
-        KeyButton("\u2193", onKey, sendKey = "DOWN",  repeatable = true)
-        KeyButton("\u2192", onKey, sendKey = "RIGHT", repeatable = true)
-        KeyButton("ALT", onKey, isActive = altActive)
-        KeyButton("-", onKey)
-        KeyButton("/", onKey)
-        KeyButton("|", onKey)
-        KeyButton("HOME", onKey)
-        KeyButton("END", onKey)
-        KeyButton("PGUP", onKey)
-        KeyButton("PGDN", onKey)
-        KeyButton("F1", onKey)
-        KeyButton("F2", onKey)
-        KeyButton("F3", onKey)
-        KeyButton("F4", onKey)
-        KeyButton("F5", onKey)
-        KeyButton("F6", onKey)
-        KeyButton("F7", onKey)
-        KeyButton("F8", onKey)
-        KeyButton("F9", onKey)
-        KeyButton("F10", onKey)
-        KeyButton("F11", onKey)
-        KeyButton("F12", onKey)
+    val scroll = rememberScrollState()
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // 1-px separator so the row reads as chrome, not as terminal content.
+        HorizontalDivider(
+            color = MaterialTheme.colorScheme.outline,
+            thickness = 1.dp,
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surface)
+                .fadingEdgesHorizontal(scroll)
+                .horizontalScroll(scroll)
+                .padding(horizontal = PodroidTokens.Spacing.SM, vertical = PodroidTokens.Spacing.SM),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            KeyButton("ESC", onKey)
+            KeyButton("TAB", onKey)
+            KeyButton("CTRL", onKey, isActive = ctrlActive)
+            KeyButton("\u2190", onKey, sendKey = "LEFT",  repeatable = true)
+            KeyButton("\u2191", onKey, sendKey = "UP",    repeatable = true)
+            KeyButton("\u2193", onKey, sendKey = "DOWN",  repeatable = true)
+            KeyButton("\u2192", onKey, sendKey = "RIGHT", repeatable = true)
+            KeyButton("ALT", onKey, isActive = altActive)
+            KeyButton("-", onKey); KeyButton("/", onKey); KeyButton("|", onKey)
+            KeyButton("HOME", onKey); KeyButton("END", onKey)
+            KeyButton("PGUP", onKey); KeyButton("PGDN", onKey)
+            (1..12).forEach { KeyButton("F$it", onKey) }
+        }
     }
 }
 
@@ -507,11 +519,6 @@ private fun KeyButton(
     isActive: Boolean = false,
     repeatable: Boolean = false,
 ) {
-    // State-based press tracking: the gesture coroutine flips `pressed`,
-    // and a LaunchedEffect keyed on that state drives the repeat loop.
-    // Splitting state from the pointer coroutine avoids the cancellation
-    // issues you hit when the scroll container on the parent Row steals
-    // the gesture mid-hold.
     var pressed by remember { mutableStateOf(false) }
     LaunchedEffect(pressed, sendKey, repeatable) {
         if (!repeatable || !pressed) return@LaunchedEffect
@@ -527,13 +534,9 @@ private fun KeyButton(
         Modifier.pointerInput(sendKey) {
             awaitEachGesture {
                 awaitFirstDown(requireUnconsumed = false)
-                onKey(sendKey)          // fire once on touch-down
+                onKey(sendKey)
                 pressed = true
-                try {
-                    waitForUpOrCancellation()
-                } finally {
-                    pressed = false
-                }
+                try { waitForUpOrCancellation() } finally { pressed = false }
             }
         }
     } else {
@@ -541,18 +544,59 @@ private fun KeyButton(
     }
     Text(
         text = label,
-        color = if (isActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-        fontSize = 12.sp,
+        color = if (isActive) PodroidTokens.AccentInk else MaterialTheme.colorScheme.onSurface,
+        fontSize = 13.sp,
         fontWeight = FontWeight.Medium,
-        fontFamily = FontFamily.Monospace,
+        fontFamily = PodroidTokens.mono(),
         textAlign = TextAlign.Center,
         modifier = Modifier
-            .clip(RoundedCornerShape(4.dp))
-            .background(if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
+            .clip(RoundedCornerShape(PodroidTokens.Radius.Chip))
+            .background(if (isActive) PodroidTokens.Accent else MaterialTheme.colorScheme.surfaceVariant)
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(PodroidTokens.Radius.Chip))
             .then(tapModifier)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .padding(horizontal = 13.dp, vertical = 9.dp),
     )
 }
+
+/**
+ * Horizontal gradient fade at the start/end edges of a scrollable row — drawn
+ * only when there's actually overflow in that direction. Same pattern as the
+ * old fadingEdges() helper but keyed on ScrollState (not LazyListState) so it
+ * can wrap a plain Row + horizontalScroll(...).
+ */
+private fun Modifier.fadingEdgesHorizontal(
+    scroll: androidx.compose.foundation.ScrollState,
+    fadeWidth: Dp = 24.dp,
+): Modifier = this
+    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+    .drawWithContent {
+        drawContent()
+        val fadePx = fadeWidth.toPx()
+        if (scroll.canScrollBackward) {
+            drawRect(
+                topLeft = Offset.Zero,
+                size = Size(fadePx, size.height),
+                brush = Brush.horizontalGradient(
+                    listOf(Color.Transparent, Color.Black),
+                    startX = 0f,
+                    endX = fadePx,
+                ),
+                blendMode = BlendMode.DstIn,
+            )
+        }
+        if (scroll.canScrollForward) {
+            drawRect(
+                topLeft = Offset(size.width - fadePx, 0f),
+                size = Size(fadePx, size.height),
+                brush = Brush.horizontalGradient(
+                    listOf(Color.Black, Color.Transparent),
+                    startX = size.width - fadePx,
+                    endX = size.width,
+                ),
+                blendMode = BlendMode.DstIn,
+            )
+        }
+    }
 
 /**
  * Quick Settings — minimal top-anchored sheet. Shows a few items per section
@@ -574,11 +618,16 @@ private fun QuickSettingsDialog(
     onFontChange: (String) -> Unit,
     viewModel: TerminalViewModel = hiltViewModel(),
 ) {
-    var bump by remember { mutableStateOf(0) }
+    var bump by remember { mutableIntStateOf(0) }
     val themes = remember(bump) { viewModel.listAvailableThemes() }
-    val fonts = remember(bump) { viewModel.listAvailableFonts() }
+    val fonts  = remember(bump) { viewModel.listAvailableFonts() }
 
-    // SAF for fonts.
+    var showThemePicker by remember { mutableStateOf(false) }
+    var showFontPicker  by remember { mutableStateOf(false) }
+    var showThemeImport by remember { mutableStateOf(false) }
+    var fontToDelete    by remember { mutableStateOf<String?>(null) }
+    var themeToDelete   by remember { mutableStateOf<String?>(null) }
+
     val fontImport = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -589,76 +638,54 @@ private fun QuickSettingsDialog(
     }
     val fontMimes = remember { arrayOf("font/ttf", "application/x-font-ttf", "application/octet-stream") }
 
-    // Sub-dialogs.
-    var showThemePicker by remember { mutableStateOf(false) }
-    var showFontPicker by remember { mutableStateOf(false) }
-    var showThemeImport by remember { mutableStateOf(false) }
-    var fontToDelete by remember { mutableStateOf<String?>(null) }
-    var themeToDelete by remember { mutableStateOf<String?>(null) }
-
+    // ── Sub-dialogs unchanged ───────────────────────────────────────
     if (showThemePicker) {
         FullPickerDialog(
             title = "Color themes",
-            items = themes,
-            selected = colorTheme,
-            onPick = { onColorThemeChange(it); showThemePicker = false },
+            items = themes, selected = colorTheme,
+            onPick = { onColorThemeChange(it); showThemePicker = false; onDismiss() },
             onDismiss = { showThemePicker = false },
             isCustom = { viewModel.isCustomTheme(it) },
             onLongPressCustom = { themeToDelete = it },
-            renderChip = { name, selected, onClick, onLongClick ->
-                ThemeSwatch(name, selected, onClick, onLongClick, viewModel)
+            renderChip = { name, sel, click, longClick ->
+                ThemeSwatch(name, sel, click, longClick, viewModel)
             },
             extraTrailingChip = {
-                AddSwatch(label = "Import",
-                    subLabel = "Paste URL",
-                    onClick = { showThemeImport = true })
+                AddSwatch(label = "Import", subLabel = "Paste URL", onClick = { showThemeImport = true })
             },
         )
     }
-
     if (showFontPicker) {
         FullPickerDialog(
             title = "Fonts",
-            items = fonts,
-            selected = terminalFont,
-            onPick = { onFontChange(it); showFontPicker = false },
+            items = fonts, selected = terminalFont,
+            onPick = { onFontChange(it); showFontPicker = false; onDismiss() },
             onDismiss = { showFontPicker = false },
             isCustom = { viewModel.isCustomFont(it) },
             onLongPressCustom = { fontToDelete = it },
-            renderChip = { name, selected, onClick, onLongClick ->
-                FontSwatch(
-                    name, viewModel.isCustomFont(name), selected, onClick, onLongClick, viewModel,
-                )
+            renderChip = { name, sel, click, longClick ->
+                FontSwatch(name, viewModel.isCustomFont(name), sel, click, longClick, viewModel)
             },
             extraTrailingChip = {
                 AddSwatch(label = "+ Add", subLabel = ".ttf", onClick = { fontImport.launch(fontMimes) })
             },
         )
     }
-
     if (showThemeImport) {
         ThemeImportDialog(
             onDismiss = { showThemeImport = false },
-            onImported = { name ->
-                onColorThemeChange(name)
-                bump++
-                showThemeImport = false
-            },
+            onImported = { name -> onColorThemeChange(name); bump++; showThemeImport = false },
             viewModel = viewModel,
         )
     }
-
     fontToDelete?.let { name ->
         AlertDialog(
             onDismissRequest = { fontToDelete = null },
             title = { Text("Remove font?") },
-            text = { Text("\"${prettyName(name)}\" will be deleted.") },
+            text  = { Text("\"${prettyName(name)}\" will be deleted.") },
             confirmButton = {
                 TextButton(onClick = {
-                    if (viewModel.deleteCustomFont(name)) {
-                        if (terminalFont == name) onFontChange("default")
-                        bump++
-                    }
+                    if (viewModel.deleteCustomFont(name)) { if (terminalFont == name) onFontChange("default"); bump++ }
                     fontToDelete = null
                 }) { Text("Delete") }
             },
@@ -669,13 +696,10 @@ private fun QuickSettingsDialog(
         AlertDialog(
             onDismissRequest = { themeToDelete = null },
             title = { Text("Remove theme?") },
-            text = { Text("\"${prettyName(name)}\" will be deleted.") },
+            text  = { Text("\"${prettyName(name)}\" will be deleted.") },
             confirmButton = {
                 TextButton(onClick = {
-                    if (viewModel.deleteCustomTheme(name)) {
-                        if (colorTheme == name) onColorThemeChange("default")
-                        bump++
-                    }
+                    if (viewModel.deleteCustomTheme(name)) { if (colorTheme == name) onColorThemeChange("default"); bump++ }
                     themeToDelete = null
                 }) { Text("Delete") }
             },
@@ -683,7 +707,7 @@ private fun QuickSettingsDialog(
         )
     }
 
-    // Top sheet.
+    // ── The top-anchored drawer ────────────────────────────────────
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
         properties = androidx.compose.ui.window.DialogProperties(
@@ -693,49 +717,47 @@ private fun QuickSettingsDialog(
         ),
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            // Cap sheet height at ~92% of the screen so it can never push toggles
-            // off the visible area in landscape (where height ≈ 360dp). The inner
-            // Column is scrollable so any overflow becomes a swipe instead of a clip.
-            val configuration = LocalConfiguration.current
-            val maxSheetHeight = (configuration.screenHeightDp * 0.92f).dp
+            val windowInfo = androidx.compose.ui.platform.LocalWindowInfo.current
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            val maxSheetHeight = with(density) {
+                (windowInfo.containerSize.height * 0.92f).toInt().toDp()
+            }
             androidx.compose.material3.Surface(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
                     .heightIn(max = maxSheetHeight),
-                shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp),
+                shape = RoundedCornerShape(bottomStart = PodroidTokens.Radius.Sheet, bottomEnd = PodroidTokens.Radius.Sheet),
                 color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 4.dp,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                tonalElevation = 0.dp,
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp)
-                        .padding(top = 6.dp, bottom = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                        .padding(horizontal = PodroidTokens.Spacing.LG)
+                        .padding(top = PodroidTokens.Spacing.SM, bottom = PodroidTokens.Spacing.MD),
                 ) {
                     // Drag handle
                     Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 4.dp),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = PodroidTokens.Spacing.XS),
                         contentAlignment = Alignment.Center,
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(width = 36.dp, height = 4.dp)
+                                .size(width = 32.dp, height = 3.dp)
                                 .clip(RoundedCornerShape(2.dp))
-                                .background(MaterialTheme.colorScheme.outlineVariant),
+                                .background(MaterialTheme.colorScheme.onSurfaceVariant),
                         )
                     }
 
-                    // Compact header
+                    // Header
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             "Settings",
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
+                            fontWeight = FontWeight.Medium,
                             modifier = Modifier.weight(1f),
                         )
                         IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
@@ -743,114 +765,78 @@ private fun QuickSettingsDialog(
                         }
                     }
 
-                    // Font size — continuous slider, rounded in callback (no visible ticks)
+                    PodroidSectionLabel("Display")
+
+                    // Size slider — sliding doesn't dismiss (you want to adjust),
+                    // but releasing the thumb does (matches the "any interaction
+                    // closes the drawer" rule).
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = PodroidTokens.Spacing.SM),
                     ) {
-                        Text("Size",
-                            style = MaterialTheme.typography.labelLarge,
-                            modifier = Modifier.width(56.dp))
+                        Text(
+                            "Size",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.width(56.dp),
+                        )
                         Slider(
                             value = fontSize.toFloat(),
                             onValueChange = { v ->
                                 val rounded = v.toInt()
                                 if (rounded != fontSize) onFontSizeChange(rounded)
                             },
+                            onValueChangeFinished = onDismiss,
                             valueRange = 10f..36f,
                             modifier = Modifier.weight(1f),
                         )
                         Text(
                             "$fontSize",
-                            style = MaterialTheme.typography.labelLarge,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.width(36.dp),
                             textAlign = TextAlign.End,
                         )
                     }
 
-                    // Theme strip — 4 chips + More + Import-by-URL
-                    QuickStripRow(
-                        label = "Theme",
-                        selectedName = prettyName(colorTheme),
-                        items = themes,
-                        selected = colorTheme,
-                        onSelect = onColorThemeChange,
-                        onMore = { showThemePicker = true },
-                        onImport = { showThemeImport = true },
-                        importLabel = "URL",
-                    ) { name, sel, click ->
-                        ThemeSwatch(name, sel, click, null, viewModel)
-                    }
+                    // Theme + Font — full-width ghost buttons so they read as
+                    // actions, not list rows. Picker's onPick already calls
+                    // onDismiss to close the drawer.
+                    Spacer(Modifier.height(PodroidTokens.Spacing.SM))
+                    PodroidGhostButton(
+                        text = "Theme · ${prettyName(colorTheme)}",
+                        onClick = { showThemePicker = true },
+                    )
+                    Spacer(Modifier.height(PodroidTokens.Spacing.SM))
+                    PodroidGhostButton(
+                        text = "Font · ${prettyName(terminalFont)}",
+                        onClick = { showFontPicker = true },
+                    )
 
-                    // Font strip — 4 chips + More + Import .ttf
-                    QuickStripRow(
-                        label = "Font",
-                        selectedName = prettyName(terminalFont),
-                        items = fonts,
-                        selected = terminalFont,
-                        onSelect = onFontChange,
-                        onMore = { showFontPicker = true },
-                        onImport = { fontImport.launch(fontMimes) },
-                        importLabel = ".ttf",
-                    ) { name, sel, click ->
-                        FontSwatch(name, viewModel.isCustomFont(name), sel, click, null, viewModel)
-                    }
+                    PodroidSectionLabel("Input")
 
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant,
-                        modifier = Modifier.padding(vertical = 4.dp))
-
-                    // Toggles — single line each, no subtitles
-                    CompactToggle("Extra keys", showExtraKeys, onToggleExtraKeys)
-                    CompactToggle("Haptics", hapticsEnabled, onToggleHaptics)
+                    // Toggles — flipping any of these dismisses the drawer
+                    // immediately so the terminal is unblocked.
+                    PodroidListRow(
+                        label = "Extra keys",
+                        rightSlot = {
+                            PodroidSwitch(
+                                checked = showExtraKeys,
+                                onCheckedChange = { onToggleExtraKeys(it); onDismiss() },
+                            )
+                        },
+                    )
+                    PodroidListRow(
+                        label = "Haptics",
+                        rightSlot = {
+                            PodroidSwitch(
+                                checked = hapticsEnabled,
+                                onCheckedChange = { onToggleHaptics(it); onDismiss() },
+                            )
+                        },
+                        divider = false,
+                    )
                 }
             }
-        }
-    }
-}
-
-/**
- * Compact strip: label + selected name + 4 preview chips + [More] [+ Import].
- * The selected item is pinned first, then up to 3 alphabetical neighbors.
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun QuickStripRow(
-    label: String,
-    selectedName: String,
-    items: List<String>,
-    selected: String,
-    onSelect: (String) -> Unit,
-    onMore: () -> Unit,
-    onImport: () -> Unit,
-    importLabel: String,
-    chip: @Composable (name: String, selected: Boolean, onClick: () -> Unit) -> Unit,
-) {
-    val visible = remember(items, selected) {
-        val sel = if (selected in items) selected else items.firstOrNull()
-        if (sel == null) emptyList()
-        else listOf(sel) + items.filter { it != sel }.take(3)
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(label, style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.width(56.dp))
-            Text(selectedName,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.weight(1f),
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            visible.forEach { name ->
-                chip(name, name == selected) { onSelect(name) }
-            }
-            AddSwatch(label = "More", subLabel = "${items.size}", onClick = onMore)
-            AddSwatch(label = "+ Add", subLabel = importLabel, onClick = onImport)
         }
     }
 }
@@ -894,6 +880,9 @@ private fun ThemeSwatch(
  * Font preview chip — shows "Aa" rendered in the actual font, plus the name.
  * Custom (user-imported) fonts get a "•" suffix and a long-press → delete.
  */
+// "Aa" is a font-rendering preview, not a translatable string — suppress
+// SetTextI18n which would otherwise insist on a string resource.
+@android.annotation.SuppressLint("SetTextI18n")
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun FontSwatch(
@@ -954,39 +943,19 @@ private fun AddSwatch(
         modifier = Modifier
             .size(width = 104.dp, height = 76.dp)
             .clip(RoundedCornerShape(12.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(PodroidTokens.Radius.Card))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(label,
                 style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
+                color = PodroidTokens.Accent,
                 fontWeight = FontWeight.SemiBold)
             Text(subLabel,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-    }
-}
-
-@Composable
-private fun CompactToggle(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .clickable { onChange(!checked) }
-            .padding(start = 4.dp, end = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(label, style = MaterialTheme.typography.labelLarge,
-            modifier = Modifier.weight(1f))
-        Switch(
-            checked = checked,
-            onCheckedChange = onChange,
-            modifier = Modifier.scale(0.85f),
-        )
     }
 }
 
@@ -1026,8 +995,9 @@ private fun FullPickerDialog(
                 .fillMaxWidth()
                 .fillMaxHeight(0.92f)
                 .padding(8.dp),
-            shape = RoundedCornerShape(20.dp),
-            tonalElevation = 6.dp,
+            shape = RoundedCornerShape(PodroidTokens.Radius.Sheet),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            tonalElevation = 0.dp,
             color = MaterialTheme.colorScheme.surface,
         ) {
             Column(modifier = Modifier
@@ -1035,7 +1005,7 @@ private fun FullPickerDialog(
                 .padding(horizontal = 16.dp, vertical = 12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(title, style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Medium,
                         modifier = Modifier.weight(1f))
                     IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
                         Icon(Icons.Default.Close, contentDescription = "Close")
@@ -1056,7 +1026,7 @@ private fun FullPickerDialog(
                     .verticalScroll(rememberScrollState())) {
                     FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         filtered.forEach { name ->
@@ -1148,7 +1118,6 @@ private fun SwatchBox(
     onLongClick: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val ring = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent
     val clickModifier = if (onLongClick != null) {
         Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
     } else {
@@ -1161,42 +1130,14 @@ private fun SwatchBox(
             .background(backgroundColor)
             .then(clickModifier)
             .border(
-                width = if (selected) 2.dp else 0.dp,
-                color = ring,
-                shape = RoundedCornerShape(12.dp),
+                width = if (selected) 2.dp else 1.dp,
+                color = if (selected) PodroidTokens.Accent else MaterialTheme.colorScheme.outline,
+                shape = RoundedCornerShape(PodroidTokens.Radius.Card),
             )
             .padding(6.dp),
         contentAlignment = Alignment.Center,
         content = content,
     )
-}
-
-@Composable
-private fun QuickSettingsRow(
-    label: String,
-    value: String,
-    content: @Composable () -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            Text(
-                label,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                value,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-        content()
-    }
 }
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -1211,9 +1152,9 @@ private fun QuickChip(
     // supplied we wrap it in a combinedClickable Box that mimics the chip's
     // rounded shape + selected colors.
     if (onLongClick != null) {
-        val bg = if (selected) MaterialTheme.colorScheme.primaryContainer
+        val bg = if (selected) PodroidTokens.Accent
                  else MaterialTheme.colorScheme.surfaceContainerHighest
-        val fg = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+        val fg = if (selected) PodroidTokens.AccentInk
                  else MaterialTheme.colorScheme.onSurface
         Box(
             modifier = Modifier
@@ -1242,10 +1183,7 @@ private fun QuickChip(
             )
         },
         shape = RoundedCornerShape(14.dp),
-        colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        ),
+        colors = podroidChipColors(),
     )
 }
 
