@@ -83,9 +83,9 @@ public final class TerminalView extends View {
 
     /** Hard cap on how long a single burst can defer paints. Without it, a
      *  continuous output stream (yes, while-true, sixel video) would never
-     *  paint. 64 ms ≈ 4 VSYNCs at 60 Hz — fast enough that the user perceives
-     *  the screen as live. */
-    private static final long INPUT_COALESCE_MAX_MS = 64;
+     *  paint. 33 ms ≈ 2 VSYNCs at 60 Hz — caps continuous-stream TUIs (btop,
+     *  nvim scroll, top) at ~30 fps minimum instead of ~15. */
+    private static final long INPUT_COALESCE_MAX_MS = 33;
 
     private final Choreographer mChoreographer = Choreographer.getInstance();
     private final Choreographer.FrameCallback mFrameCallback = new Choreographer.FrameCallback() {
