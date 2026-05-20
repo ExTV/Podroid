@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Terminal &amp; settings · Podroid docs</title>
+  <meta name="description" content="Reference for the Podroid terminal (Quick Settings, themes, fonts) and every in-app setting: RAM, CPU, storage, SSH, port forwards, backend, advanced QEMU args, diagnostics." />
+  <link rel="icon" type="image/png" href="https://github.com/ExTV.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <nav>
+    <a class="nav-logo" href="../index.html"><img src="../logo.png" alt="Podroid" />Podroid</a>
+    <button class="menu-toggle" aria-label="Toggle menu">&#9776;</button>
+    <ul class="nav-links">
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="index.html" class="cta">Docs</a></li>
+      <li><a href="https://github.com/ExTV/Podroid">GitHub</a></li>
+    </ul>
+  </nav>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <h4>Getting started</h4>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="getting-started.html">Getting started</a></li>
+        <li><a href="how-it-works.html">How it works</a></li>
+      </ul>
+      <h4>Going deeper</h4>
+      <ul>
+        <li><a href="performance.html">Performance &amp; why it's slow</a></li>
+        <li><a href="backends.html">Backends: QEMU &amp; AVF</a></li>
+        <li><a href="networking.html">Networking &amp; ports</a></li>
+        <li><a href="packages.html">Packages &amp; services</a></li>
+        <li><a href="desktop.html">Desktops &amp; X11 viewer</a></li>
+        <li><a href="settings.html" class="active">Terminal &amp; settings</a></li>
+      </ul>
+      <h4>Reference</h4>
+      <ul>
+        <li><a href="limitations.html">Limitations &amp; troubleshooting</a></li>
+        <li><a href="use-cases.html">Use cases</a></li>
+      </ul>
+    </aside>
+
+    <main class="content">
+      <h1>Terminal &amp; settings</h1>
+      <p class="lead">The Podroid terminal is built on the Termux engine: xterm-256color, true color, mouse tracking, and live resize. This page covers the Quick Settings drawer in the terminal and every option in the main Settings screen.</p>
+
+      <h2>Terminal Quick Settings</h2>
+      <p>Tap the tune icon in the terminal's top bar to open the Quick Settings drawer. All changes apply immediately without restarting the VM.</p>
+      <ul>
+        <li><strong>Font size slider</strong> - drag to resize text live.</li>
+        <li><strong>Color themes</strong> - over 100 themes including Dracula, Nord, Solarized Dark and Light, Tokyo Night, Catppuccin, Gruvbox, Monokai, and the full base16 family. You can also import any theme via a terminalcolors.com URL.</li>
+        <li><strong>Fonts</strong> - 13 built-in fonts including JetBrains Mono, Fira Code, Cascadia Code, Hack, Iosevka, and Victor Mono. Import any <code>.ttf</code> file for a custom font.</li>
+        <li><strong>Extra-keys toggle</strong> - show or hide the row of shortcut keys below the terminal.</li>
+        <li><strong>Haptics toggle</strong> - enable or disable vibration feedback on key presses.</li>
+      </ul>
+
+      <h2>Settings reference</h2>
+
+      <h3>Appearance</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Setting</th>
+            <th>Control</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Dark theme</td>
+            <td>Toggle</td>
+            <td>Switches the app UI between light and dark. Applies immediately.</td>
+          </tr>
+          <tr>
+            <td>Dynamic color / Material You</td>
+            <td>Toggle</td>
+            <td>Uses your wallpaper's colors as the app accent palette. Android 12+ only.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>VM resources</h3>
+
+      <div class="callout note">
+        <span class="label">Restart required</span>
+        <p>RAM, CPU, and Backend changes take effect only after the VM is restarted. These controls are locked (grayed out) while the VM is running. Port-forward and SSH changes apply live without a restart.</p>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Setting</th>
+            <th>Control</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>RAM</td>
+            <td>512 MB / 1 GB / 2 GB / 4 GB</td>
+            <td>Memory allocated to the VM. Requires a VM restart. Locked while running.</td>
+          </tr>
+          <tr>
+            <td>CPU cores</td>
+            <td>1 / 2 / 4 / 6 / 8</td>
+            <td>vCPU count passed to QEMU. Requires a VM restart. On AVF, any value above 1 uses all available host cores.</td>
+          </tr>
+          <tr>
+            <td>Storage size</td>
+            <td>Set at first-run setup</td>
+            <td>The size of the persistent overlay image (<code>storage.img</code>). Set during setup; changing it requires a full VM reset.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Connectivity</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Setting</th>
+            <th>Control</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>SSH</td>
+            <td>Toggle</td>
+            <td>Exposes dropbear on host port 9922 (forwarded to guest port 22). Default credentials: username <code>root</code>, password <code>podroid</code>. Injects and removes the 9922 forward live via QMP.</td>
+          </tr>
+          <tr>
+            <td>Port forwards</td>
+            <td>Add / Remove</td>
+            <td>Add TCP, UDP, or both forwarding rules. Changes apply live via QMP without a VM restart.</td>
+          </tr>
+          <tr>
+            <td>Downloads sharing</td>
+            <td>Toggle</td>
+            <td>Shares the Android Downloads folder into the VM as a virtio-fs mount. May be a no-op on some AVF devices. Can be unstable on some QEMU configurations; disable it if the VM crashes on boot.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Advanced</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Setting</th>
+            <th>Control</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Backend</td>
+            <td>Auto / AVF (KVM) / QEMU (TCG)</td>
+            <td>Auto picks AVF when the device supports it, otherwise QEMU. Requires a VM restart. See the <a href="backends.html">Backends</a> page for details.</td>
+          </tr>
+          <tr>
+            <td>Extra QEMU args</td>
+            <td>Editable text field + Reset</td>
+            <td>
+              Appended verbatim to the QEMU command line. Default:<br />
+              <code>-cpu max,sve=off,pauth-impdef=on -accel tcg,thread=multi,tb-size=512 -object rng-random,id=rng0,filename=/dev/urandom -device virtio-rng-pci,rng=rng0 -overcommit mem-lock=off</code>
+            </td>
+          </tr>
+          <tr>
+            <td>Extra kernel cmdline</td>
+            <td>Editable text field + Reset</td>
+            <td>
+              Appended to the kernel command line. Default:<br />
+              <code>loglevel=1 quiet mitigations=off</code>
+            </td>
+          </tr>
+          <tr>
+            <td>Reset VM</td>
+            <td>Button</td>
+            <td>Wipes all VM data: the persistent overlay (<code>storage.img</code>) is deleted and recreated on next boot. Does not affect app settings.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Diagnostics</h2>
+      <p>Open <strong>Settings &rarr; About</strong> for diagnostics tools:</p>
+      <ul>
+        <li><strong>Export diagnostic log</strong> - writes and shares a <code>log.txt</code> containing app version, device info, current settings, VM state, port-forward rules, AVF capability probe results, recent app logcat, and the full guest <code>console.log</code>. Attach this to bug reports.</li>
+        <li><strong>Verbose AVF logging</strong> - toggle that adds extra detail to AVF-related log output. Useful when investigating AVF-specific issues.</li>
+        <li><strong>AVF (pKVM) diagnostic</strong> - runs the capability and permission probe immediately and shows the result, so you can confirm whether your device meets AVF requirements without attempting a boot.</li>
+      </ul>
+
+      <div class="pagenav">
+        <a class="prev" href="desktop.html"><span class="dir">Previous</span>← Desktops &amp; X11 viewer</a>
+        <a class="next" href="limitations.html"><span class="dir">Next</span>Limitations &amp; troubleshooting →</a>
+      </div>
+      <p class="docfoot">Podroid is free software (GPL). Docs for v1.2.1. Found something inaccurate? <a href="https://github.com/ExTV/Podroid/issues">Open an issue</a>.</p>
+    </main>
+  </div>
+
+  <script>
+    document.querySelector('.menu-toggle').addEventListener('click', function () {
+      document.querySelector('.sidebar').classList.toggle('open');
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How it works · Podroid docs</title>
+  <meta name="description" content="Architecture of the Podroid Alpine Linux VM: kernel, OpenRC, squashfs, ext4 overlay, QEMU/AVF, and how the app keeps it alive." />
+  <link rel="icon" type="image/png" href="https://github.com/ExTV.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <nav>
+    <a class="nav-logo" href="../index.html"><img src="../logo.png" alt="Podroid" />Podroid</a>
+    <button class="menu-toggle" aria-label="Toggle menu">☰</button>
+    <ul class="nav-links">
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="index.html" class="cta">Docs</a></li>
+      <li><a href="https://github.com/ExTV/Podroid">GitHub</a></li>
+    </ul>
+  </nav>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <h4>Getting started</h4>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="getting-started.html">Getting started</a></li>
+        <li><a href="how-it-works.html" class="active">How it works</a></li>
+      </ul>
+      <h4>Going deeper</h4>
+      <ul>
+        <li><a href="performance.html">Performance &amp; why it's slow</a></li>
+        <li><a href="backends.html">Backends: QEMU &amp; AVF</a></li>
+        <li><a href="networking.html">Networking &amp; ports</a></li>
+        <li><a href="packages.html">Packages &amp; services</a></li>
+        <li><a href="desktop.html">Desktops &amp; X11 viewer</a></li>
+        <li><a href="settings.html">Terminal &amp; settings</a></li>
+      </ul>
+      <h4>Reference</h4>
+      <ul>
+        <li><a href="limitations.html">Limitations &amp; troubleshooting</a></li>
+        <li><a href="use-cases.html">Use cases</a></li>
+      </ul>
+    </aside>
+
+    <main class="content">
+      <h1>How it works</h1>
+      <p class="lead">Podroid is a real virtual machine, not a translation layer or a container trick. An Alpine Linux 3.23 guest running a custom Linux 7.0.5 kernel boots inside the Android app, with full process isolation and a persistent filesystem.</p>
+
+      <h2>A real VM</h2>
+      <p>When you tap "Start VM", the app launches a real hypervisor with a real aarch64 Alpine Linux guest. The guest kernel, the init system, the shell, and every process you run are all executing real ARM64 machine code inside a fully virtualized machine. There is no instruction translation of Alpine binaries, no Android kernel namespace trick, and no chroot. The guest sees a completely clean Linux environment.</p>
+
+      <h2>Two backends</h2>
+      <p>Podroid supports two hypervisor backends, selectable in Settings. The guest is identical either way - only the host-side virtualization layer differs.</p>
+      <ul>
+        <li><strong>QEMU (default):</strong> software CPU emulation via TCG. Works on any ARM64 Android 9+ device. Slower than native because every guest instruction is translated and executed by the host CPU. See the <a href="backends.html">Backends</a> page for tuning options.</li>
+        <li><strong>AVF / pKVM:</strong> hardware virtualization via Android's Virtualization Framework. Available on recent Pixel devices that ship pKVM. Runs at near-native speed. Requires two one-time <code>adb</code> permission grants. See <a href="backends.html">Backends: QEMU &amp; AVF</a>.</li>
+      </ul>
+
+      <h2>The filesystem: squashfs + ext4 overlay</h2>
+      <p>The Alpine root is split across two virtual block devices so that the base system stays compact and reproducible while your changes persist across reboots.</p>
+      <ul>
+        <li><strong>/dev/vdb - read-only squashfs:</strong> the complete Alpine system (packages, OpenRC services, configs) is baked into a compressed squashfs image shipped inside the APK. It is never written to. Updates to the base system ship as a new APK release.</li>
+        <li><strong>/dev/vda - writable ext4 image:</strong> the persistent overlay upper layer. Every file you create or modify - <code>apk add</code> output, container images, SSH keys, home directories - lands here and survives reboots. You sized this in the setup wizard.</li>
+      </ul>
+      <p>A minimal initramfs boots first. It mounts both block devices, stacks them with <strong>overlayfs</strong> (squashfs as lower, ext4 as upper), then calls <code>switch_root</code> to hand control to the real Alpine root. From that point on the guest sees a single unified filesystem, with writes silently redirected to the ext4 overlay.</p>
+
+      <div class="callout note">
+        <span class="label">Why switch_root, not chroot?</span>
+        <p>An earlier version used <code>chroot</code> to pivot into the overlay. That broke <code>podman exec -it</code>: when <code>crun</code> calls <code>setns(MNT)</code> to enter a container's namespace, it resets the root, and exec'd processes saw raw kernel paths like <code>/mnt/overlay/proc</code> instead of <code>/proc</code>. <code>switch_root</code> reorganizes the kernel mount tree itself, so namespace forks always see a clean <code>/</code>.</p>
+      </div>
+
+      <h2>Init system: OpenRC</h2>
+      <p>OpenRC is PID 1 inside the guest. Three app-specific services on the squashfs handle bring-up:</p>
+      <ul>
+        <li><strong>podroid-bootstrap:</strong> kernel modules, cgroup v2, ZRAM swap, devpts/shm/mqueue mounts, sysctl, hostname.</li>
+        <li><strong>podroid-network:</strong> brings up eth0, assigns 10.0.2.15/24, sets the default route and /etc/resolv.conf (SLIRP provides NAT).</li>
+        <li><strong>podroid-ready:</strong> emits the "Starting SSH...", "Almost ready...", and "Ready!" markers that the app tracks to update the notification and unlock the terminal.</li>
+      </ul>
+
+      <h2>Boot stages</h2>
+      <p>The app watches the VM's serial console and updates the persistent notification as each stage marker appears. You can follow along in real time during the first boot, where host-key generation adds a visible pause between "Starting SSH..." and the next stage.</p>
+
+      <h2>Keeping the VM alive</h2>
+      <p>A foreground Android service holds a partial WakeLock for the lifetime of the VM. The WakeLock keeps the CPU running so QEMU (or AVF) is not paused by Android's power scheduler while the app is in the background. The foreground service also shows the persistent notification required by Android for any long-running background work.</p>
+
+      <div class="callout warn">
+        <span class="label">Phantom-process killer</span>
+        <p>On some Android builds, the OS aggressively kills child processes of apps running in the background, including the QEMU process. If your VM dies when you switch apps, see <a href="limitations.html">Limitations &amp; troubleshooting</a>.</p>
+      </div>
+
+      <h2>Native binaries and page alignment</h2>
+      <p>QEMU, the terminal bridge, and the Termux JNI library are compiled as ARM64 native binaries with 16 KB page alignment (<code>-Wl,-z,max-page-size=16384</code>). This alignment is mandatory on Android 13+ and on devices with 16 KB memory pages (some Pixel 9/10 variants). The app is arm64-v8a only; there is no 32-bit or x86 build.</p>
+
+      <h2>Component summary</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Component</th>
+            <th>Role</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Linux 7.0.5 kernel</td>
+            <td>Custom-built arm64 guest kernel with overlayfs, cgroups v2, netfilter, FUSE, and VETH built in</td>
+          </tr>
+          <tr>
+            <td>OpenRC (PID 1)</td>
+            <td>Service manager and init system inside the Alpine guest</td>
+          </tr>
+          <tr>
+            <td>squashfs (/dev/vdb)</td>
+            <td>Read-only, compressed Alpine base system; shipped inside the APK, never written to</td>
+          </tr>
+          <tr>
+            <td>ext4 overlay (/dev/vda)</td>
+            <td>Writable persistent layer; all user changes and installed packages live here</td>
+          </tr>
+          <tr>
+            <td>QEMU / AVF</td>
+            <td>Hypervisor backend; QEMU (software TCG) works on any device, AVF (hardware) on supported Pixels</td>
+          </tr>
+          <tr>
+            <td>Foreground service</td>
+            <td>Holds a partial WakeLock and the persistent notification to keep the VM running in the background</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="pagenav">
+        <a class="prev" href="getting-started.html"><span class="dir">Previous</span>&larr; Getting started</a>
+        <a class="next" href="performance.html"><span class="dir">Next</span>Performance &amp; why it's slow &rarr;</a>
+      </div>
+      <p class="docfoot">Podroid is free software (GPL). Docs for v1.2.1. Found something inaccurate? <a href="https://github.com/ExTV/Podroid/issues">Open an issue</a>.</p>
+    </main>
+  </div>
+
+  <script>
+    document.querySelector('.menu-toggle').addEventListener('click', function () {
+      document.querySelector('.sidebar').classList.toggle('open');
+    });
+  </script>
+</body>
+</html>

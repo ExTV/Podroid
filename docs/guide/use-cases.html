@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Use cases · Podroid docs</title>
+  <meta name="description" content="Practical use cases for Podroid: self-hosting containers, local Linux development, GUI apps, and learning Linux." />
+  <link rel="icon" type="image/png" href="https://github.com/ExTV.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <nav>
+    <a class="nav-logo" href="../index.html"><img src="../logo.png" alt="Podroid" />Podroid</a>
+    <button class="menu-toggle" aria-label="Toggle menu">&#9776;</button>
+    <ul class="nav-links">
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="index.html" class="cta">Docs</a></li>
+      <li><a href="https://github.com/ExTV/Podroid">GitHub</a></li>
+    </ul>
+  </nav>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <h4>Getting started</h4>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="getting-started.html">Getting started</a></li>
+        <li><a href="how-it-works.html">How it works</a></li>
+      </ul>
+      <h4>Going deeper</h4>
+      <ul>
+        <li><a href="performance.html">Performance &amp; why it's slow</a></li>
+        <li><a href="backends.html">Backends: QEMU &amp; AVF</a></li>
+        <li><a href="networking.html">Networking &amp; ports</a></li>
+        <li><a href="packages.html">Packages &amp; services</a></li>
+        <li><a href="desktop.html">Desktops &amp; X11 viewer</a></li>
+        <li><a href="settings.html">Terminal &amp; settings</a></li>
+      </ul>
+      <h4>Reference</h4>
+      <ul>
+        <li><a href="limitations.html">Limitations &amp; troubleshooting</a></li>
+        <li><a href="use-cases.html" class="active">Use cases</a></li>
+      </ul>
+    </aside>
+
+    <main class="content">
+      <h1>Use cases</h1>
+      <p class="lead">What Podroid is genuinely good for, what it does with caveats, and what to avoid - with honest notes on TCG performance throughout.</p>
+
+      <h2>Self-hosting via containers</h2>
+      <p>Rootless Podman, Docker and LXC are all ready the moment the VM boots: Podman needs no daemon, and the Docker and LXC services are enabled in the default runlevel, so they start automatically. You can run any ARM64 container image from Docker Hub or GHCR.</p>
+      <p>Port forwarding rules (see <a href="networking.html">Networking &amp; ports</a>) expose guest ports on the phone's real IP. Use a host port above 1024 for anything you expose, because an unprivileged Android app cannot bind host ports below 1024.</p>
+      <pre><code><span class="c"># Pi-hole (DNS + ad-blocking)</span>
+<span class="p">$</span> podman run -d --name pihole \
+    -p 8080:80 -p 5353:53/tcp \
+    -e TZ=Europe/London \
+    docker.io/pihole/pihole:latest
+
+<span class="c"># Gitea (self-hosted Git)</span>
+<span class="p">$</span> podman run -d --name gitea \
+    -p 3000:3000 -p 2222:22 \
+    -v gitea-data:/data \
+    docker.io/gitea/gitea:latest-linux-arm64
+
+<span class="c"># Vaultwarden (Bitwarden-compatible password server)</span>
+<span class="p">$</span> podman run -d --name vaultwarden \
+    -p 8888:80 \
+    -v vaultwarden-data:/data \
+    docker.io/vaultwarden/server:latest
+
+<span class="c"># code-server (VS Code in the browser)</span>
+<span class="p">$</span> podman run -d --name code-server \
+    -p 8443:8443 \
+    -v "$HOME/.config:/home/coder/.config" \
+    -v "$PWD:/home/coder/project" \
+    ghcr.io/coder/code-server:latest \
+    --bind-addr 0.0.0.0:8443 /home/coder/project</code></pre>
+
+      <div class="callout note">
+        <span class="label">JVM-heavy services</span>
+        <p>Services backed by a JVM - Gitea's built-in runner, Jenkins, Gradle builds inside code-server, and anything running on Java or Kotlin - are noticeably slow on the QEMU TCG backend. JVM startup alone can take 10-30 seconds. If you rely on these services heavily, enabling the <a href="backends.html">AVF backend</a> on a Pixel device makes a large practical difference.</p>
+      </div>
+
+      <h2>Local Linux development environment</h2>
+      <p>The Alpine guest is a full persistent Linux system. Install your toolchain once and it survives every reboot on the ext4 overlay.</p>
+      <pre><code><span class="c"># Install a development toolchain</span>
+<span class="p">$</span> apk add git nodejs npm python3 py3-pip go gcc musl-dev make
+
+<span class="c"># SSH in from a laptop on the same Wi-Fi</span>
+<span class="p">$</span> ssh root@&lt;phone-ip&gt; -p 9922</code></pre>
+      <p>Once SSH is working, VS Code Remote-SSH and JetBrains Gateway both connect without any plugin beyond their standard remote-development extension. The phone acts exactly like any remote Linux server from the laptop's point of view.</p>
+      <p>Persistence is handled by the overlayfs stack: all writes go to the ext4 <code>storage.img</code>. Packages you install with <code>apk add</code>, files you create, services you enable with <code>rc-update add</code> - all survive reboots and app updates.</p>
+
+      <div class="callout tip">
+        <span class="label">IO-bound vs CPU-bound work</span>
+        <p>Text editing, shell scripting, Git operations, and short Python scripts are comfortable on TCG - these workloads spend most time on IO and memory, where the emulation overhead is low. Long compilations (LLVM, Linux kernel, large Rust projects) will be painfully slow; for those, prefer cross-compiling on the laptop and copying binaries over SSH.</p>
+      </div>
+
+      <h2>GUI Linux apps</h2>
+      <p>The in-app X11 viewer connects to an Xvnc display in the guest. Install a desktop environment or individual X11 apps and they appear directly in the viewer with touch, external keyboard and mouse, and audio forwarding.</p>
+      <pre><code><span class="c"># Install XFCE and common accessories</span>
+<span class="p">$</span> apk add xfce4 xfce4-terminal mousepad ristretto xfce4-taskmanager
+
+<span class="c"># Install Firefox (ARM64 build)</span>
+<span class="p">$</span> apk add firefox
+
+<span class="c"># Install GIMP</span>
+<span class="p">$</span> apk add gimp</code></pre>
+      <p>See <a href="desktop.html">Desktops &amp; X11 viewer</a> for how to start and configure the Xvnc session. Note that only X11 desktop sessions render correctly; Wayland sessions (GNOME on Wayland, Plasma Wayland, sway) do not render in the viewer - see <a href="limitations.html">Limitations</a>.</p>
+
+      <h2>Learning Linux and containers</h2>
+      <p>Podroid gives you a real Linux kernel with cgroup v2, network namespaces, overlayfs, netfilter/nftables, and OpenRC - all on hardware you already own. Nothing is simulated or mocked; the same kernel features that production servers use are present and explorable.</p>
+      <pre><code><span class="c"># Inspect the cgroup v2 hierarchy</span>
+<span class="p">$</span> mount | grep cgroup
+<span class="p">$</span> ls /sys/fs/cgroup/
+
+<span class="c"># Run a container and inspect its namespaces</span>
+<span class="p">$</span> podman run --rm -it alpine sh
+<span class="p">$</span> ls -la /proc/1/ns/
+
+<span class="c"># Examine the overlayfs mount used by Podman's graph driver</span>
+<span class="p">$</span> podman info | grep graphDriver
+<span class="p">$</span> mount | grep overlay
+
+<span class="c"># Explore OpenRC service management</span>
+<span class="p">$</span> rc-status
+<span class="p">$</span> rc-update add sshd default
+<span class="p">$</span> rc-service sshd start
+
+<span class="c"># Inspect nftables rules added by Podman for port forwarding</span>
+<span class="p">$</span> nft list ruleset</code></pre>
+      <p>Because this is a real VM, experiments that would break a shared server are safe here - a factory reset restores a clean Alpine image in under a minute. You can deliberately crash the kernel, fill the disk, or misconfigure networking and recover immediately.</p>
+
+      <h2>Lightweight CLI tools and scripts</h2>
+      <p>Running cron jobs, personal bots, data processing scripts, or static site generators is one of the most practical uses on TCG. These workloads are typically IO-bound or short-lived, so the 5-20x CPU penalty of TCG emulation is barely noticeable compared to the time spent waiting on network or disk.</p>
+      <pre><code><span class="c"># Install common CLI tooling</span>
+<span class="p">$</span> apk add curl jq rsync htop tmux vim ffmpeg yt-dlp
+
+<span class="c"># Run a Python script on a schedule</span>
+<span class="p">$</span> echo "*/15 * * * * python3 /root/sync.py" | crontab -
+<span class="p">$</span> rc-update add crond default &amp;&amp; rc-service crond start</code></pre>
+
+      <h2>What works poorly</h2>
+      <ul>
+        <li><strong>Wayland desktops</strong> - GNOME Wayland, Plasma Wayland, sway, and Hyprland do not render in the X11 viewer. Use XFCE or another X11 session instead.</li>
+        <li><strong>Heavy compilation on TCG</strong> - building LLVM, the Linux kernel, or large Rust crates inside the VM is feasible but very slow (hours, not minutes). Cross-compile on a real machine and copy the result over SSH.</li>
+        <li><strong>x86 Docker images</strong> - pulling an <code>linux/amd64</code> image runs it under double emulation (QEMU TCG emulating ARM64 guest, which then runs QEMU user-mode emulating x86). Expect 50-100x slowdown. Always prefer <code>linux/arm64</code> images.</li>
+        <li><strong>UDP port forwarding on AVF</strong> - UDP rules are silently ignored on the AVF backend; switch to QEMU if you need UDP (e.g. a game server or DNS resolver serving LAN clients).</li>
+        <li><strong>A full desktop environment at 512 MB RAM</strong> - XFCE with a browser open will page heavily into ZRAM swap at 512 MB. Set RAM to 1 GB or more in Settings if you plan to run a desktop regularly.</li>
+      </ul>
+
+      <div class="callout tip">
+        <span class="label">Getting better performance</span>
+        <p>If TCG is too slow for your workload, the most impactful step is switching to the <a href="backends.html">AVF backend</a> on a Pixel 8 or later - it provides near-native CPU speed. Bumping RAM above 1 GB also helps containers and desktops avoid swap pressure. The <a href="performance.html">Performance &amp; why it's slow</a> page covers every tuning option in detail. For hard limits such as Wayland or UDP-on-AVF, see <a href="limitations.html">Limitations &amp; troubleshooting</a>.</p>
+      </div>
+
+      <div class="pagenav">
+        <a class="prev" href="limitations.html"><span class="dir">Previous</span>&larr; Limitations &amp; troubleshooting</a>
+        <span></span>
+      </div>
+      <p class="docfoot">Podroid is free software (GPL). Docs for v1.2.1. Found something inaccurate? <a href="https://github.com/ExTV/Podroid/issues">Open an issue</a>.</p>
+    </main>
+  </div>
+
+  <script>
+    document.querySelector('.menu-toggle').addEventListener('click', function () {
+      document.querySelector('.sidebar').classList.toggle('open');
+    });
+  </script>
+</body>
+</html>

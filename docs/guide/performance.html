@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Performance &amp; why it's slow · Podroid docs</title>
+  <meta name="description" content="Why QEMU TCG is slow, where the bottlenecks are, and every tuning knob Podroid exposes to help." />
+  <link rel="icon" type="image/png" href="https://github.com/ExTV.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <nav>
+    <a class="nav-logo" href="../index.html"><img src="../logo.png" alt="Podroid" />Podroid</a>
+    <button class="menu-toggle" aria-label="Toggle menu">&#9776;</button>
+    <ul class="nav-links">
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="index.html" class="cta">Docs</a></li>
+      <li><a href="https://github.com/ExTV/Podroid">GitHub</a></li>
+    </ul>
+  </nav>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <h4>Getting started</h4>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="getting-started.html">Getting started</a></li>
+        <li><a href="how-it-works.html">How it works</a></li>
+      </ul>
+      <h4>Going deeper</h4>
+      <ul>
+        <li><a href="performance.html" class="active">Performance &amp; why it's slow</a></li>
+        <li><a href="backends.html">Backends: QEMU &amp; AVF</a></li>
+        <li><a href="networking.html">Networking &amp; ports</a></li>
+        <li><a href="packages.html">Packages &amp; services</a></li>
+        <li><a href="desktop.html">Desktops &amp; X11 viewer</a></li>
+        <li><a href="settings.html">Terminal &amp; settings</a></li>
+      </ul>
+      <h4>Reference</h4>
+      <ul>
+        <li><a href="limitations.html">Limitations &amp; troubleshooting</a></li>
+        <li><a href="use-cases.html">Use cases</a></li>
+      </ul>
+    </aside>
+
+    <main class="content">
+      <h1>Performance &amp; why it's slow</h1>
+      <p class="lead">On the default QEMU path, every guest CPU instruction is emulated in software. There is no shortcut: KVM hardware virtualization is impossible without root on Android. This page explains exactly what that means, where it hurts most, and every tuning knob Podroid applies.</p>
+
+      <h2>The core bottleneck: TCG software emulation</h2>
+      <p>QEMU's CPU backend on Podroid is <strong>TCG</strong> (Tiny Code Generator), a software JIT that translates guest ARM64 instructions into host ARM64 instructions at runtime. The pipeline for each guest basic block is: fetch guest instructions, decode, translate to host IR, optimize, emit host code, cache the result as a "translation block" (TB), execute. Simple scalar code runs at roughly 2-5x the cost of native; anything that creates many short-lived blocks (branch-heavy code, dynamic dispatch, interpreters) compounds that badly.</p>
+
+      <p>Hardware virtualization via KVM would eliminate the translation entirely, letting the guest run directly on the physical CPU cores. KVM requires <code>CAP_SYS_ADMIN</code> or the Android Virtualization Framework's special permissions. The QEMU path has neither. AVF (pKVM) does, which is why it is dramatically faster on devices that support it - see <a href="backends.html">Backends: QEMU &amp; AVF</a>.</p>
+
+      <h2>Why npm, Node, JVM, and compilers crawl</h2>
+
+      <h3>The double-JIT problem</h3>
+      <p>Node.js, the JVM, and similar runtimes are themselves JIT compilers: they watch hot code paths in the guest and emit new machine code at runtime to speed them up. Under TCG, that freshly-generated guest machine code has never been seen before. QEMU must translate it, cache it as TBs, and then the JIT runtime modifies or discards those code pages when it deoptimizes or garbage-collects - which invalidates the TBs. The cycle repeats: generate guest code, translate, invalidate, translate again. The translation-block cache (<code>tb-size</code>) is finite; JIT output that is larger than the cache evicts older entries, causing retranslation stalls on every cache miss. You are paying TCG overhead on top of what the JIT was already doing.</p>
+
+      <h3>Process-spawn cost</h3>
+      <p>Commands like <code>npm install</code>, <code>./configure</code>, and <code>make</code> spawn hundreds or thousands of short-lived child processes. Each new QEMU process starts with a <strong>cold translation cache</strong>. There is no shared TB cache between QEMU process invocations, and no persistent cache on disk. That means the same tiny utilities (<code>sh</code>, <code>awk</code>, <code>grep</code>, <code>cp</code>) are fully re-translated from scratch on every invocation. Even a build step that does trivially little actual computation feels slow because the TCG startup cost dominates. This is the mechanism behind "even small builds feel slow."</p>
+
+      <h2>I/O</h2>
+      <p>Disk I/O travels through three layers: guest virtio-blk driver to QEMU device emulation, then to the host Android filesystem. Podroid assigns a dedicated <strong>I/O thread</strong> to each virtio-blk device so disk requests are handled on a separate thread and do not stall vCPU execution. The guest uses the <code>mq-deadline</code> I/O scheduler for request merging, which matters most for the random small writes Podman's overlay graph driver generates during container image extraction. The ext4 overlay volume is mounted with <code>noatime,commit=60,barrier=0</code> to reduce metadata write amplification.</p>
+
+      <h2>Memory</h2>
+      <p>The default allocation is 512 MB of guest RAM - enough for a shell and basic containers, but tight for npm or a JVM process. Podroid configures <strong>ZRAM swap</strong> inside the guest at <strong>1.5x the VM's RAM</strong>, using lz4 compression. Because lz4 averages around 3x on heap and text pages, that compressed swap costs only a fraction of its size in real RAM - so a 512 MB VM gets roughly 768 MB of extra swap on top of its RAM at near-zero I/O cost (ZRAM lives in RAM; there is no disk read or write). That headroom is what keeps an <code>npm install</code> or a browser tab from immediately hitting the out-of-memory killer. For memory-heavy work, raise RAM in <strong>Settings &rarr; RAM</strong>.</p>
+
+      <h2>Network</h2>
+      <p>Podroid uses <strong>SLIRP</strong>, a userspace TCP/IP stack embedded inside QEMU. It is adequate for bulk transfers (container image pulls, SSH, HTTP) but adds per-packet CPU overhead compared to a kernel network path. High-connection-count workloads - tools that open hundreds of parallel connections like <code>npm install</code> with many dependencies - will feel this overhead in addition to the CPU emulation cost. There is no alternative without root: TAP networking requires a TUN/TAP device or elevated permissions.</p>
+
+      <h2>Tuning summary</h2>
+      <p>The table below lists every tuning measure Podroid applies and what it buys. All of these are already active by default; they are not optional settings you need to find.</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Measure</th>
+            <th>Where it lives</th>
+            <th>What it buys</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>-cpu max,pauth-impdef=on</code></td>
+            <td>QEMU command line</td>
+            <td>Enables all host CPU extensions in the guest, including non-cryptographic pointer authentication (fast, TCG-native). Up to ~50% on PAuth-heavy code (Rust, recent Clang output).</td>
+          </tr>
+          <tr>
+            <td><code>-accel tcg,thread=multi</code></td>
+            <td>QEMU command line</td>
+            <td>One host thread per vCPU. Without this all vCPUs share one host thread and can't use more than one core. Enables real SMP scaling.</td>
+          </tr>
+          <tr>
+            <td><code>tb-size=256</code> (&lt;2 GB RAM) / <code>tb-size=512</code> (&ge;2 GB RAM)</td>
+            <td>QEMU command line</td>
+            <td>Larger translation-block cache reduces re-translation for JIT-heavy workloads (Node, JVM in containers). Default QEMU value is 32 MB.</td>
+          </tr>
+          <tr>
+            <td>Per-disk <code>iothread</code></td>
+            <td>QEMU command line</td>
+            <td>Dedicated I/O thread per virtio-blk device, decoupled from vCPU threads. Largest single win for container image pull and extraction.</td>
+          </tr>
+          <tr>
+            <td><code>mitigations=off</code> in kernel cmdline</td>
+            <td>Guest kernel boot args</td>
+            <td>Disables Spectre/Meltdown mitigations inside the guest. Safe inside a TCG VM: speculative execution attacks cannot cross the emulated ISA boundary. Saves 5-15% CPU on syscall-heavy workloads.</td>
+          </tr>
+          <tr>
+            <td><code>mq-deadline</code> I/O scheduler</td>
+            <td>Guest kernel cmdline (<code>elevator=mq-deadline</code>)</td>
+            <td>Request merging for virtio-blk random writes. Reduces write amplification on Podman overlay graph driver operations.</td>
+          </tr>
+          <tr>
+            <td>ZRAM swap at 1.5x RAM (lz4)</td>
+            <td>Guest init (<code>podroid-bootstrap</code> OpenRC service)</td>
+            <td>lz4 (~3x on heap/text) makes the compressed swap cost a fraction of its size, giving large headroom against the out-of-memory killer at near-zero I/O cost. Priority 100 so it is preferred over any file swap.</td>
+          </tr>
+          <tr>
+            <td>ext4 <code>noatime,commit=60,barrier=0</code></td>
+            <td>Overlay volume mount options</td>
+            <td>Skips access-time updates, batches journal commits to 60-second windows, and omits write barriers (safe: data loss on crash only risks the 60-second window, not the filesystem). Reduces metadata I/O on package-install workloads.</td>
+          </tr>
+          <tr>
+            <td><code>metacopy=on</code> on overlayfs</td>
+            <td>Overlay mount options</td>
+            <td>Copies only inode metadata (not data) when a file is stat'd or chmod'd on the overlay. Speeds up container image layer application.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>What won't help without root</h2>
+      <p>Some common Linux performance tricks are simply unavailable on a stock Android device: <code>io_uring</code> is blocked by Android 12+ seccomp policy; CPU affinity (<code>taskset</code>) requires elevated scheduling permissions; KSM memory deduplication is a kernel knob; huge pages on the host are not user-configurable; TAP networking requires a TUN/TAP device. These are hard limits, not oversights.</p>
+
+      <div class="callout tip">
+        <span class="label">Biggest wins</span>
+        <p>If you have a Pixel 8, 9, or 10 (or another device shipping pKVM), switch the backend to <strong>AVF</strong> in Settings &rarr; Advanced. AVF runs the guest on real hardware CPU cores via the kernel hypervisor - no TCG, no double-JIT overhead, no cold-cache process-spawn cost. See <a href="backends.html">Backends: QEMU &amp; AVF</a> for setup. For heavy workloads on any backend, also raise RAM in Settings and lower the X11 viewer resolution if you are running a desktop.</p>
+      </div>
+
+      <div class="pagenav">
+        <a class="prev" href="how-it-works.html"><span class="dir">Previous</span>&larr; How it works</a>
+        <a class="next" href="backends.html"><span class="dir">Next</span>Backends: QEMU &amp; AVF &rarr;</a>
+      </div>
+      <p class="docfoot">Podroid is free software (GPL). Docs for v1.2.1. Found something inaccurate? <a href="https://github.com/ExTV/Podroid/issues">Open an issue</a>.</p>
+    </main>
+  </div>
+
+  <script>
+    document.querySelector('.menu-toggle').addEventListener('click', function () {
+      document.querySelector('.sidebar').classList.toggle('open');
+    });
+  </script>
+</body>
+</html>

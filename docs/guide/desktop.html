@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Desktops &amp; the X11 viewer · Podroid docs</title>
+  <meta name="description" content="Run an X11 Linux desktop inside Podroid and view it with the built-in VNC viewer. Covers setup-desktop, supported DEs, viewer settings, and known limitations." />
+  <link rel="icon" type="image/png" href="https://github.com/ExTV.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <nav>
+    <a class="nav-logo" href="../index.html"><img src="../logo.png" alt="Podroid" />Podroid</a>
+    <button class="menu-toggle" aria-label="Toggle menu">&#9776;</button>
+    <ul class="nav-links">
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="index.html" class="cta">Docs</a></li>
+      <li><a href="https://github.com/ExTV/Podroid">GitHub</a></li>
+    </ul>
+  </nav>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <h4>Getting started</h4>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="getting-started.html">Getting started</a></li>
+        <li><a href="how-it-works.html">How it works</a></li>
+      </ul>
+      <h4>Going deeper</h4>
+      <ul>
+        <li><a href="performance.html">Performance &amp; why it's slow</a></li>
+        <li><a href="backends.html">Backends: QEMU &amp; AVF</a></li>
+        <li><a href="networking.html">Networking &amp; ports</a></li>
+        <li><a href="packages.html">Packages &amp; services</a></li>
+        <li><a href="desktop.html" class="active">Desktops &amp; X11 viewer</a></li>
+        <li><a href="settings.html">Terminal &amp; settings</a></li>
+      </ul>
+      <h4>Reference</h4>
+      <ul>
+        <li><a href="limitations.html">Limitations &amp; troubleshooting</a></li>
+        <li><a href="use-cases.html">Use cases</a></li>
+      </ul>
+    </aside>
+
+    <main class="content">
+      <h1>Desktops &amp; the X11 viewer</h1>
+      <p class="lead">Podroid includes a built-in VNC viewer that connects to <strong>Xvnc</strong> running inside the VM on display <code>:0</code> (port 5900, auto-forwarded). Tap the monitor icon in the terminal's top bar to open it.</p>
+
+      <h2>Installing a desktop</h2>
+      <p>Alpine ships <code>setup-desktop</code> as part of the <code>alpine-conf</code> package. It is an interactive helper that creates a user and installs a desktop environment of your choice. Run it in the Podroid terminal:</p>
+      <pre><code><span class="p">#</span> setup-desktop</code></pre>
+      <p>Follow the prompts to pick a desktop and create a user account. The script handles the <code>apk add</code> steps for you.</p>
+
+      <div class="callout warn">
+        <span class="label">X11 only - Wayland desktops will not appear</span>
+        <p>The built-in viewer speaks RFB (VNC), so it connects to an X11 display. It cannot show a Wayland compositor. Use <strong>Xfce, LXQt, or MATE</strong> - they run on X11 and render correctly. <strong>KDE Plasma 6, GNOME, and Sway are Wayland on Alpine</strong> and will not appear in the viewer, even after launching them.</p>
+      </div>
+
+      <h2>Launching a desktop</h2>
+      <p>You do not need a display manager. Xvnc is already the X server on <code>:0</code>, and <code>DISPLAY=:0</code> is preset in the environment. After installing a desktop, start it directly from the terminal:</p>
+      <pre><code><span class="c"># Xfce example</span>
+<span class="p">$</span> startxfce4 &amp;
+
+<span class="c"># LXQt example</span>
+<span class="p">$</span> startlxqt &amp;
+
+<span class="c"># MATE example</span>
+<span class="p">$</span> mate-session &amp;</code></pre>
+
+      <div class="callout warn">
+        <span class="label">Do not install or enable a display manager</span>
+        <p>Installing <code>lightdm</code> or any other display manager and enabling it with <code>rc-update add</code> will cause it to fight Xvnc for display <code>:0</code>. Xvnc is already the X server; no display manager is needed.</p>
+      </div>
+
+      <h2>Single GUI apps</h2>
+      <p>You do not need a full desktop to run individual X11 applications. Install any X11 app and launch it directly; <code>DISPLAY=:0</code> is already exported:</p>
+      <pre><code><span class="p">#</span> apk add firefox
+<span class="p">$</span> firefox &amp;</code></pre>
+      <p>The app will appear in the viewer as soon as it opens a window.</p>
+
+      <h2>Viewer settings reference</h2>
+      <p>Tap the tune/gear icon in the X11 viewer's top bar to open viewer settings.</p>
+
+      <h3>Resolution</h3>
+      <p>Controls what resolution Xvnc presents to the desktop. Uses the RFB ExtendedDesktopSize extension to resize live without restarting the VM.</p>
+      <ul>
+        <li><strong>Match viewport</strong> - the desktop tracks your screen size exactly, resizing whenever the viewer resizes. Pixel-perfect on most devices.</li>
+        <li><strong>Preset</strong> - fixed resolutions: 720p, 900p, 1080p, or 1440p. Pick a lower preset for smoother rendering on heavy desktops over a high-DPI display.</li>
+        <li><strong>Custom</strong> - enter any width and height in pixels.</li>
+      </ul>
+
+      <h3>Touch input</h3>
+      <ul>
+        <li><strong>Direct</strong> - tap to click at the point you touch; drag to drag; long-press activates drag-lock. Intuitive for touch-first use.</li>
+        <li><strong>Trackpad</strong> - relative pointer: your finger position moves the cursor rather than placing it. Sensitivity is adjustable (0.5x to 3.0x) with optional pointer acceleration.</li>
+      </ul>
+      <p>In both modes: two-finger tap sends a right-click; two-finger drag scrolls.</p>
+
+      <h3>External input</h3>
+      <p>A connected hardware keyboard passes through fully, including Ctrl, Alt, Shift, and composed shortcuts (e.g. Ctrl+L in a browser). An external mouse's scroll wheel scrolls, and all three buttons map to their X11 equivalents.</p>
+
+      <h3>Other settings</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Setting</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Fullscreen</td>
+            <td>Hides the system UI. Back exits fullscreen.</td>
+          </tr>
+          <tr>
+            <td>Rotation lock</td>
+            <td>Auto, Landscape, or Portrait. Auto follows the device sensor.</td>
+          </tr>
+          <tr>
+            <td>Extra-keys bar</td>
+            <td>Show or hide the keyboard shortcut bar below the viewer.</td>
+          </tr>
+          <tr>
+            <td>Server DPI</td>
+            <td>96 to 192. Tells Xvnc what DPI to report to apps. Takes effect on the next VM start.</td>
+          </tr>
+          <tr>
+            <td>Audio</td>
+            <td>PulseAudio streams PCM from the VM to the app over port 4713. Toggle to enable or disable.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout warn">
+        <span class="label">Known limitation: external mouse right-click</span>
+        <p>With an external mouse, right-click currently exits fullscreen instead of reaching the desktop. Android maps the mouse's right button to the Back action. Two-finger touch right-click works correctly as a workaround. A fix is planned.</p>
+      </div>
+
+      <div class="callout note">
+        <span class="label">Performance</span>
+        <p>The viewer currently uses uncompressed Raw encoding (ZRLE was disabled after it desynced on complex content). On a high-DPI phone, selecting the 720p or 900p preset reduces the amount of screen data transferred each frame and noticeably improves smoothness on heavy desktops. See the <a href="performance.html">Performance</a> page for general tuning advice.</p>
+      </div>
+
+      <div class="pagenav">
+        <a class="prev" href="packages.html"><span class="dir">Previous</span>← Packages &amp; services</a>
+        <a class="next" href="settings.html"><span class="dir">Next</span>Terminal &amp; settings →</a>
+      </div>
+      <p class="docfoot">Podroid is free software (GPL). Docs for v1.2.1. Found something inaccurate? <a href="https://github.com/ExTV/Podroid/issues">Open an issue</a>.</p>
+    </main>
+  </div>
+
+  <script>
+    document.querySelector('.menu-toggle').addEventListener('click', function () {
+      document.querySelector('.sidebar').classList.toggle('open');
+    });
+  </script>
+</body>
+</html>

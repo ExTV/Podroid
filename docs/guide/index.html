@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Overview · Podroid docs</title>
+  <meta name="description" content="Podroid documentation: run Linux containers and a Linux desktop on Android with no root, via a real Alpine VM on QEMU or AVF/pKVM." />
+  <link rel="icon" type="image/png" href="https://github.com/ExTV.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <nav>
+    <a class="nav-logo" href="../index.html"><img src="../logo.png" alt="Podroid" />Podroid</a>
+    <button class="menu-toggle" aria-label="Toggle menu">☰</button>
+    <ul class="nav-links">
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="index.html" class="cta">Docs</a></li>
+      <li><a href="https://github.com/ExTV/Podroid">GitHub</a></li>
+    </ul>
+  </nav>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <h4>Getting started</h4>
+      <ul>
+        <li><a href="index.html" class="active">Overview</a></li>
+        <li><a href="getting-started.html">Getting started</a></li>
+        <li><a href="how-it-works.html">How it works</a></li>
+      </ul>
+      <h4>Going deeper</h4>
+      <ul>
+        <li><a href="performance.html">Performance &amp; why it's slow</a></li>
+        <li><a href="backends.html">Backends: QEMU &amp; AVF</a></li>
+        <li><a href="networking.html">Networking &amp; ports</a></li>
+        <li><a href="packages.html">Packages &amp; services</a></li>
+        <li><a href="desktop.html">Desktops &amp; X11 viewer</a></li>
+        <li><a href="settings.html">Terminal &amp; settings</a></li>
+      </ul>
+      <h4>Reference</h4>
+      <ul>
+        <li><a href="limitations.html">Limitations &amp; troubleshooting</a></li>
+        <li><a href="use-cases.html">Use cases</a></li>
+      </ul>
+    </aside>
+
+    <main class="content">
+      <h1>Podroid documentation</h1>
+      <p class="lead">Podroid runs real Linux - Podman, Docker, LXC, and a Linux desktop - on an Android phone, with no root and no custom recovery. It boots an Alpine Linux VM with a custom Linux 7.0.5 kernel inside the app.</p>
+
+      <p>There are two ways the VM runs. By default it uses <strong>QEMU</strong> with software CPU emulation (TCG), which works on any ARM64 Android 9+ device. On recent Pixel devices that ship pKVM, Podroid can instead use the <strong>Android Virtualization Framework (AVF)</strong> for near-native speed. Either way you get the same Alpine guest, the same terminal, and the same in-app X11 viewer for GUI apps.</p>
+
+      <div class="callout note">
+        <span class="label">No root required</span>
+        <p>Everything here works on a stock, unrooted phone. The only optional setup that needs a computer is enabling the AVF backend, which uses two one-time <code>adb</code> permission grants (or Shizuku). The default QEMU path needs nothing.</p>
+      </div>
+
+      <h2>What you can do with it</h2>
+      <ul>
+        <li><strong>Run containers</strong> - rootless Podman is wired up out of the box; Docker and LXC are pre-installed. Self-host Pi-hole, Gitea, code-server, Vaultwarden and more.</li>
+        <li><strong>A real Linux shell</strong> - a full Alpine system with <code>apk</code> package management that persists across reboots. SSH in from your laptop on the same Wi-Fi.</li>
+        <li><strong>GUI Linux apps</strong> - install a desktop or single X11 apps and view them in the app, with touch, trackpad, external keyboard and mouse, and audio.</li>
+        <li><strong>Learn Linux &amp; containers</strong> - cgroups, namespaces, overlayfs, netfilter, OpenRC services - all on a device you already own.</li>
+      </ul>
+
+      <h2>How these docs are organized</h2>
+      <p><strong>Getting started</strong> covers installing the app, the first boot, and a tour of how the whole thing fits together. <strong>Going deeper</strong> explains performance (and honestly, why some things are slow), the two backends and how to enable AVF, networking and port forwarding, Alpine package management, the desktop/X11 viewer, and every in-app setting. <strong>Reference</strong> is the complete limitations + troubleshooting list and a set of grounded use cases.</p>
+
+      <h2>The honest summary</h2>
+      <p>Podroid is a real VM, not a translation layer, so it is far more capable than userspace tricks - but on the default QEMU path the CPU is emulated in software, so CPU-heavy work (compiling, <code>npm install</code>, JVM apps) is slow. The <a href="performance.html">Performance</a> page explains exactly why, and how AVF and a few settings help. The <a href="limitations.html">Limitations &amp; troubleshooting</a> page is the place to look when something behaves unexpectedly.</p>
+
+      <div class="callout tip">
+        <span class="label">New here?</span>
+        <p>Start with <a href="getting-started.html">Getting started</a>, then skim <a href="how-it-works.html">How it works</a>. If you have a Pixel 8/9/10, the <a href="backends.html">Backends</a> page shows how to switch on AVF for a big speed jump.</p>
+      </div>
+
+      <div class="pagenav">
+        <span></span>
+        <a class="next" href="getting-started.html"><span class="dir">Next</span>Getting started →</a>
+      </div>
+      <p class="docfoot">Podroid is free software (GPL). Docs for v1.2.1. Found something inaccurate? <a href="https://github.com/ExTV/Podroid/issues">Open an issue</a>.</p>
+    </main>
+  </div>
+
+  <script>
+    document.querySelector('.menu-toggle').addEventListener('click', function () {
+      document.querySelector('.sidebar').classList.toggle('open');
+    });
+  </script>
+</body>
+</html>

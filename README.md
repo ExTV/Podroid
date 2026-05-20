@@ -18,6 +18,7 @@ A real Alpine VM, a real Linux kernel, rootless Podman, and an in-app X11 viewer
 </p>
 
 <a href="https://extv.github.io/Podroid/"><strong>Website</strong></a> ·
+<a href="https://extv.github.io/Podroid/guide/"><strong>Documentation</strong></a> ·
 <a href="https://github.com/ExTV/Podroid/releases/latest"><strong>Download</strong></a> ·
 <a href="#quick-start"><strong>Quick Start</strong></a> ·
 <a href="#build"><strong>Build</strong></a> ·

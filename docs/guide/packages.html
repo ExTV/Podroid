@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Packages &amp; services &middot; Podroid docs</title>
+  <meta name="description" content="Alpine package management with apk, what ships pre-installed in Podroid, and how to manage OpenRC services inside the VM." />
+  <link rel="icon" type="image/png" href="https://github.com/ExTV.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <nav>
+    <a class="nav-logo" href="../index.html"><img src="../logo.png" alt="Podroid" />Podroid</a>
+    <button class="menu-toggle" aria-label="Toggle menu">&#9776;</button>
+    <ul class="nav-links">
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="index.html" class="cta">Docs</a></li>
+      <li><a href="https://github.com/ExTV/Podroid">GitHub</a></li>
+    </ul>
+  </nav>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <h4>Getting started</h4>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="getting-started.html">Getting started</a></li>
+        <li><a href="how-it-works.html">How it works</a></li>
+      </ul>
+      <h4>Going deeper</h4>
+      <ul>
+        <li><a href="performance.html">Performance &amp; why it's slow</a></li>
+        <li><a href="backends.html">Backends: QEMU &amp; AVF</a></li>
+        <li><a href="networking.html">Networking &amp; ports</a></li>
+        <li><a href="packages.html" class="active">Packages &amp; services</a></li>
+        <li><a href="desktop.html">Desktops &amp; X11 viewer</a></li>
+        <li><a href="settings.html">Terminal &amp; settings</a></li>
+      </ul>
+      <h4>Reference</h4>
+      <ul>
+        <li><a href="limitations.html">Limitations &amp; troubleshooting</a></li>
+        <li><a href="use-cases.html">Use cases</a></li>
+      </ul>
+    </aside>
+
+    <main class="content">
+      <h1>Packages &amp; services</h1>
+      <p class="lead">The VM is a standard Alpine Linux system. Install packages with <code>apk</code> as you would on any Alpine machine. Changes persist across reboots on the writable ext4 overlay.</p>
+
+      <h2>Package management with apk</h2>
+      <p>Both the <strong>main</strong> and <strong>community</strong> repositories are pre-configured in <code>/etc/apk/repositories</code>. Any package available on Alpine 3.23 for aarch64 can be installed directly.</p>
+
+      <table>
+        <thead>
+          <tr><th>Command</th><th>What it does</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>apk update</code></td><td>Refresh the package index from the repositories</td></tr>
+          <tr><td><code>apk upgrade</code></td><td>Upgrade all installed packages to the latest versions</td></tr>
+          <tr><td><code>apk add &lt;pkg&gt;</code></td><td>Install a package (and its dependencies)</td></tr>
+          <tr><td><code>apk del &lt;pkg&gt;</code></td><td>Remove a package</td></tr>
+          <tr><td><code>apk search &lt;kw&gt;</code></td><td>Search for packages by name or description</td></tr>
+          <tr><td><code>apk info &lt;pkg&gt;</code></td><td>Show details about an installed or available package</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout tip">
+        <span class="label">Alpine documentation</span>
+        <p>The Alpine project maintains authoritative documentation for package management and everything else in the distribution. These are the best references for what packages exist and how to use them:</p>
+        <ul>
+          <li><strong>Package search:</strong> <a href="https://pkgs.alpinelinux.org/packages" target="_blank" rel="noopener">pkgs.alpinelinux.org/packages</a></li>
+          <li><strong>Alpine User Handbook</strong> (covers apk, storage, users, services): <a href="https://docs.alpinelinux.org/user-handbook/0.1a/index.html" target="_blank" rel="noopener">docs.alpinelinux.org/user-handbook</a></li>
+          <li><strong>Alpine Wiki:</strong> <a href="https://wiki.alpinelinux.org/" target="_blank" rel="noopener">wiki.alpinelinux.org</a></li>
+        </ul>
+      </div>
+
+      <h2>What ships pre-installed</h2>
+      <p>The following packages are baked into the Alpine squashfs that Podroid ships. You do not need to install them.</p>
+
+      <table>
+        <thead>
+          <tr><th>Category</th><th>Packages</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Rootless containers</td>
+            <td><code>podman</code>, <code>crun</code>, <code>netavark</code>, <code>aardvark-dns</code>, <code>fuse-overlayfs</code>, <code>slirp4netns</code>, <code>shadow</code>, <code>shadow-uidmap</code></td>
+          </tr>
+          <tr>
+            <td>Docker</td>
+            <td><code>docker</code>, <code>docker-openrc</code>, <code>docker-cli-compose</code></td>
+          </tr>
+          <tr>
+            <td>LXC</td>
+            <td><code>lxc</code>, <code>lxc-templates</code>, <code>lxc-openrc</code>, <code>lxc-bridge</code></td>
+          </tr>
+          <tr>
+            <td>Networking tools</td>
+            <td><code>iptables</code>, <code>ip6tables</code>, <code>nftables</code>, <code>bridge-utils</code>, <code>iproute2</code></td>
+          </tr>
+          <tr>
+            <td>SSH server</td>
+            <td><code>dropbear</code>, <code>dropbear-openrc</code></td>
+          </tr>
+          <tr>
+            <td>X11 / audio</td>
+            <td><code>tigervnc</code> (Xvnc), <code>pulseaudio</code>, <code>pulseaudio-utils</code>, <code>font-misc-misc</code>, <code>font-cursor-misc</code>, <code>ttf-dejavu</code></td>
+          </tr>
+          <tr>
+            <td>System base</td>
+            <td><code>alpine-base</code>, <code>openrc</code>, <code>busybox-openrc</code>, <code>bash</code>, <code>curl</code>, <code>ca-certificates</code>, <code>doas</code>, <code>sudo</code>, <code>gcompat</code>, <code>libcap-utils</code>, <code>gzip</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout tip">
+        <span class="label">Podman, Docker and LXC are all ready at boot</span>
+        <p>Rootless Podman needs no daemon and works immediately. The Docker and LXC services are enabled in the <code>default</code> runlevel, so they start automatically on every boot - there is nothing to run. Confirm with <code>rc-status</code>, and use <code>rc-service docker stop</code> if you want to free memory when you are not using it.</p>
+      </div>
+
+      <h2>OpenRC service management</h2>
+      <p>The VM uses <strong>OpenRC</strong> as its init system (PID 1 is busybox init; OpenRC manages the service tree). Standard OpenRC commands work as-is:</p>
+
+      <pre><code><span class="c"># List all services and their status</span>
+<span class="p">~#</span> rc-status
+
+<span class="c"># Start, stop, restart, or check a service</span>
+<span class="p">~#</span> rc-service dropbear start
+<span class="p">~#</span> rc-service docker stop
+<span class="p">~#</span> rc-service podroid-x11 restart
+<span class="p">~#</span> rc-service podroid-x11 status
+
+<span class="c"># Enable a service you installed on every boot (adds to the 'default' runlevel)</span>
+<span class="p">~#</span> rc-update add crond default
+
+<span class="c"># Disable a service from auto-starting (e.g. Docker, to save memory)</span>
+<span class="p">~#</span> rc-update del docker default</code></pre>
+
+      <h2>Podroid system services</h2>
+      <p>These OpenRC services are part of Podroid's Alpine image. Most start automatically; a few are conditional.</p>
+
+      <table>
+        <thead>
+          <tr><th>Service</th><th>What it does</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>podroid-bootstrap</code></td>
+            <td>First service to run. Sets the system clock (AVF path), enables cgroup v2, loads kernel modules, mounts devpts/shm/mqueue, configures ZRAM swap, sets sysctl tunables, sets the hostname, and bind-mounts the persistent ext4 storage onto the Podman/Docker/LXC data directories.</td>
+          </tr>
+          <tr>
+            <td><code>podroid-network</code></td>
+            <td>Brings up eth0 (10.0.2.15/24 on QEMU, DHCP on AVF), adds the default route, and writes <code>/etc/resolv.conf</code>.</td>
+          </tr>
+          <tr>
+            <td><code>podroid-resize</code></td>
+            <td>Runs the terminal resize daemon: reads <code>RESIZE rows cols</code> messages from the ctrl virtio-console (hvc1) and calls <code>stty</code> on hvc0 so the shell prompt redraws correctly after keyboard or orientation changes.</td>
+          </tr>
+          <tr>
+            <td><code>podroid-x11</code></td>
+            <td>Starts Xvnc on display <code>:0</code> (port 5900) and PulseAudio on port 4713. These back the in-app X11 viewer and audio stream.</td>
+          </tr>
+          <tr>
+            <td><code>podroid-vsock</code></td>
+            <td>AVF only. Starts the vsock port-forwarding agent that bridges Android-side TCP connections to guest vsock ports. On QEMU this service marks itself inactive and does nothing.</td>
+          </tr>
+          <tr>
+            <td><code>podroid-ready</code></td>
+            <td>Runs last (after all other services). Emits the boot-stage markers (<code>Starting SSH...</code>, <code>Almost ready...</code>, <code>Ready!</code>) that the Android app watches to detect a successful boot. Also sets OOM scores on infrastructure processes so the kernel reaps user apps before killing the VM.</td>
+          </tr>
+          <tr>
+            <td><code>dropbear</code></td>
+            <td>SSH server on guest port 22, started at boot. It is reachable from the host and LAN only when the SSH toggle is on (which adds the <code>9922&rarr;22</code> forward). Default credentials: <code>root</code> / <code>podroid</code>.</td>
+          </tr>
+          <tr>
+            <td><code>docker</code></td>
+            <td>Docker daemon. Enabled in the default runlevel, so it starts automatically at boot. Stop it (<code>rc-service docker stop</code>) or disable it (<code>rc-update del docker default</code>) to save memory if you only use Podman.</td>
+          </tr>
+          <tr>
+            <td><code>lxc</code></td>
+            <td>LXC container manager. Also enabled in the default runlevel and starts automatically at boot.</td>
+          </tr>
+          <tr>
+            <td><code>dnsmasq.lxcbr0</code></td>
+            <td>DHCP and DNS for the LXC bridge network (<code>lxcbr0</code>). Started alongside the <code>lxc</code> service.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="pagenav">
+        <a class="prev" href="networking.html"><span class="dir">Previous</span>&larr; Networking &amp; ports</a>
+        <a class="next" href="desktop.html"><span class="dir">Next</span>Desktops &amp; X11 viewer &rarr;</a>
+      </div>
+      <p class="docfoot">Podroid is free software (GPL). Docs for v1.2.1. Found something inaccurate? <a href="https://github.com/ExTV/Podroid/issues">Open an issue</a>.</p>
+    </main>
+  </div>
+
+  <script>
+    document.querySelector('.menu-toggle').addEventListener('click', function () {
+      document.querySelector('.sidebar').classList.toggle('open');
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Backends: QEMU &amp; AVF · Podroid docs</title>
+  <meta name="description" content="How to choose between QEMU (TCG) and AVF (pKVM), how to grant AVF permissions, and what differs between the two backends." />
+  <link rel="icon" type="image/png" href="https://github.com/ExTV.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <nav>
+    <a class="nav-logo" href="../index.html"><img src="../logo.png" alt="Podroid" />Podroid</a>
+    <button class="menu-toggle" aria-label="Toggle menu">&#9776;</button>
+    <ul class="nav-links">
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="index.html" class="cta">Docs</a></li>
+      <li><a href="https://github.com/ExTV/Podroid">GitHub</a></li>
+    </ul>
+  </nav>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <h4>Getting started</h4>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="getting-started.html">Getting started</a></li>
+        <li><a href="how-it-works.html">How it works</a></li>
+      </ul>
+      <h4>Going deeper</h4>
+      <ul>
+        <li><a href="performance.html">Performance &amp; why it's slow</a></li>
+        <li><a href="backends.html" class="active">Backends: QEMU &amp; AVF</a></li>
+        <li><a href="networking.html">Networking &amp; ports</a></li>
+        <li><a href="packages.html">Packages &amp; services</a></li>
+        <li><a href="desktop.html">Desktops &amp; X11 viewer</a></li>
+        <li><a href="settings.html">Terminal &amp; settings</a></li>
+      </ul>
+      <h4>Reference</h4>
+      <ul>
+        <li><a href="limitations.html">Limitations &amp; troubleshooting</a></li>
+        <li><a href="use-cases.html">Use cases</a></li>
+      </ul>
+    </aside>
+
+    <main class="content">
+      <h1>Backends: QEMU &amp; AVF</h1>
+      <p class="lead">Podroid has two VM engines behind one setting. The default uses QEMU with software CPU emulation and works on any device. On Pixel 8/9/10 and similar devices that ship pKVM, the AVF backend runs the guest on real CPU cores for near-native speed.</p>
+
+      <h2>Choosing a backend</h2>
+      <p>Go to <strong>Settings &rarr; Advanced &rarr; Backend</strong>. The three options are:</p>
+      <ul>
+        <li><strong>Auto</strong> (default) - Podroid probes the device at startup and uses AVF if the feature, both permissions, and non-protected VM support are all present; otherwise it falls back to QEMU. This is the right choice for most users.</li>
+        <li><strong>AVF (KVM)</strong> - always use AVF; the VM will fail to start if the prerequisites are not met.</li>
+        <li><strong>QEMU (TCG)</strong> - always use software emulation, even on a device that supports AVF.</li>
+      </ul>
+
+      <div class="callout note">
+        <span class="label">Stop the VM first</span>
+        <p>Changing the backend setting takes effect at the next VM start. The VM must be stopped before you switch.</p>
+      </div>
+
+      <h2>QEMU (TCG)</h2>
+      <p>The QEMU backend is the default and works on <strong>any ARM64 Android 9+ device</strong> with no setup beyond installing the app. The guest CPU is emulated in software via TCG (Tiny Code Generator). See <a href="performance.html">Performance &amp; why it's slow</a> for a full explanation of where the overhead comes from and what Podroid does to reduce it. The short version: simple workloads are 2-5x slower than native; JIT-heavy workloads (Node, JVM, compilers) are slower still because of double-JIT and cold-cache process-spawn costs.</p>
+
+      <p>QEMU supports both <strong>TCP and UDP port forwarding</strong>. Rules you configure in the Port Forwarding screen work for both protocols.</p>
+
+      <h2>AVF (pKVM)</h2>
+      <p>The Android Virtualization Framework (AVF) is a system hypervisor shipped on some Android devices. On devices that include pKVM (protected Kernel-based Virtual Machine), Podroid can run the guest directly on physical CPU cores - no TCG translation, no double-JIT, no cold-cache overhead. CPU-bound tasks that crawl on QEMU run at near-native speed on AVF.</p>
+
+      <p>AVF is currently available on <strong>Pixel 8, Pixel 8a, Pixel 9, Pixel 9 Pro, Pixel 9 Pro XL, and Pixel 10</strong> series devices (and any other Android device your manufacturer ships with pKVM). Two development-mode permissions must be granted once before Podroid can open a VM.</p>
+
+      <h3>Setting up AVF</h3>
+
+      <p><strong>Step 1 - Confirm the device supports AVF.</strong> Run the following in a terminal with ADB access to the device:</p>
+      <pre><code><span class="p">$</span> adb shell pm list features | grep virtualization_framework</code></pre>
+      <p>If the command prints a line containing <code>android.software.virtualization_framework</code>, the device supports AVF. If the command prints nothing, the device does not have pKVM and AVF is not available.</p>
+
+      <p><strong>Step 2 - Grant the two permissions.</strong> These are development-mode permissions not exposed in the system UI. Grant them over ADB:</p>
+      <pre><code><span class="p">$</span> adb shell pm grant com.excp.podroid android.permission.MANAGE_VIRTUAL_MACHINE
+<span class="p">$</span> adb shell pm grant com.excp.podroid android.permission.USE_CUSTOM_VIRTUAL_MACHINE</code></pre>
+
+      <div class="callout note">
+        <span class="label">No PC? Use Shizuku.</span>
+        <p>If you do not have a computer handy, install <a href="https://shizuku.rikka.app/">Shizuku</a> and start it (over ADB or wireless debugging). Then open Shizuku's <code>rish</code> shell and run the same two <code>pm grant</code> lines above, replacing <code>adb shell</code> with just the <code>pm grant ...</code> command directly inside <code>rish</code>.</p>
+      </div>
+
+      <p><strong>Step 3 - Run the AVF diagnostic.</strong> In Podroid, go to <strong>Settings &rarr; About &rarr; "AVF (pKVM) diagnostic"</strong>. This runs a probe and a smoke test that checks: the virtualization_framework feature flag, both permissions, the presence of <code>/apex/com.android.virt</code>, the AVF system service, and the hypervisor capabilities reported by the kernel. If it reports success on all points, you are ready. Set <strong>Backend</strong> to <strong>Auto</strong> (or <strong>AVF</strong> if you want to force it) and start the VM.</p>
+
+      <h3>Permission lifetime</h3>
+      <p>The two <code>pm grant</code> permissions <strong>persist across reboots and in-place app updates</strong>. You do not need to re-grant them after an OTA or a Podroid update installed over the existing app. However, they are <strong>lost on uninstall</strong>: if you uninstall and reinstall Podroid, run the two <code>pm grant</code> commands again before using AVF.</p>
+
+      <h2>How Auto-selection works</h2>
+      <p>When the backend is set to Auto, Podroid checks four conditions at startup: (1) the <code>android.software.virtualization_framework</code> feature is present, (2) <code>MANAGE_VIRTUAL_MACHINE</code> is granted, (3) <code>USE_CUSTOM_VIRTUAL_MACHINE</code> is granted, and (4) the device advertises support for <strong>non-protected VMs</strong>. All four must pass. If any fails, Podroid silently falls back to QEMU - no error, the VM just starts with software emulation.</p>
+
+      <p>Condition (4) is the non-obvious one. pKVM can operate in two modes: <em>protected</em> (guest memory is encrypted and the host cannot inspect it) and <em>non-protected</em>. Podroid's guest image is a standard Alpine Linux squashfs - it does not meet the signing and measurement requirements for protected VMs. A device that only advertises protected VM support cannot run Podroid's image under AVF, so Auto falls back to QEMU on such devices.</p>
+
+      <h2>Differences between backends</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th>QEMU (TCG)</th>
+            <th>AVF (pKVM)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Device requirement</td>
+            <td>Any ARM64 Android 9+</td>
+            <td>Device must ship pKVM (recent Pixels and select others)</td>
+          </tr>
+          <tr>
+            <td>Setup required</td>
+            <td>None</td>
+            <td>Two <code>pm grant</code> commands (once)</td>
+          </tr>
+          <tr>
+            <td>CPU speed</td>
+            <td>Software emulation (2-5x+ overhead)</td>
+            <td>Near-native (hardware VMs, no TCG)</td>
+          </tr>
+          <tr>
+            <td>Port forwarding protocols</td>
+            <td>TCP and UDP</td>
+            <td>TCP only (UDP rules are silently ignored)</td>
+          </tr>
+          <tr>
+            <td>vCPU count</td>
+            <td>Configurable (1 to device core count)</td>
+            <td>1 vCPU = one physical core; &gt;1 vCPU = all host cores</td>
+          </tr>
+          <tr>
+            <td>Terminal console</td>
+            <td>hvc0 via QEMU virtio-console</td>
+            <td>hvc0 (same guest view, different host path)</td>
+          </tr>
+          <tr>
+            <td>Downloads folder sharing</td>
+            <td>Supported</td>
+            <td>May be a no-op on shipping Pixel AVF builds (requires an AOSP-main SharedPath API not yet in stable releases)</td>
+          </tr>
+          <tr>
+            <td>Verbose logging toggle</td>
+            <td>Not applicable</td>
+            <td>"Verbose AVF logging" in Settings &rarr; Advanced (useful for bug reports)</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout warn">
+        <span class="label">AVF boot failures on some Pixel 8 / 8a / 9 units</span>
+        <p>Some Pixel 8, Pixel 8a, and Pixel 9 units reboot the device during AVF VM startup. This appears to be a pKVM firmware issue on certain builds. If AVF causes a reboot, switch the backend to <strong>QEMU (TCG)</strong> in Settings &rarr; Advanced. QEMU is the reliable fallback on all devices. See <a href="limitations.html">Limitations &amp; troubleshooting</a> for the current status.</p>
+      </div>
+
+      <div class="pagenav">
+        <a class="prev" href="performance.html"><span class="dir">Previous</span>&larr; Performance</a>
+        <a class="next" href="networking.html"><span class="dir">Next</span>Networking &amp; ports &rarr;</a>
+      </div>
+      <p class="docfoot">Podroid is free software (GPL). Docs for v1.2.1. Found something inaccurate? <a href="https://github.com/ExTV/Podroid/issues">Open an issue</a>.</p>
+    </main>
+  </div>
+
+  <script>
+    document.querySelector('.menu-toggle').addEventListener('click', function () {
+      document.querySelector('.sidebar').classList.toggle('open');
+    });
+  </script>
+</body>
+</html>

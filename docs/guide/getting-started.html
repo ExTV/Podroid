@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Getting started · Podroid docs</title>
+  <meta name="description" content="Install Podroid, run the setup wizard, and boot your first Alpine Linux VM on Android." />
+  <link rel="icon" type="image/png" href="https://github.com/ExTV.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <nav>
+    <a class="nav-logo" href="../index.html"><img src="../logo.png" alt="Podroid" />Podroid</a>
+    <button class="menu-toggle" aria-label="Toggle menu">☰</button>
+    <ul class="nav-links">
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="index.html" class="cta">Docs</a></li>
+      <li><a href="https://github.com/ExTV/Podroid">GitHub</a></li>
+    </ul>
+  </nav>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <h4>Getting started</h4>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="getting-started.html" class="active">Getting started</a></li>
+        <li><a href="how-it-works.html">How it works</a></li>
+      </ul>
+      <h4>Going deeper</h4>
+      <ul>
+        <li><a href="performance.html">Performance &amp; why it's slow</a></li>
+        <li><a href="backends.html">Backends: QEMU &amp; AVF</a></li>
+        <li><a href="networking.html">Networking &amp; ports</a></li>
+        <li><a href="packages.html">Packages &amp; services</a></li>
+        <li><a href="desktop.html">Desktops &amp; X11 viewer</a></li>
+        <li><a href="settings.html">Terminal &amp; settings</a></li>
+      </ul>
+      <h4>Reference</h4>
+      <ul>
+        <li><a href="limitations.html">Limitations &amp; troubleshooting</a></li>
+        <li><a href="use-cases.html">Use cases</a></li>
+      </ul>
+    </aside>
+
+    <main class="content">
+      <h1>Getting started</h1>
+      <p class="lead">From APK download to a running Alpine Linux VM in about five minutes, plus a first boot that takes a little longer than you might expect - and why.</p>
+
+      <h2>Install</h2>
+      <p>Podroid is distributed as a standard APK sideload. There is no Play Store listing.</p>
+      <ol>
+        <li>Download the latest <code>Podroid-release-*.apk</code> from <a href="https://github.com/ExTV/Podroid/releases">GitHub Releases</a>.</li>
+        <li>Enable "Install unknown apps" for your browser or file manager in Android Settings, then open the APK.</li>
+        <li>Tap <strong>Install</strong>.</li>
+      </ol>
+
+      <div class="callout note">
+        <span class="label">Requirements</span>
+        <p>ARM64 (arm64-v8a) only. Android 9 (API 28) or newer. The APK will not install on 32-bit or x86 devices.</p>
+      </div>
+
+      <h2>Setup wizard</h2>
+      <p>The first time you open Podroid a three-step wizard runs before anything else.</p>
+
+      <h3>Step 1: Persistent storage size</h3>
+      <p>Choose how large the writable VM disk image will be: 2, 4, 8, 16, 32, or 64 GB. This image lives in the app's private storage and holds everything you install inside the VM - packages, container images, config files. Pick more than you think you need.</p>
+
+      <div class="callout warn">
+        <span class="label">Choose carefully</span>
+        <p>The storage size is set once and cannot be changed later without a full reset that wipes all VM data. If you run out of space you will need to reset.</p>
+      </div>
+
+      <h3>Step 2: VM configuration</h3>
+      <p>Set the number of virtual CPU cores and the RAM allocation (default 512 MB). You can also toggle SSH here - when enabled, Dropbear starts automatically and the VM is reachable at port 9922 over your local network. These settings can be changed later in Settings.</p>
+
+      <h3>Step 3: Downloads sharing (optional)</h3>
+      <p>Grants access to your phone's Downloads folder so you can move files between Android and the VM. Useful, but skip it if you don't need it.</p>
+
+      <div class="callout warn">
+        <span class="label">Instability warning</span>
+        <p>Downloads sharing can be unstable on some devices. If the VM behaves oddly after enabling it, try disabling it in Settings.</p>
+      </div>
+
+      <h2>First boot</h2>
+      <p>Tap <strong>Start VM</strong> on the home screen. The first boot takes roughly 50-60 seconds, noticeably longer than the 10-15 seconds of later boots. Two one-time tasks run:</p>
+      <ul>
+        <li><strong>SSH host key generation:</strong> Dropbear generates RSA, ECDSA, and ED25519 host keys. This takes 25-35 seconds on a typical phone and happens only once; the keys are stored on the persistent overlay and reused on every subsequent boot.</li>
+        <li><strong>Filesystem formatting:</strong> the ext4 storage image is formatted to the size you chose in step 1.</li>
+      </ul>
+      <p>The notification shows boot stages as they complete: "Starting SSH...", "Almost ready...", then "Ready!" - at which point the VM is fully up and the terminal is interactive.</p>
+
+      <h2>Home screen at a glance</h2>
+      <p>Once the VM is running the home screen shows:</p>
+      <ul>
+        <li><strong>VM status</strong> and uptime</li>
+        <li><strong>Network info</strong> - your phone's IP address, SSH endpoint, and how many port-forward rules are active</li>
+        <li><strong>Start / Stop</strong> button</li>
+      </ul>
+
+      <h2>Terminal and X11 viewer</h2>
+      <p>Tap the terminal icon from the home screen to open a full VT100 terminal connected to the VM shell. Inside the terminal, tap the monitor icon in the top bar to open the X11 viewer - needed for GUI Linux apps and desktop environments.</p>
+
+      <h2>Default credentials</h2>
+      <p>The default login is <code>root</code> with password <code>podroid</code>. The terminal banner reminds you of this on every boot. To create a regular user with sudo-equivalent access:</p>
+      <pre><code><span class="p">$</span> adduser -G wheel &lt;username&gt;</code></pre>
+      <p>Members of <code>wheel</code> can use <code>doas</code> (and <code>sudo</code> if installed).</p>
+
+      <h2>SSH from another device</h2>
+      <p>With SSH enabled and both devices on the same Wi-Fi, connect from a laptop or desktop:</p>
+      <pre><code><span class="p">$</span> ssh root@&lt;phone-ip&gt; -p 9922
+<span class="c"># password: podroid</span></code></pre>
+      <p>Port 9922 is the default; see the <a href="networking.html">Networking &amp; ports</a> page for how SLIRP forwarding works and how to add more port rules.</p>
+
+      <div class="callout warn">
+        <span class="label">VM killed when you switch apps?</span>
+        <p>If you see "QEMU crashed (SIGKILL)" after backgrounding the app, Android's phantom-process killer is terminating the QEMU process. This is an OS-level restriction, not a bug. See <a href="limitations.html">Limitations &amp; troubleshooting</a> for the workaround.</p>
+      </div>
+
+      <div class="pagenav">
+        <a class="prev" href="index.html"><span class="dir">Previous</span>&larr; Overview</a>
+        <a class="next" href="how-it-works.html"><span class="dir">Next</span>How it works &rarr;</a>
+      </div>
+      <p class="docfoot">Podroid is free software (GPL). Docs for v1.2.1. Found something inaccurate? <a href="https://github.com/ExTV/Podroid/issues">Open an issue</a>.</p>
+    </main>
+  </div>
+
+  <script>
+    document.querySelector('.menu-toggle').addEventListener('click', function () {
+      document.querySelector('.sidebar').classList.toggle('open');
+    });
+  </script>
+</body>
+</html>

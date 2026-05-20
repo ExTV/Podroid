@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Limitations &amp; troubleshooting · Podroid docs</title>
+  <meta name="description" content="Known limitations of Podroid and a troubleshooting guide for common issues." />
+  <link rel="icon" type="image/png" href="https://github.com/ExTV.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <nav>
+    <a class="nav-logo" href="../index.html"><img src="../logo.png" alt="Podroid" />Podroid</a>
+    <button class="menu-toggle" aria-label="Toggle menu">&#9776;</button>
+    <ul class="nav-links">
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="index.html" class="cta">Docs</a></li>
+      <li><a href="https://github.com/ExTV/Podroid">GitHub</a></li>
+    </ul>
+  </nav>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <h4>Getting started</h4>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="getting-started.html">Getting started</a></li>
+        <li><a href="how-it-works.html">How it works</a></li>
+      </ul>
+      <h4>Going deeper</h4>
+      <ul>
+        <li><a href="performance.html">Performance &amp; why it's slow</a></li>
+        <li><a href="backends.html">Backends: QEMU &amp; AVF</a></li>
+        <li><a href="networking.html">Networking &amp; ports</a></li>
+        <li><a href="packages.html">Packages &amp; services</a></li>
+        <li><a href="desktop.html">Desktops &amp; X11 viewer</a></li>
+        <li><a href="settings.html">Terminal &amp; settings</a></li>
+      </ul>
+      <h4>Reference</h4>
+      <ul>
+        <li><a href="limitations.html" class="active">Limitations &amp; troubleshooting</a></li>
+        <li><a href="use-cases.html">Use cases</a></li>
+      </ul>
+    </aside>
+
+    <main class="content">
+      <h1>Limitations &amp; troubleshooting</h1>
+      <p class="lead">Podroid runs a real VM on hardware that was not designed for it. This page documents every known limitation honestly, and explains how to work around the most common problems.</p>
+
+      <h2>Limitations</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>Limitation</th>
+            <th>Detail</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>CPU / acceleration</td>
+            <td>No KVM on the default QEMU path</td>
+            <td>KVM requires root access to <code>/dev/kvm</code>, which Podroid does not have. The default backend uses QEMU TCG (software CPU emulation), which is 5-20x slower than native for CPU-bound work. AVF/pKVM is the only hardware-accelerated option and is Pixel-only; see <a href="backends.html">Backends</a>.</td>
+          </tr>
+          <tr>
+            <td>Architecture</td>
+            <td>ARM64 only</td>
+            <td>The app ships an <code>arm64-v8a</code> ABI only. x86, x86_64, and 32-bit ARM devices are not supported. x86 container images pulled inside the VM will run under double emulation (guest ARM64 + QEMU TCG re-emulates x86), which is extremely slow.</td>
+          </tr>
+          <tr>
+            <td>OS version</td>
+            <td>Android 9+ required (minSdk 28)</td>
+            <td>Features such as <code>memfd_create</code> and the required SELinux/seccomp policy are only stable from API 28. Android 8 is blocked additionally by glib/iconv linking issues in the QEMU build.</td>
+          </tr>
+          <tr>
+            <td>AVF backend</td>
+            <td>Pixel pKVM devices only; two ADB permissions required</td>
+            <td>AVF uses the Android Virtualization Framework, which requires a device that ships pKVM (currently Pixel 8 and later). Two one-time <code>adb</code> grants (or Shizuku) are needed before AVF can start. Devices that only support protected VMs and not non-protected VMs cannot use the AVF backend at all; Podroid falls back to QEMU automatically.</td>
+          </tr>
+          <tr>
+            <td>AVF networking</td>
+            <td>TCP port forwarding only</td>
+            <td>The AVF backend forwards TCP ports via the in-app port-forward rules. UDP rules are silently ignored when AVF is active. If you need UDP (e.g. DNS on port 53 serving LAN clients), switch to QEMU.</td>
+          </tr>
+          <tr>
+            <td>AVF CPU count</td>
+            <td>No fine-grained vCPU selection</td>
+            <td>Requesting more than one vCPU under AVF gives the VM all available host cores rather than the exact count chosen in Settings. The CPU count setting has full effect on the QEMU backend only.</td>
+          </tr>
+          <tr>
+            <td>Storage</td>
+            <td>Size cannot be changed after setup without a full reset</td>
+            <td>The persistent ext4 overlay image (<code>storage.img</code>) is created at first-boot time and cannot be non-destructively resized later. Choose your storage size in the setup wizard. A future release may add live resize; for now a factory reset is required to change the allocation.</td>
+          </tr>
+          <tr>
+            <td>Background stability</td>
+            <td>Phantom-process killer terminates the VM (exit 137) on Android 12+</td>
+            <td>Android 12 and later aggressively kill processes that are not direct children of an app's own process. QEMU is a subprocess of the foreground service; if Android classifies it as a phantom process, it sends SIGKILL (exit code 137). See the troubleshooting section below for the ADB command that disables this limit permanently.</td>
+          </tr>
+          <tr>
+            <td>Downloads sharing (AVF)</td>
+            <td>May silently do nothing, or crash QEMU's 9p worker on some ARMv9.2 devices</td>
+            <td>The virtio-9p driver used to expose the host Downloads folder is unstable on some hardware. On shipping Pixel AVF builds the share may be a silent no-op. On some ARMv9.2 devices (including the Pixel 10) the 9p worker in QEMU can crash and bring down the VM. If your VM crashes shortly after boot, disable Downloads sharing in Settings as the first diagnostic step.</td>
+          </tr>
+          <tr>
+            <td>X11 viewer: Wayland desktops</td>
+            <td>Wayland sessions do not render</td>
+            <td>The in-app X11 viewer connects to an Xvnc (X11) display. Wayland-native desktops (GNOME on Wayland, Plasma Wayland session, sway, Hyprland) start a compositor that does not render to an X display. Use XFCE, LXDE, or another X11 session, or force GNOME into its X11/Xorg session.</td>
+          </tr>
+          <tr>
+            <td>X11 viewer: compression</td>
+            <td>Raw encoding only - heavier bandwidth</td>
+            <td>ZRLE compression is currently disabled in the VNC client. Every frame is sent as uncompressed Raw pixels. At high resolutions on a high-DPI phone this means more bandwidth and slower screen updates. Choose a 720p or 900p resolution preset in the X11 viewer settings to compensate.</td>
+          </tr>
+          <tr>
+            <td>X11 viewer: right-click</td>
+            <td>External-mouse right-click exits fullscreen</td>
+            <td>A right-click from a paired Bluetooth or USB mouse is currently intercepted by the Android fullscreen gesture handler and dismisses fullscreen mode. As a workaround, use a two-finger touch to right-click; that gesture is passed through correctly to the VNC session.</td>
+          </tr>
+          <tr>
+            <td>X11 viewer: DPI</td>
+            <td>Server DPI changes need a VM restart</td>
+            <td>The guest Xvnc server is started with a fixed DPI argument. Changing the DPI setting in the app requires stopping and restarting the VM to take effect; hot-reloading is not supported.</td>
+          </tr>
+          <tr>
+            <td>First boot</td>
+            <td>Slower due to SSH host-key generation</td>
+            <td>On the very first boot, Dropbear generates RSA and ECDSA host keys. This is a one-time cost that typically adds 15-60 seconds on slower devices. Subsequent boots skip key generation and are noticeably faster.</td>
+          </tr>
+          <tr>
+            <td>CPU performance</td>
+            <td>TCG emulation is 5-20x slower than native for CPU-bound work</td>
+            <td>QEMU TCG translates ARM64 guest instructions to host ARM64 instructions in software. The overhead is highest for workloads that execute many unique code paths (compilers, JVM startup, <code>npm install</code>). IO-bound and memory-bound workloads fare better. See <a href="performance.html">Performance &amp; why it's slow</a> for full detail and tuning options.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Troubleshooting</h2>
+
+      <h3>VM dies or "QEMU crashed (SIGKILL)" when I switch apps</h3>
+      <p>This is Android's phantom-process killer, active on Android 12 and later. When the app is backgrounded, the OS may classify QEMU as a phantom process and send SIGKILL, producing exit code 137 in the diagnostic log.</p>
+      <p>The fix is a one-time ADB command sequence that persists across reboots. Run these from a PC with <code>adb</code> installed:</p>
+      <pre><code><span class="c"># Disable phantom-process monitoring persistently (survives reboots)</span>
+<span class="p">$</span> adb shell device_config set_sync_disabled_for_tests persistent
+<span class="p">$</span> adb shell device_config put activity_manager max_phantom_processes 2147483647
+<span class="p">$</span> adb shell settings put global settings_enable_monitor_phantom_procs false</code></pre>
+      <p>If you have root on-device, the equivalent commands via <code>su</code>:</p>
+      <pre><code><span class="p">#</span> On-device with root
+<span class="p">$</span> su -c "device_config set_sync_disabled_for_tests persistent"
+<span class="p">$</span> su -c "device_config put activity_manager max_phantom_processes 2147483647"
+<span class="p">$</span> su -c "setprop persist.sys.fflag.override.settings_enable_monitor_phantom_procs false"</code></pre>
+
+      <div class="callout note">
+        <span class="label">Why these commands work</span>
+        <p><code>device_config</code> writes to the <code>device_config</code> namespace backed by <code>Settings.Config</code>. Setting <code>set_sync_disabled_for_tests persistent</code> prevents subsequent OTA flag pushes from reverting your values. The three properties together raise the phantom-process cap to <code>Integer.MAX_VALUE</code> and disable the monitor that enforces it.</p>
+      </div>
+
+      <h3>It's slow. Can I enable KVM?</h3>
+      <p>Not on the QEMU backend - KVM requires <code>/dev/kvm</code> access, which needs root. If you have a Pixel 8 or later (pKVM), switch to the <a href="backends.html">AVF backend</a> for near-native CPU speed. On any other device, the <a href="performance.html">Performance</a> page covers the TCG tuning options already applied (multi-threaded TCG, larger TB cache, iothread for disk I/O) and sets realistic expectations.</p>
+
+      <h3>QEMU crashes with a hint about "Downloads sharing is unstable"</h3>
+      <p>This is the virtio-9p crash on certain ARMv9.2 devices, including the Pixel 10. Open Settings inside Podroid and disable <strong>Downloads sharing</strong>. The crash will stop. The underlying 9p driver instability is an open issue in the QEMU build for those chips.</p>
+
+      <h3>AVF stops on boot with reason=5 / STOP_REASON_REBOOT</h3>
+      <p>This is a known issue on some Pixel 8, 8a, and 9 units where the pKVM firmware raises a stop event before the guest kernel finishes booting. To diagnose: enable <strong>Verbose AVF logging</strong> in Settings, reproduce the boot failure, then use <strong>Export diagnostic log</strong> to capture the output. While investigating, switch the Backend setting to <strong>QEMU</strong> to continue using the app.</p>
+
+      <h3>VM won't start / stuck on "Starting"</h3>
+      <p>Two timeouts govern boot: QEMU fails and surfaces an error if it cannot create its Unix sockets within 10 seconds (this usually means a stale socket file from a previous crash - try a force-stop and re-open). If sockets open but the guest never emits the <code>Ready!</code> marker, a 60-second boot timeout fires and the app declares the boot failed. In either case, go to <strong>Settings &rarr; Export diagnostic log</strong> and inspect <code>console.log</code>; the last few lines usually show exactly where the guest stalled.</p>
+
+      <h3>First boot is very slow</h3>
+      <p>Expected. Dropbear generates RSA and ECDSA host keys on the first boot, which takes 15-60 seconds on low-end hardware under TCG emulation. Once the keys exist on the persistent overlay they are never regenerated; subsequent boots skip this step entirely.</p>
+
+      <h3>Right-click exits fullscreen when I use a mouse</h3>
+      <p>This is a known limitation of the X11 viewer: Android's fullscreen gesture handler intercepts the right mouse button before it reaches the VNC client. Use a two-finger touch gesture to right-click instead - that path bypasses the gesture handler and is delivered correctly to the guest X session.</p>
+
+      <h3>X11 is blurry or laggy</h3>
+      <p>The VNC client uses uncompressed Raw encoding (ZRLE is currently disabled), so high resolutions generate large frame payloads. Open the X11 viewer settings and pick a lower resolution preset (720p or 900p are good starting points). If you are on AVF, the latency should be much lower than on QEMU; on QEMU, latency will scale with how busy the TCG threads are.</p>
+
+      <h3>I changed RAM or CPU count and nothing happened</h3>
+      <p>RAM and CPU count are passed to QEMU at launch time and cannot be hot-changed. Stop the VM from the main screen, then start it again - the new values will be used. Port-forward rules and SSH toggle changes take effect without a restart.</p>
+
+      <div class="pagenav">
+        <a class="prev" href="settings.html"><span class="dir">Previous</span>&larr; Terminal &amp; settings</a>
+        <a class="next" href="use-cases.html"><span class="dir">Next</span>Use cases &rarr;</a>
+      </div>
+      <p class="docfoot">Podroid is free software (GPL). Docs for v1.2.1. Found something inaccurate? <a href="https://github.com/ExTV/Podroid/issues">Open an issue</a>.</p>
+    </main>
+  </div>
+
+  <script>
+    document.querySelector('.menu-toggle').addEventListener('click', function () {
+      document.querySelector('.sidebar').classList.toggle('open');
+    });
+  </script>
+</body>
+</html>
