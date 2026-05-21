@@ -52,6 +52,13 @@ interface VmEngine {
      */
     suspend fun addPortForward(rule: PortForwardRule)
     suspend fun removePortForward(rule: PortForwardRule)
+
+    /**
+     * Backend-specific diagnostics for the export log: AVF stop/crash reason +
+     * launch config, or QEMU exit code + stderr tail. Empty when there's nothing
+     * backend-specific to add. Observational; never mutates VM state.
+     */
+    fun diagnosticsReport(): String = ""
 }
 
 /**

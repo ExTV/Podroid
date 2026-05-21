@@ -36,6 +36,24 @@ object NetworkUtils {
     )
 
     private fun firstIpv4ByTransportPreference(cm: ConnectivityManager): String? {
+        // Prefer the active (default-route) network first — it's the address
+        // that traffic actually leaves through, not just any connected interface.
+        cm.activeNetwork?.let { active ->
+            val caps = cm.getNetworkCapabilities(active)
+            if (caps != null && !caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+                val link = cm.getLinkProperties(active)
+                if (link != null) {
+                    for (la in link.linkAddresses) {
+                        val addr = la.address
+                        if (addr is Inet4Address && !addr.isLoopbackAddress) {
+                            return addr.hostAddress
+                        }
+                    }
+                }
+            }
+        }
+        // Fall back to transport-preference scan for edge cases (e.g. active network
+        // has only IPv6, but a secondary WiFi interface has an IPv4 address).
         for (preferred in TRANSPORT_PREFERENCE) {
             for (net in cm.allNetworks) {
                 val caps = cm.getNetworkCapabilities(net) ?: continue
