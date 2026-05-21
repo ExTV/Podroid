@@ -23,6 +23,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.excp.podroid.MainActivity
+import com.excp.podroid.PodroidApplication
 import com.excp.podroid.R
 import com.excp.podroid.data.repository.PortForwardRepository
 import com.excp.podroid.data.repository.SettingsRepository
@@ -69,17 +70,42 @@ class PodroidService : Service() {
                 } else {
                     0
                 }
+                // Always (re-)assert foreground within the start window — required
+                // even on a redundant ACTION_START so the system doesn't fault us
+                // for not calling startForeground.
                 ServiceCompat.startForeground(
                     this,
                     NOTIFICATION_ID,
                     buildNotification("Starting VM..."),
                     fgType,
                 )
-                acquireWakeLock()
-                launchPodroid()
+                // De-dup: if the VM is already active, do NOT re-acquire/relaunch.
+                // launchPodroid relaunches the observers (resetting their
+                // seenActive latch); doing that on a double-tap could strand the
+                // teardown path. The engine's own start() is also a no-op here.
+                val alreadyActive = engine.state.value is VmState.Starting ||
+                    engine.state.value is VmState.Running
+                if (!alreadyActive) {
+                    acquireWakeLock()
+                    launchPodroid()
+                }
             }
             ACTION_STOP -> {
+                // engine.stop() is a no-op if nothing is running. Either way the
+                // shutdown observer only fires after an active state, so on the
+                // "stop while idle" path (e.g. PodroidService.stop() spinning up a
+                // fresh service) we must release + stop here so this doesn't
+                // linger as a started-but-never-foregrounded orphan.
                 engine.stop()
+                releaseWakeLock()
+                stopForegroundCompat()
+                stopSelf()
+            }
+            else -> {
+                // Null/unrecognized action (e.g. a system redelivery): we never
+                // called startForeground for this start, so just stop to avoid a
+                // started-but-not-foregrounded service.
+                stopSelf()
             }
         }
         return START_NOT_STICKY
@@ -94,11 +120,14 @@ class PodroidService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        // App swiped from recents — stop the VM gracefully
-        if (engine.state.value is VmState.Running ||
-            engine.state.value is VmState.Starting) {
-            engine.stop()
-        }
+        // App swiped from recents — stop the VM gracefully and tear the service
+        // down unconditionally. engine.stop() is a no-op if idle; doing this even
+        // in the Idle-before-Starting window prevents a swipe during early start
+        // from leaving a VM that starts with no UI, holding the WakeLock.
+        engine.stop()
+        releaseWakeLock()
+        stopForegroundCompat()
+        stopSelf()
     }
 
     private fun acquireWakeLock() {
@@ -147,25 +176,42 @@ class PodroidService : Service() {
 
     /**
      * Releases the wakelock and stops the service when the VM reaches a
-     * terminal state. The seenActive guard avoids tearing down on the initial
-     * Idle replay before QEMU has even been launched.
+     * terminal state.
+     *
+     * `Error`/`Stopped` are treated as always-actionable: an engine that goes
+     * straight to `Error` without ever emitting `Starting` (e.g. a missing QEMU
+     * binary), or a conflated `Idle→Starting→Error` that the Main collector only
+     * observes as `Error`, must still release the no-timeout WakeLock and stop
+     * the foreground service. The `seenActive` latch exists only to skip the
+     * initial `Idle` replay before the VM has been launched, so the guard now
+     * gates `Idle` alone — terminal failures are never silently swallowed.
      */
     private suspend fun observeStateForShutdown() {
         var seenActive = false
         engine.state.collect { state ->
             when (state) {
                 is VmState.Starting, is VmState.Running -> seenActive = true
-                is VmState.Stopped, is VmState.Idle, is VmState.Error -> {
+                is VmState.Idle -> {
                     if (!seenActive) return@collect
-                    releaseWakeLock()
-                    if (Build.VERSION.SDK_INT >= 33) {
-                        stopForeground(STOP_FOREGROUND_REMOVE)
-                    } else {
-                        @Suppress("DEPRECATION") stopForeground(true)
-                    }
-                    stopSelf()
+                    teardown()
                 }
+                is VmState.Stopped, is VmState.Error -> teardown()
             }
+        }
+    }
+
+    /** Release the WakeLock, drop the foreground notification, and stop. */
+    private fun teardown() {
+        releaseWakeLock()
+        stopForegroundCompat()
+        stopSelf()
+    }
+
+    private fun stopForegroundCompat() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION") stopForeground(true)
         }
     }
 
@@ -174,6 +220,12 @@ class PodroidService : Service() {
             startNotificationUpdates()
             withContext(Dispatchers.IO) {
                 try {
+                    // Asset extraction now runs off the main thread; the engine
+                    // reads vmlinuz/initrd/squashfs synchronously in start(), so
+                    // we MUST block here until extraction has fully completed or
+                    // the VM could launch against a partial/missing file.
+                    (application as? PodroidApplication)?.awaitAssetsReady()
+
                     val rules = portForwardRepository.getRulesSnapshot().toMutableList()
                     val sshEnabled = settingsRepository.getSshEnabledSnapshot()
 
