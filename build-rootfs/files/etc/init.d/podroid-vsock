@@ -24,7 +24,9 @@ start() {
         --stdout /var/log/podroid-vsock-agent.log \
         --stderr /var/log/podroid-vsock-agent.log \
         --exec /usr/local/bin/podroid-vsock-agent
-    eend $?
+    _agent_rc=$?
+    [ "$_agent_rc" -eq 0 ] || ewarn "podroid-vsock-agent failed to start (see /var/log/podroid-vsock-agent.log)"
+    eend "$_agent_rc"
 }
 
 stop() {

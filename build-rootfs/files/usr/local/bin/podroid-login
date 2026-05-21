@@ -10,10 +10,14 @@
 # sensible default rather than leaving winsize at 0x0. The host-side
 # TerminalView will overwrite this the moment the user touches the
 # screen and triggers a real SIGWINCH.
+_r=""
+_c=""
 if [ -r /run/term_size ]; then
     read _r _c < /run/term_size
 fi
-[ -z "$_r" ] && _r=24
-[ -z "$_c" ] && _c=80
+# Reject empty, non-numeric, and 0 (a 0x0 winsize is the exact failure this
+# script exists to prevent: TUIs bail "Failed to get size of terminal").
+case "$_r" in ''|*[!0-9]*|0) _r=24;; esac
+case "$_c" in ''|*[!0-9]*|0) _c=80;; esac
 stty rows "$_r" cols "$_c" 2>/dev/null
 exec /bin/login "$@"

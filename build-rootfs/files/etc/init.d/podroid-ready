@@ -2,8 +2,8 @@
 description="Podroid VM ready marker (consumed by Android boot detector)"
 
 depend() {
-    need podroid-network dropbear
-    after *
+    need podroid-network
+    after dropbear *
 }
 
 start() {

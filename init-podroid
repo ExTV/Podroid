@@ -30,12 +30,16 @@ if ! mount -t ext4 -o rw,noatime,commit=60,barrier=0 /dev/vda /mnt/persist 2>/de
     mount -t ext4 -o rw,noatime,commit=60,barrier=0 /dev/vda /mnt/persist
 fi
 
-mount -t squashfs -o ro /dev/vdb /mnt/lower
+echo "Mounting system..." > /dev/console
+mount -t squashfs -o ro /dev/vdb /mnt/lower \
+    || { echo "FATAL: squashfs (/dev/vdb) mount failed" > /dev/console; exec sh; }
 
 mkdir -p /mnt/persist/upper /mnt/persist/work
+echo "Stacking overlay..." > /dev/console
 mount -t overlay overlay \
     -o lowerdir=/mnt/lower,upperdir=/mnt/persist/upper,workdir=/mnt/persist/work,metacopy=on,redirect_dir=on,index=on \
-    /mnt/overlay
+    /mnt/overlay \
+    || { echo "FATAL: overlay mount failed" > /dev/console; exec sh; }
 
 # Move /mnt/persist into the new root so users can reach raw storage,
 # and so switch_root can fully clear initramfs (no orphan mounts left

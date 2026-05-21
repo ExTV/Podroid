@@ -145,8 +145,12 @@ start() {
         ip link add name lxcbr0 type bridge 2>/dev/null
         ip addr add 10.0.3.1/24 dev lxcbr0 2>/dev/null
         ip link set lxcbr0 up 2>/dev/null
+        # Don't hide the rule-install failure: the `-C` probe is an expected
+        # non-zero existence check (kept quiet), but a failed `-A` (missing
+        # nat table / nf modules) must surface in the boot log instead of
+        # leaving lxc containers without outbound NAT and no diagnostic.
         iptables -t nat -C POSTROUTING -s 10.0.3.0/24 ! -o lxcbr0 -j MASQUERADE 2>/dev/null \
-            || iptables -t nat -A POSTROUTING -s 10.0.3.0/24 ! -o lxcbr0 -j MASQUERADE 2>/dev/null
+            || iptables -t nat -A POSTROUTING -s 10.0.3.0/24 ! -o lxcbr0 -j MASQUERADE
     fi
 
     eend 0

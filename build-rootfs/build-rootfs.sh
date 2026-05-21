@@ -116,10 +116,14 @@ cp /work/files/etc/inittab "$ROOTFS/etc/inittab"
 cp /work/files/etc/rc.conf "$ROOTFS/etc/rc.conf"
 
 # /etc/profile.d/*.sh — sourced by Alpine's /etc/profile in login shells.
-# Currently: COLORTERM=truecolor so apps emit 24-bit color sequences.
+# podroid-color.sh: COLORTERM=truecolor (24-bit color). podroid-x11.sh:
+# DISPLAY / PULSE_SERVER for the in-app GUI viewer. Copy by explicit name so
+# a renamed/removed asset fails the build (set -e) instead of silently
+# shipping a squashfs without these exports.
 mkdir -p "$ROOTFS/etc/profile.d"
-cp /work/files/etc/profile.d/*.sh "$ROOTFS/etc/profile.d/" 2>/dev/null || true
-chmod 0644 "$ROOTFS/etc/profile.d/"*.sh 2>/dev/null || true
+cp /work/files/etc/profile.d/podroid-color.sh "$ROOTFS/etc/profile.d/"
+cp /work/files/etc/profile.d/podroid-x11.sh   "$ROOTFS/etc/profile.d/"
+chmod 0644 "$ROOTFS/etc/profile.d/podroid-color.sh" "$ROOTFS/etc/profile.d/podroid-x11.sh"
 
 # /etc/containers/storage.conf — pin Podman to the in-kernel overlay driver.
 # Without this file, Podman auto-detects fuse-overlayfs (still apk-installed
@@ -149,8 +153,15 @@ EOF
 # Set runlevels via direct symlinks (host is x86_64, can't chroot into aarch64 rootfs to run rc-update).
 # rc-update is just `ln -s /etc/init.d/X /etc/runlevels/<level>/X` under the hood.
 mkdir -p "$ROOTFS/etc/runlevels/default" "$ROOTFS/etc/runlevels/boot"
+# Guard each link: a dangling symlink (e.g. dnsmasq.lxcbr0, which lxc-bridge
+# may ship only as dnsmasq config and not an init script) makes OpenRC log
+# an error every boot and stalls podroid-ready's `after *` on a phantom.
 for svc in podroid-bootstrap podroid-network podroid-resize dropbear docker lxc dnsmasq.lxcbr0 podroid-x11 podroid-vsock podroid-ready; do
-    ln -sf "/etc/init.d/$svc" "$ROOTFS/etc/runlevels/default/$svc"
+    if [ -e "$ROOTFS/etc/init.d/$svc" ]; then
+        ln -sf "/etc/init.d/$svc" "$ROOTFS/etc/runlevels/default/$svc"
+    else
+        echo "WARN: init script /etc/init.d/$svc missing, skipping runlevel symlink"
+    fi
 done
 
 # Disable services we don't need (initramfs already handles them, or they're noise in the VM)

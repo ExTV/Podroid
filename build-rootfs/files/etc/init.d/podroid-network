@@ -35,6 +35,13 @@ start() {
         # Belt-and-suspenders: if DHCP didn't write resolv.conf (busybox
         # variants differ), drop public DNS so apk/curl don't die silently.
         [ -s /etc/resolv.conf ] || printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' > /etc/resolv.conf
+        # Don't report success on a total DHCP failure: dependents that
+        # `need` us would start believing the link is up, then SSH/apk fail
+        # with no obvious cause. Surface it instead.
+        if ! ip -o -4 addr show dev "$NETIF" 2>/dev/null | grep -q 'inet '; then
+            eend 1 "DHCP did not assign an address to $NETIF"
+            return 1
+        fi
     else
         # QEMU/TCG backend: SLIRP's built-in DHCP also exists but hardcoding
         # is faster + matches every existing user's setup. Original behavior.

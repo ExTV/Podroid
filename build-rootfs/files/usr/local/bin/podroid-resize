@@ -6,7 +6,11 @@
 # Also writes the last-known size to /run/term_size so podroid-login
 # can restore it after each getty respawn (virtio-console resets winsize
 # to 0x0 every time the line is reopened).
-set -e
+#
+# No `set -e`: this is a long-lived `while read` daemon. A transient stty
+# failure (e.g. /dev/hvc0 momentarily unavailable during a getty respawn)
+# or a tmpfs write hiccup must not terminate the daemon for the rest of
+# the VM's life; start-stop-daemon --background won't respawn it.
 
 # Wait for the virtio-console node to appear (timing varies)
 for _i in $(seq 1 30); do

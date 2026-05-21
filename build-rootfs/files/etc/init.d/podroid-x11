@@ -2,7 +2,11 @@
 description="Podroid X11 server (Xvnc + pulseaudio) for in-app viewer"
 
 depend() {
-    need podroid-network
+    # Xvnc binds 127.0.0.1:5900 and pulseaudio 0.0.0.0:4713, both loopback,
+    # neither needs eth0/default-route. Order after networking but don't let a
+    # podroid-network failure (slow NIC, probe timeout) needlessly kill the GUI.
+    need podroid-bootstrap
+    after podroid-network
     before podroid-ready
 }
 
@@ -18,7 +22,9 @@ start() {
     ebegin "Starting X11 server (Xvnc + pulseaudio)"
 
     # Read per-boot DPI from the kernel cmdline token written by the Android app.
-    XVNC_DPI=$(awk -v RS=' ' -F= '/^podroid.x11.dpi=/{print $2}' /proc/cmdline 2>/dev/null)
+    # Digit-only capture: /proc/cmdline ends in '\n', and an `awk -v RS=' '`
+    # parse would keep that newline on the last token, so Xvnc rejects -dpi.
+    XVNC_DPI=$(sed -n 's/.*podroid\.x11\.dpi=\([0-9]*\).*/\1/p' /proc/cmdline 2>/dev/null)
     [ -z "$XVNC_DPI" ] && XVNC_DPI=96
 
     # /tmp lives on the persistent ext4 overlay, so a stale X server lock
@@ -46,6 +52,8 @@ start() {
         -AlwaysShared \
         -dpi $XVNC_DPI \
         -AcceptSetDesktopSize
+    _xvnc_rc=$?
+    [ "$_xvnc_rc" -eq 0 ] || ewarn "Xvnc failed to start (see $XVNC_LOGFILE)"
 
     # PulseAudio: system-wide-style daemon writing raw S16LE PCM to TCP 4713.
     # We use --system=no with explicit XDG_RUNTIME_DIR so it runs as root
@@ -62,7 +70,12 @@ start() {
         --load="module-null-sink sink_name=podroid_sink rate=44100 channels=2 format=s16le" \
         --load="module-simple-protocol-tcp source=podroid_sink.monitor record=true rate=44100 format=s16le channels=2 listen=0.0.0.0 port=$PA_PORT" \
         --load="module-native-protocol-unix"
+    _pa_rc=$?
+    [ "$_pa_rc" -eq 0 ] || ewarn "pulseaudio failed to start (see $PA_LOGFILE)"
 
+    # eend reflects either daemon failing: a single `eend $?` would have
+    # masked a dead Xvnc behind a healthy pulseaudio (or vice-versa).
+    [ "$_xvnc_rc" -eq 0 ] && [ "$_pa_rc" -eq 0 ]
     eend $?
 }
 
