@@ -135,7 +135,8 @@ RUN cd linux-${KERNEL_VERSION} \
                   EXT4_FS_SECURITY SQUASHFS_XATTR SQUASHFS_ZSTD \
                   DECOMPRESS_ZSTD ZSTD_DECOMPRESS \
                   IKCONFIG IKCONFIG_PROC BINFMT_MISC \
-                  VSOCKETS VIRTIO_VSOCKETS; do \
+                  VSOCKETS VIRTIO_VSOCKETS \
+                  RFKILL LEDS_CLASS CFG80211 MAC80211 RTW88 BT; do \
            grep -q "^CONFIG_${opt}=y\$" .config \
                || { echo "FATAL: CONFIG_${opt} is not =y after merge" >&2; \
                     grep "CONFIG_${opt}" .config >&2; exit 1; }; \
