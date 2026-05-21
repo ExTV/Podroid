@@ -33,11 +33,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.windowsizeclass.WindowHeightSizeClass
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -54,6 +57,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.excp.podroid.BuildConfig
 import com.excp.podroid.data.repository.PortForwardRule
@@ -86,6 +92,7 @@ fun SettingsScreen(
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
     val portForwardRules by viewModel.portForwardRules.collectAsStateWithLifecycle()
     val vmState by viewModel.vmState.collectAsStateWithLifecycle()
+    val exportError by viewModel.exportError.collectAsStateWithLifecycle()
 
     var advancedExpanded by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
@@ -95,6 +102,35 @@ fun SettingsScreen(
     val avfScope = rememberCoroutineScope()
     val ctx = LocalContext.current
     val vmNotRunning = vmState !is VmState.Running && vmState !is VmState.Starting
+
+    // Memoize: both values are constant for the process lifetime / until a backend
+    // swap, so there's no point re-running reflection on every recomposition.
+    val isDownloadsShareAvailable = remember { viewModel.isDownloadsShareAvailable() }
+    val activeBackendId = remember { viewModel.activeBackendId() }
+
+    // Re-sync the persisted storageAccessEnabled flag against the real OS grant on
+    // every resume (user may have denied all-files-access on the system screen we
+    // sent them to, but the DataStore flag still reads true).
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME &&
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+                !Environment.isExternalStorageManager()
+            ) {
+                viewModel.setStorageAccessEnabled(false)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(exportError) {
+        val msg = exportError ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(msg)
+        viewModel.clearExportError()
+    }
 
     Scaffold(
         topBar = {
@@ -107,6 +143,7 @@ fun SettingsScreen(
                 },
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = MaterialTheme.colorScheme.background,
     ) { innerPadding ->
         val isCompactHeight = windowSizeClass.heightSizeClass == WindowHeightSizeClass.Compact
@@ -203,8 +240,8 @@ fun SettingsScreen(
                 DownloadsSharingRow(
                     enabled = ui.storageAccessEnabled,
                     vmNotRunning = vmNotRunning,
-                    available = viewModel.isDownloadsShareAvailable(),
-                    activeBackendId = viewModel.activeBackendId(),
+                    available = isDownloadsShareAvailable,
+                    activeBackendId = activeBackendId,
                     onToggle = { viewModel.setStorageAccessEnabled(it) },
                 )
                 Spacer(Modifier.height(PodroidTokens.Spacing.MD))
@@ -295,7 +332,7 @@ fun SettingsScreen(
                             } else null
                             avfReportText = probe.copy(
                                 smokeTestResult = smoke,
-                                activeBackend = viewModel.activeBackendId(),
+                                activeBackend = activeBackendId,
                             ).pretty()
                             avfRunning = false
                         }

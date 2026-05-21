@@ -282,6 +282,8 @@ class EngineHolder @Inject constructor(
         _currentFlow.value = next
     }
 
+    override val runningSinceMs: Long? get() = current.runningSinceMs
+
     // ── VmEngine: flows that follow the currently-selected engine ──────────
     // A freshly (re)selected engine that hasn't been started this cycle has its
     // retained terminal state (Stopped/Error) normalized to Idle, so a swap-back

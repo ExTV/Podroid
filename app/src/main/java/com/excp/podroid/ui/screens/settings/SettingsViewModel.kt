@@ -24,8 +24,10 @@ import com.excp.podroid.util.NetworkUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -228,6 +230,12 @@ class SettingsViewModel @Inject constructor(
         else  -> true
     }
 
+    private val _exportError = MutableStateFlow<String?>(null)
+    /** One-shot export failure message; clear after showing with [clearExportError]. */
+    val exportError: StateFlow<String?> = _exportError.asStateFlow()
+
+    fun clearExportError() { _exportError.value = null }
+
     fun removePortForward(rule: PortForwardRule) {
         viewModelScope.launch { portForwardRepository.removeRule(rule) }
     }
@@ -279,6 +287,7 @@ class SettingsViewModel @Inject constructor(
                 })
             } catch (e: Exception) {
                 Log.w(TAG, "Export failed", e)
+                _exportError.value = "Export failed: ${e.message ?: "unknown error"}"
             }
         }
     }

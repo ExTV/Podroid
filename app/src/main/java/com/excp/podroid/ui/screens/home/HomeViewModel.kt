@@ -127,17 +127,28 @@ class HomeViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
-    private var runningSinceMs: Long? = null
+    // Fallback timestamp stamped the first time we observe Running, used when the
+    // engine doesn't supply runningSinceMs (e.g. a future engine that omits the override).
+    private var fallbackRunningSinceMs: Long? = null
+
+    // The uptime baseline: prefer the real →Running timestamp from the engine so
+    // rotation / Activity recreation doesn't reset the displayed uptime to "Up 0s"
+    // while the VM has actually been running for minutes.
+    private val runningSinceMs: Long?
+        get() = engine.runningSinceMs ?: fallbackRunningSinceMs
 
     init {
         checkForUpdate()
-        // Maintain runningSinceMs for the synchronous read path used by uptime formatter.
+        // Maintain fallbackRunningSinceMs for engines that don't override runningSinceMs.
         viewModelScope.launch {
             var lastWasRunning = false
             engine.state.collect { state ->
                 val nowRunning = state is VmState.Running
-                if (nowRunning && !lastWasRunning) runningSinceMs = System.currentTimeMillis()
-                if (!nowRunning) runningSinceMs = null
+                if (nowRunning && !lastWasRunning) {
+                    // Only stamp the fallback when the engine doesn't provide the real time.
+                    if (engine.runningSinceMs == null) fallbackRunningSinceMs = System.currentTimeMillis()
+                }
+                if (!nowRunning) fallbackRunningSinceMs = null
                 lastWasRunning = nowRunning
             }
         }
