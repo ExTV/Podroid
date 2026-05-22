@@ -6,10 +6,10 @@
  * sockets for the terminal layer:
  *
  *   serial.sock   — QEMU -serial (ttyAMA0 in the VM). Boot-log sink only:
- *                   QemuEngine's monitorBootSerial coroutine connects here
- *                   for the lifetime of the VM, streaming kernel messages
- *                   and init-podroid boot stages into console.log + the
- *                   in-memory ring buffer used by BootStageDetector.
+ *                   QemuBootMonitor connects here for the lifetime of the VM,
+ *                   streaming kernel messages and init-podroid boot stages
+ *                   into console.log + the in-memory ring buffer used by
+ *                   BootStageDetector.
  *
  *   terminal.sock — QEMU virtio-console (/dev/hvc0 in the VM). Primary
  *                   terminal I/O. getty runs on hvc0; the podroid-bridge
@@ -26,8 +26,6 @@ package com.excp.podroid.engine
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.net.LocalSocket
-import android.net.LocalSocketAddress
 import android.util.Log
 import com.excp.podroid.data.repository.PortForwardRule
 import com.excp.podroid.util.LogProxy
@@ -41,10 +39,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
-import java.io.FileOutputStream
-import java.nio.ByteBuffer
-import java.nio.CharBuffer
-import java.nio.charset.CodingErrorAction
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -91,10 +85,6 @@ class QemuEngine @Inject constructor(
     val terminalSockPath: String get() = "${context.filesDir.absolutePath}/terminal.sock"
     val ctrlSockPath: String get() = "${context.filesDir.absolutePath}/ctrl.sock"
 
-    /** Boot-monitoring socket connection. Closed when the bridge takes over. */
-    @Volatile
-    private var bootSocket: LocalSocket? = null
-
     /**
      * Last QEMU process exit code (null until it exits) + a bounded tail of
      * QEMU's own stderr. Surfaced in the diagnostic export so a crash leaves a
@@ -126,8 +116,8 @@ class QemuEngine @Inject constructor(
 
     private var bootStartTime: Long = 0L
 
-    private val consoleBuilder = StringBuilder()
-    private val maxConsoleSize = 64 * 1024
+    /** Per-run serial monitor; created in start(), released in cleanup(). */
+    private var bootMonitor: QemuBootMonitor? = null
 
     private val bootStageDetector = BootStageDetector(_bootStage, _state) {
         // BootStageDetector has already flipped _state to Running by the time
@@ -177,25 +167,6 @@ class QemuEngine @Inject constructor(
         override fun logStackTraceWithMessage(tag: String?, msg: String?, e: Exception?) =
             LogProxy.stackTraceWithMessage(tag, TAG, msg, e)
         override fun logStackTrace(tag: String?, e: Exception?) = LogProxy.stackTrace(tag, TAG, e)
-    }
-
-    /**
-     * Close the boot-monitoring serial socket. Called from cleanup() when the
-     * VM stops; not used as a hand-off trigger any more (bridge has its own
-     * socket).
-     */
-    fun releaseSerial() {
-        val sock = bootSocket ?: return
-        Log.d(TAG, "Closing boot monitor socket")
-        bootSocket = null
-        try {
-            // Signal EOF to the monitor loop
-            sock.shutdownInput()
-            sock.shutdownOutput()
-            sock.close()
-        } catch (e: Exception) {
-            Log.w(TAG, "Error closing boot socket: ${e.message}")
-        }
     }
 
     private fun persistBootDuration() {
@@ -294,10 +265,6 @@ class QemuEngine @Inject constructor(
 
         ensureStorageImage(config.storageSizeGb)
 
-        // consoleBuilder is also appended from the monitor coroutine; guard
-        // every access with the same lock cleanup() uses (the @Synchronized
-        // object monitor) so a concurrent append can't race this clear().
-        synchronized(this) { consoleBuilder.clear() }
         _consoleText.value = ""
         _bootStage.value = "Starting QEMU..."
         // Re-arm the one-shot detector so a Stop → Start cycle's second boot
@@ -353,8 +320,14 @@ class QemuEngine @Inject constructor(
                 }
             }
 
-            // Boot monitor — connects to serial.sock once QEMU creates it
-            scope.launch { monitorBootSerial(proc) }
+            // Boot monitor — connects to serial.sock once QEMU creates it and
+            // streams the guest console into console.log + the boot-stage detector.
+            val monitor = QemuBootMonitor(
+                serialSockPath, File(context.filesDir, "console.log"),
+                bootStageDetector, _consoleText, SOCKET_READY_TIMEOUT_MS,
+            )
+            bootMonitor = monitor
+            monitor.connectAndRun(scope) { proc.isAlive }
 
             val startMs = System.currentTimeMillis()
             var socketsReady = false
@@ -385,16 +358,17 @@ class QemuEngine @Inject constructor(
                     VmState.Error("QEMU failed to create sockets within ${SOCKET_READY_TIMEOUT_MS / 1000}s")
                 proc.destroy()
             } else {
-                // State stays Starting — boot monitor will set Running when "Ready!" is detected
+                // Primary readiness is the detector's "Ready!" (now reliable).
+                // This is only a safety net so the UI never strands in Starting:
+                // generous enough to clear a worst-case first boot (~56s, dropbear
+                // hostkey gen), and it logs loudly instead of silently rubber-
+                // stamping Running at a fixed 60s like the old blind fallback.
                 scope.launch {
-                    delay(60_000)
-                    // Only promote a still-Starting, still-alive VM. Without the
-                    // isAlive/cleanedUp check a VM that died (or stopped) in the
-                    // window after delay() resumes could be flipped to a phantom
-                    // Running and have the bridge re-armed after exit.
+                    delay(BOOT_READY_SAFETY_MS)
                     if (_state.value is VmState.Starting &&
                         process?.isAlive == true && !cleanedUp.get()) {
-                        Log.w(TAG, "Boot timeout fallback → forcing Running state")
+                        Log.w(TAG, "Ready! not detected within ${BOOT_READY_SAFETY_MS / 1000}s - " +
+                            "promoting to Running (boot detection may have missed the marker)")
                         _bootStage.value = "Ready"
                         persistBootDuration()
                         _runningSinceMs = System.currentTimeMillis()
@@ -436,114 +410,6 @@ class QemuEngine @Inject constructor(
         }
     }
 
-    /**
-     * Connects to serial.sock and streams kernel + init-podroid output for the
-     * lifetime of the VM. Writes the bytes to console.log and pushes the
-     * latest tail into the consoleText flow used by the diagnostic exporter
-     * and the boot-stage detector. Stops when:
-     *   - releaseSerial() is called during cleanup() (VM stopping), or
-     *   - QEMU itself exits, or
-     *   - The coroutine is cancelled.
-     *
-     * Writes all output to console.log for the test-deploy.sh validator and
-     * publishes boot stage updates to the UI.
-     */
-    private suspend fun monitorBootSerial(proc: Process) {
-        val sockFile = File(serialSockPath)
-
-        // Share the same socket-readiness deadline used by start() so a slow
-        // QEMU startup doesn't get inconsistent grace periods.
-        var waited = 0L
-        while (waited < SOCKET_READY_TIMEOUT_MS && !sockFile.exists() && proc.isAlive) {
-            delay(100)
-            waited += 100
-        }
-        if (!sockFile.exists()) {
-            Log.w(TAG, "serial.sock not found after ${waited}ms — boot detection disabled")
-            return
-        }
-
-        val sock = LocalSocket()
-        try {
-            sock.connect(LocalSocketAddress(serialSockPath, LocalSocketAddress.Namespace.FILESYSTEM))
-            // Read timeout so a wedged-but-alive VM (no serial output) can't
-            // block this monitor forever in input.read(); on timeout we loop and
-            // re-check proc.isAlive instead of treating it as EOF. Mirrors the
-            // soTimeout QmpClient already sets on its command socket.
-            sock.soTimeout = BOOT_SOCKET_READ_TIMEOUT_MS
-            bootSocket = sock
-            Log.d(TAG, "Boot monitor connected to serial.sock")
-        } catch (e: Exception) {
-            Log.w(TAG, "Boot monitor could not connect to serial.sock: ${e.message}")
-            sock.close()
-            return
-        }
-
-        val logFile = File(context.filesDir, "console.log")
-        logFile.delete()
-
-        // Streaming UTF-8 decoder — kept across read() calls so multi-byte
-        // sequences split between chunks decode correctly instead of
-        // surfacing as U+FFFD replacement chars in the in-memory console
-        // and breaking BootStageDetector matches.
-        val decoder = Charsets.UTF_8.newDecoder()
-            .onMalformedInput(CodingErrorAction.REPLACE)
-            .onUnmappableCharacter(CodingErrorAction.REPLACE)
-        val byteBuf = ByteBuffer.allocate(8192)
-        val charBuf = CharBuffer.allocate(8192)
-
-        try {
-            FileOutputStream(logFile, false).use { logOut ->
-                val readBuf = ByteArray(4096)
-                val input = sock.inputStream
-                while (true) {
-                    val n = try {
-                        input.read(readBuf)
-                    } catch (_: java.net.SocketTimeoutException) {
-                        // No serial output within the timeout. If QEMU is still
-                        // alive it may just be idle/wedged — loop and keep
-                        // waiting; only stop once the process is gone.
-                        if (!proc.isAlive) break
-                        continue
-                    } catch (_: Exception) {
-                        break // socket closed by releaseSerial() or VM exit
-                    }
-                    if (n < 0) break
-
-                    // Raw bytes go straight to disk for the diagnostic log.
-                    logOut.write(readBuf, 0, n)
-                    logOut.flush()
-
-                    // Feed the decoder; carry leftover undecoded bytes via compact().
-                    byteBuf.put(readBuf, 0, n)
-                    byteBuf.flip()
-                    decoder.decode(byteBuf, charBuf, false)
-                    byteBuf.compact()
-                    charBuf.flip()
-                    if (charBuf.hasRemaining()) {
-                        // Guard consoleBuilder with the same lock cleanup()/start()
-                        // use, so a concurrent clear() can't corrupt the append/trim.
-                        synchronized(this) {
-                            consoleBuilder.append(charBuf)
-                            if (consoleBuilder.length > maxConsoleSize) {
-                                consoleBuilder.delete(0, consoleBuilder.length - maxConsoleSize)
-                            }
-                            _consoleText.value = consoleBuilder.toString()
-                        }
-                    }
-                    charBuf.clear()
-
-                    bootStageDetector.feed(readBuf, n)
-                }
-            }
-        } catch (e: Exception) {
-            Log.d(TAG, "Boot monitor ended: ${e.message}")
-        } finally {
-            try { sock.close() } catch (_: Exception) {}
-            bootSocket = null
-            Log.d(TAG, "Boot monitor disconnected — bridge can now connect")
-        }
-    }
 
     /**
      * Signal the VM to stop. Destroys the QEMU process; the start() coroutine's
@@ -589,7 +455,8 @@ class QemuEngine @Inject constructor(
     @Synchronized
     private fun cleanup() {
         if (cleanedUp.getAndSet(true)) return
-        releaseSerial()
+        bootMonitor?.release()
+        bootMonitor = null
         ioScope?.cancel()
         ioScope = null
         // QEMU has already exited by the time cleanup() runs, so retiring its
@@ -600,7 +467,6 @@ class QemuEngine @Inject constructor(
         _terminalSession?.finishIfRunning()
         _terminalSession = null
         sessionClientDelegate = null
-        consoleBuilder.clear()
         _consoleText.value = ""
         _runningSinceMs = null
         File(serialSockPath).delete()
@@ -818,15 +684,15 @@ class QemuEngine @Inject constructor(
         private const val TAG = "QemuEngine"
         private const val STDERR_TAIL_LINES = 40
 
-        /** Shared deadline for both start()'s socket-readiness loop and monitorBootSerial's wait. */
+        /** Shared deadline for start()'s socket-readiness loop and the boot monitor's connect wait. */
         private const val SOCKET_READY_TIMEOUT_MS = 10_000L
 
         /**
-         * Read timeout on the boot serial socket. On timeout the monitor loops
-         * and re-checks proc.isAlive instead of blocking forever on a
-         * wedged-but-alive VM. Does not affect the happy path: bytes arriving
-         * before the timeout are read normally.
+         * Safety-net cap: if the guest's "Ready!" marker is never seen, promote
+         * to Running anyway so the UI never strands. Sized above a worst-case
+         * first boot (~56s, dropbear hostkey gen). On a healthy boot the detector
+         * fires first and this never triggers.
          */
-        private const val BOOT_SOCKET_READ_TIMEOUT_MS = 3000
+        private const val BOOT_READY_SAFETY_MS = 120_000L
     }
 }
