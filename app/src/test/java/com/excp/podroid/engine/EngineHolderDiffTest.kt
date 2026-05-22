@@ -59,4 +59,35 @@ class EngineHolderDiffTest {
         assertEquals(desired, added)
         assertEquals(emptySet<PortForwardRule>(), removed)
     }
+
+    @Test
+    fun `implicit always-on forwards are never removed`() {
+        // SSH/VNC/audio are injected into the launch set by PodroidService but
+        // never persisted to the DataStore, so they appear in launchRules yet
+        // not in `rules`. The diff loop folds them back in (desired = rules +
+        // implicit) so they are never computed as removed. Without that fold the
+        // first →Running diff tore them down, racing the engine's own initial
+        // setup and surfacing as intermittent SSH/VNC/audio dropout.
+        val ssh = rule(9922, 22); val vnc = rule(5900); val audio = rule(4713)
+        val launch = setOf(ssh, vnc, audio)             // appliedRules at →Running
+        val persisted = emptySet<PortForwardRule>()     // DataStore: no user rules
+        val implicit = launch - persisted               // captured at →Running edge
+        val desired = persisted + implicit              // the fold
+        val (added, removed) = computeRuleDiff(applied = launch, desired = desired)
+        assertEquals(emptySet<PortForwardRule>(), removed)
+        assertEquals(emptySet<PortForwardRule>(), added)
+    }
+
+    @Test
+    fun `user rule removed mid-session is torn down while implicit forwards survive`() {
+        val ssh = rule(9922, 22)
+        val user = rule(8000)
+        val launch = setOf(ssh, user)
+        val implicit = launch - setOf(user)             // = {ssh}, captured at →Running
+        // user later deletes 8000 → DataStore now empty
+        val desired = emptySet<PortForwardRule>() + implicit
+        val (added, removed) = computeRuleDiff(applied = launch, desired = desired)
+        assertEquals(setOf(user), removed)              // user rule gone; ssh not removed
+        assertEquals(emptySet<PortForwardRule>(), added)
+    }
 }
