@@ -82,8 +82,10 @@ fun SetupScreen(
     var selectedGb by rememberSaveable { mutableIntStateOf(DEFAULT_STORAGE_GB) }
     var sshEnabled by rememberSaveable { mutableStateOf(true) }
     var storageAccessEnabled by rememberSaveable { mutableStateOf(false) }
+    var usbPassthroughEnabled by rememberSaveable { mutableStateOf(false) }
+    val usbPassthroughAvailable = remember { viewModel.usbPassthroughAvailable() }
     val setupComplete by viewModel.setupComplete.collectAsStateWithLifecycle()
-    val pagerState = rememberPagerState(pageCount = { 3 })
+    val pagerState = rememberPagerState(pageCount = { 4 })
     val scope = rememberCoroutineScope()
 
     // Request the notification permission BEFORE navigating away; using
@@ -131,7 +133,7 @@ fun SetupScreen(
         ) {
             // Step progress bar
             LinearProgressIndicator(
-                progress = { (pagerState.currentPage + 1) / 3f },
+                progress = { (pagerState.currentPage + 1) / 4f },
                 modifier = Modifier.fillMaxWidth(),
                 trackColor = MaterialTheme.colorScheme.surfaceVariant,
             )
@@ -184,11 +186,20 @@ fun SetupScreen(
                             }
                         },
                         onBack = { scope.launch { pagerState.animateScrollToPage(1) } },
+                        onNext = { scope.launch { pagerState.animateScrollToPage(3) } },
+                    )
+                    3 -> UsbPassthroughPage(
+                        windowSizeClass = windowSizeClass,
+                        usbPassthroughEnabled = usbPassthroughEnabled,
+                        available = usbPassthroughAvailable,
+                        onUsbPassthroughToggle = { usbPassthroughEnabled = it },
+                        onBack = { scope.launch { pagerState.animateScrollToPage(2) } },
                         onGetStarted = {
                             viewModel.completeSetup(
                                 storageSizeGb = selectedGb,
                                 sshEnabled = sshEnabled,
                                 storageAccessEnabled = storageAccessEnabled,
+                                usbPassthroughEnabled = usbPassthroughEnabled && usbPassthroughAvailable,
                             )
                         },
                     )
@@ -203,7 +214,7 @@ fun SetupScreen(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                repeat(3) { index ->
+                repeat(4) { index ->
                     val isSelected = pagerState.currentPage == index
                     val dotWidth by animateDpAsState(
                         targetValue = if (isSelected) 24.dp else 8.dp,
@@ -387,17 +398,17 @@ private fun StorageAccessPage(
     onStorageAccessToggle: (Boolean) -> Unit,
     onOpenStorageAccessSettings: () -> Unit,
     onBack: () -> Unit,
-    onGetStarted: () -> Unit,
+    onNext: () -> Unit,
 ) {
     val canManageAllFiles = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
     val hasStoragePermission = !canManageAllFiles || Environment.isExternalStorageManager()
 
     SetupPageLayout(
         windowSizeClass = windowSizeClass,
-        stepLabel  = "Step 3 of 3",
+        stepLabel  = "Step 3 of 4",
         title      = "Downloads Sharing",
         description = "Optional. Mount your Android Downloads folder into the VM over virtio-9p.",
-        bottomBar  = { SetupNavBar(onBack = onBack, onNext = onGetStarted, nextLabel = "Get Started") },
+        bottomBar  = { SetupNavBar(onBack = onBack, onNext = onNext, nextLabel = "Continue") },
     ) {
         PodroidSectionLabel("Sharing")
         PodroidListRow(
@@ -421,6 +432,53 @@ private fun StorageAccessPage(
             text = "Warning: on some devices this can crash the VM. Disable it if start fails.",
             style = MaterialTheme.typography.bodyMedium,
             color = PodroidTokens.Amber,
+        )
+    }
+}
+
+// ── Page 4: USB passthrough ───────────────────────────────────────────────────
+
+@Composable
+private fun UsbPassthroughPage(
+    windowSizeClass: WindowSizeClass,
+    usbPassthroughEnabled: Boolean,
+    available: Boolean,
+    onUsbPassthroughToggle: (Boolean) -> Unit,
+    onBack: () -> Unit,
+    onGetStarted: () -> Unit,
+) {
+    SetupPageLayout(
+        windowSizeClass = windowSizeClass,
+        stepLabel  = "Step 4 of 4",
+        title      = "USB Passthrough",
+        description = "Optional. Hot-plug external USB devices (Wi-Fi, storage, serial, etc.) " +
+            "into the VM at runtime.",
+        bottomBar  = { SetupNavBar(onBack = onBack, onNext = onGetStarted, nextLabel = "Get Started") },
+    ) {
+        PodroidSectionLabel("Devices")
+        PodroidListRow(
+            label = "Enable USB passthrough",
+            rightSlot = {
+                PodroidSwitch(
+                    checked = usbPassthroughEnabled && available,
+                    onCheckedChange = onUsbPassthroughToggle,
+                    enabled = available,
+                )
+            },
+        )
+        Spacer(Modifier.height(PodroidTokens.Spacing.SM))
+        Text(
+            text = if (available) {
+                "Each device asks for permission when you plug it in. Adds a USB " +
+                    "controller to the VM, which costs a little emulation overhead, " +
+                    "so leave it off if you don't need it. You can change this later in Settings."
+            } else {
+                "Not available on this backend: USB passthrough needs QEMU's control " +
+                    "socket, which the AVF backend doesn't provide. You can change this " +
+                    "later in Settings."
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

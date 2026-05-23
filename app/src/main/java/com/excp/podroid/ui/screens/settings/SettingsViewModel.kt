@@ -237,6 +237,13 @@ class SettingsViewModel @Inject constructor(
         else  -> true
     }
 
+    /**
+     * USB passthrough rides the QEMU QMP control socket (add-fd + device_add
+     * usb-host); the AVF backend has no QMP channel, so it can never pass a
+     * device through. QEMU-only.
+     */
+    fun isUsbPassthroughAvailable(): Boolean = engine.backendId == "qemu"
+
     private val _exportError = MutableStateFlow<String?>(null)
     /** One-shot export failure message; clear after showing with [clearExportError]. */
     val exportError: StateFlow<String?> = _exportError.asStateFlow()

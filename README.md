@@ -104,7 +104,7 @@ Everything below is editable from **Settings**:
 - **CPU cores:** 1 · 2 · 4 · 6 · 8
 - **Persistent storage:** 2 GB to 64 GB (chosen at first setup; reset to change)
 - **Downloads folder sharing:** toggle on/off; mounted inside the VM at `/mnt/downloads` (virtio-9p on QEMU, AVF `SharedPath` where the backend supports it)
-- **USB passthrough:** toggle on/off; hot-plugs attached USB devices into the running VM (QEMU backend only — adds a USB controller at boot, so restart to apply)
+- **USB passthrough:** opt-in toggle in Settings and at first-run setup (alongside Downloads sharing); hot-plugs attached USB devices into the running VM (QEMU backend only — adds a USB controller at boot, so set it while the VM is stopped)
 - **SSH** (Dropbear on host port `9922`): toggle on/off; reachable from the LAN as `ssh root@<phone-ip> -p 9922` once the VM is Ready
 - **Port forwards:** add/remove host ↔ guest TCP/UDP rules live, no VM restart
 - **Advanced QEMU args:** full `-cpu` / `-accel` / RNG / device line, editable

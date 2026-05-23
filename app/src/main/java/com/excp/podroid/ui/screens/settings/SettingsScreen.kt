@@ -93,6 +93,7 @@ fun SettingsScreen(
     val portForwardRules by viewModel.portForwardRules.collectAsStateWithLifecycle()
     val vmState by viewModel.vmState.collectAsStateWithLifecycle()
     val exportError by viewModel.exportError.collectAsStateWithLifecycle()
+    val usbPassthrough by viewModel.usbPassthroughEnabled.collectAsStateWithLifecycle()
 
     var advancedExpanded by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
@@ -106,6 +107,7 @@ fun SettingsScreen(
     // Memoize: both values are constant for the process lifetime / until a backend
     // swap, so there's no point re-running reflection on every recomposition.
     val isDownloadsShareAvailable = remember { viewModel.isDownloadsShareAvailable() }
+    val isUsbPassthroughAvailable = remember { viewModel.isUsbPassthroughAvailable() }
     val activeBackendId = remember { viewModel.activeBackendId() }
 
     // Re-sync the persisted storageAccessEnabled flag against the real OS grant on
@@ -244,6 +246,13 @@ fun SettingsScreen(
                     activeBackendId = activeBackendId,
                     onToggle = { viewModel.setStorageAccessEnabled(it) },
                 )
+                UsbPassthroughRow(
+                    enabled = usbPassthrough,
+                    vmNotRunning = vmNotRunning,
+                    available = isUsbPassthroughAvailable,
+                    activeBackendId = activeBackendId,
+                    onToggle = { viewModel.setUsbPassthroughEnabled(it) },
+                )
                 Spacer(Modifier.height(PodroidTokens.Spacing.MD))
                 PodroidDestructiveButton(
                     text = "Reset VM (deletes all data)",
@@ -293,31 +302,6 @@ fun SettingsScreen(
                         onQemuReset = viewModel::resetQemuExtraArgs,
                         onKernelReset = viewModel::resetKernelExtraCmdline,
                         enabled = vmNotRunning,
-                    )
-
-                    PodroidSectionLabel("USB passthrough")
-                    val usbPassthrough by viewModel.usbPassthroughEnabled.collectAsStateWithLifecycle()
-                    PodroidListRow(
-                        label = "USB device passthrough",
-                        rightSlot = {
-                            PodroidSwitch(
-                                checked = usbPassthrough,
-                                onCheckedChange = { viewModel.setUsbPassthroughEnabled(it) },
-                                enabled = vmNotRunning,
-                            )
-                        },
-                    )
-                    Text(
-                        text = "Hot-plugs external USB devices into the running VM. Each device " +
-                            "asks for permission when attached. Adds a USB controller at boot — " +
-                            "restart the VM to apply. Requires a libusb-enabled QEMU build.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(
-                            start = PodroidTokens.Spacing.MD,
-                            end = PodroidTokens.Spacing.MD,
-                            bottom = PodroidTokens.Spacing.SM,
-                        ),
                     )
                 }
 
@@ -622,6 +606,50 @@ private fun DownloadsSharingRow(
             ),
         )
     }
+}
+
+/**
+ * Mirrors [DownloadsSharingRow] for USB device passthrough. Permission is asked
+ * per-device at attach time (no upfront system grant), so this is just an opt-in
+ * switch. Adds a USB controller to the QEMU launch line, so it's only editable
+ * while the VM is stopped. Disabled on AVF: that backend has no QMP channel and
+ * cannot pass a device through.
+ */
+@Composable
+private fun UsbPassthroughRow(
+    enabled: Boolean,
+    vmNotRunning: Boolean,
+    available: Boolean,
+    activeBackendId: String,
+    onToggle: (Boolean) -> Unit,
+) {
+    PodroidListRow(
+        label = "USB passthrough",
+        rightSlot = {
+            PodroidSwitch(
+                checked = enabled && available,
+                onCheckedChange = onToggle,
+                enabled = vmNotRunning && available,
+            )
+        },
+    )
+    Text(
+        text = if (available) {
+            "Hot-plugs external USB devices (Wi-Fi, storage, serial, etc.) into the " +
+                "VM. Each device asks for permission when attached. Adds a USB " +
+                "controller at boot, so restart the VM to apply."
+        } else {
+            "Not available on the $activeBackendId backend: USB passthrough rides " +
+                "QEMU's QMP control socket, which the AVF backend doesn't provide."
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(
+            start = PodroidTokens.Spacing.MD,
+            end = PodroidTokens.Spacing.MD,
+            bottom = PodroidTokens.Spacing.SM,
+        ),
+    )
 }
 
 @Composable
