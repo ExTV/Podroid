@@ -38,7 +38,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -117,7 +117,11 @@ class UsbPassthroughManager @Inject constructor(
         val entries = active.values.toList()
         active.clear()
         for (e in entries) runCatching { e.connection.close() }
-        scope.cancel()
+        // Cancel in-flight attach/detach work but keep the scope itself alive:
+        // a later start() (VM stop, then restart within one process) re-arms the
+        // receiver and must be able to launch again. scope.cancel() would leave
+        // a dead Job behind and silently no-op every future attach.
+        scope.coroutineContext.cancelChildren()
         Log.d(TAG, "USB passthrough disarmed — released ${entries.size} device(s)")
     }
 
@@ -158,8 +162,12 @@ class UsbPassthroughManager @Inject constructor(
                 return
             }
 
-            // fromFd() dups the descriptor; QEMU receives its own dup via
-            // SCM_RIGHTS, so this local copy is closed right after the add-fd write.
+            // fromFd() dups the UsbDeviceConnection fd into one we own. add-fd
+            // sends it to QEMU over SCM_RIGHTS, which installs an independent fd
+            // in QEMU's table referring to the same open file; that fd lives in a
+            // process-wide fdset that outlives this monitor socket. So once addFd
+            // returns, QEMU has its own copy and we close this local dup. The
+            // UsbDeviceConnection itself stays open in `active` until detach().
             val pfd = ParcelFileDescriptor.fromFd(connection.fileDescriptor)
             try {
                 val fdSetId = qmp.addFd(pfd.fileDescriptor).getOrElse { e ->
@@ -191,7 +199,9 @@ class UsbPassthroughManager @Inject constructor(
             val entry = active.remove(deviceName) ?: return
             engine.qmpClient?.let { qmp ->
                 qmp.deviceDel(entry.qemuId)
+                    .onFailure { Log.w(TAG, "device_del failed for $deviceName (${entry.qemuId})", it) }
                 qmp.removeFd(entry.fdSetId)
+                    .onFailure { Log.w(TAG, "remove-fd failed for fdset ${entry.fdSetId}", it) }
             }
             runCatching { entry.connection.close() }
             Log.i(TAG, "Released USB device $deviceName from guest")
