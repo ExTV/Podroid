@@ -564,7 +564,7 @@ private fun PortForwardSection(
     onRemove: (PortForwardRule) -> Unit,
 ) {
     PodroidListRow(
-        label = stringResource(R.string.port_forwards_count).replace("{count}", rules.size.toString()),
+        label = stringResource(R.string.port_forwards_count, rules.size),
         rightSlot = { PodroidInlineAction(label = stringResource(R.string.add_btn), onClick = onAdd) },
     )
     rules.forEach { rule ->
@@ -758,6 +758,7 @@ private fun AddPortForwardDialog(
     var protocol by remember { mutableStateOf("tcp") }
     var error by remember { mutableStateOf<String?>(null) }
     val invalidPortsMsg = stringResource(R.string.enter_valid_ports)
+    val context = LocalContext.current
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -816,7 +817,7 @@ private fun AddPortForwardDialog(
                     return@TextButton
                 }
                 val added = onAdd(hp, gp, protocol)
-                if (!added) error = "Port $hp (${protocol.uppercase()}) is already forwarded"
+                if (!added) error = context.getString(R.string.port_already_forwarded, hp, protocol.uppercase())
             }) {
                 Text(stringResource(R.string.add))
             }

@@ -99,9 +99,10 @@
     <string name="udp">UDP</string>
     <string name="both">两者</string>
     <string name="enter_valid_ports">输入有效的端口号 (1-65535)</string>
+    <string name="port_already_forwarded">端口 %1$d (%2$s) 已转发</string>
     <string name="reset">重置</string>
     <string name="remove">删除</string>
-    <string name="port_forwards_count">端口转发 ({count})</string>
+    <string name="port_forwards_count">端口转发 (%1$d)</string>
     <string name="none">无</string>
     <string name="active">活动</string>
     <string name="off">关闭</string>
@@ -213,6 +214,6 @@
     <string name="usb_passthrough_unavailable">此后端不可用：USB 设备直通需要 QEMU 控制套接字，而 AVF 后端不提供此功能。您可在设置中随时更改。</string>
     <string name="usb_passthrough_settings_label">USB 设备直通</string>
     <string name="usb_passthrough_settings_description_available">在虚拟机中热插拔外部 USB 设备（Wi-Fi、存储、串口等）。设备连接时会询问许可。启动时添加 USB 控制器，因此需要重启虚拟机以应用更改。</string>
-    <string name="usb_passthrough_settings_description_unavailable">${backend} 后端不可用：USB 设备直通需要 QEMU 的 QMP 控制套接字，而 AVF 后端不提供此功能。</string>
-    <string name="downloads_sharing_unavailable">此 ${backend} 构建不可用 - AVF 要求特权系统应用安装（Google 的终端应用通过这种方式绕过）；第三方 APK 无法跨越 SELinux 域读取 /storage/emulated/Download。</string>
+    <string name="usb_passthrough_settings_description_unavailable">%1$s 后端不可用：USB 设备直通需要 QEMU 的 QMP 控制套接字，而 AVF 后端不提供此功能。</string>
+    <string name="downloads_sharing_unavailable">此 %1$s 构建不可用 - AVF 要求特权系统应用安装（Google 的终端应用通过这种方式绕过）；第三方 APK 无法跨越 SELinux 域读取 /storage/emulated/Download。</string>
 </resources>

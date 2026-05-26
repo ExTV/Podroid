@@ -99,9 +99,10 @@
     <string name="udp">UDP</string>
     <string name="both">Both</string>
     <string name="enter_valid_ports">Enter valid port numbers (1–65535)</string>
+    <string name="port_already_forwarded">Port %1$d (%2$s) is already forwarded</string>
     <string name="reset">Reset</string>
     <string name="remove">Remove</string>
-    <string name="port_forwards_count">Port forwards ({count})</string>
+    <string name="port_forwards_count">Port forwards (%1$d)</string>
     <string name="none">None</string>
     <string name="active">active</string>
     <string name="off">Off</string>
@@ -212,6 +213,6 @@
     <string name="usb_passthrough_unavailable">Not available on this backend: USB passthrough needs QEMU control socket, which the AVF backend does not provide. You can change this later in Settings.</string>
     <string name="usb_passthrough_settings_label">USB passthrough</string>
     <string name="usb_passthrough_settings_description_available">Hot-plugs external USB devices (Wi-Fi, storage, serial, etc.) into the VM. Each device asks for permission when attached. Adds a USB controller at boot, so restart the VM to apply.</string>
-    <string name="usb_passthrough_settings_description_unavailable">Not available on the ${backend} backend: USB passthrough rides QEMU\'s QMP control socket, which the AVF backend doesn\'t provide.</string>
-    <string name="downloads_sharing_unavailable">Not available on this ${backend} build — AVF requires a privileged system-app install (Google\'s Terminal app cheats this way); third-party APKs can\'t cross SELinux domains to read /storage/emulated/Download.</string>
+    <string name="usb_passthrough_settings_description_unavailable">Not available on the %1$s backend: USB passthrough rides QEMU\'s QMP control socket, which the AVF backend doesn\'t provide.</string>
+    <string name="downloads_sharing_unavailable">Not available on this %1$s build — AVF requires a privileged system-app install (Google\'s Terminal app cheats this way); third-party APKs can\'t cross SELinux domains to read /storage/emulated/Download.</string>
 </resources>
