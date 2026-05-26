@@ -50,6 +50,10 @@ podman run -d -p 8080:80 nginx           # reachable from Android at 127.0.0.1:8
 # GUI apps: tap the monitor icon in the terminal to open the X11 viewer
 apk add firefox
 firefox &
+
+# Talk back to Android from inside the VM
+podroid-notify --priority high "build finished"   # posts an Android notification
+podroid-forward add 8888 80                        # expose the guest's :80 on the phone's :8888
 ```
 
 Default login: **root / podroid**.
@@ -81,6 +85,8 @@ Default login: **root / podroid**.
 - **In-app X11 viewer** (Xvnc + PulseAudio): live-resizable display (match-device, or 720p–1440p / custom presets), direct-touch and trackpad pointer modes with scroll, fullscreen, rotation lock, external-keyboard and mouse-wheel support, soft-keyboard input, and PCM audio over loopback.
 - **USB device passthrough** *(coming soon)*. Hot-plug a real USB device — Wi-Fi adapter, storage, serial adapter, audio interface — into the running VM straight from the Android USB stack. No root and no XML device filter: each device asks for permission when attached and is streamed to QEMU over QMP while the app runs.
 - **Built-in terminal** powered by the Termux engine: xterm-256color, mouse tracking, debounced resize, customizable extra-keys row.
+- **Guest-to-Android bridge.** Two CLIs inside the VM talk back to the phone: `podroid-notify` posts Android notifications (title, priority, and `--id` to update one in place), and `podroid-forward` adds/lists/removes Android port-forward rules without leaving the shell. Great for long builds, cron jobs and container health alerts. Works on both the QEMU and AVF backends.
+- **English and 中文 (Chinese)** interface, switchable in Settings or following the device language.
 - **Persistent ext4 overlay** on a read-only Alpine squashfs. Installs and configs survive every reboot.
 - **Adaptive Material 3 UI** for phone, tablet and landscape, with dynamic color and a foreground service that keeps the VM alive.
 
@@ -106,7 +112,8 @@ Everything below is editable from **Settings**:
 - **Downloads folder sharing:** toggle on/off; mounted inside the VM at `/mnt/downloads` (virtio-9p on QEMU, AVF `SharedPath` where the backend supports it)
 - **USB passthrough** *(coming soon)*: opt-in toggle in Settings and at first-run setup (alongside Downloads sharing); hot-plugs attached USB devices into the running VM (QEMU backend only — adds a USB controller at boot, so set it while the VM is stopped)
 - **SSH** (Dropbear on host port `9922`): toggle on/off; reachable from the LAN as `ssh root@<phone-ip> -p 9922` once the VM is Ready
-- **Port forwards:** add/remove host ↔ guest TCP/UDP rules live, no VM restart
+- **Port forwards:** add/remove host ↔ guest TCP/UDP rules live, no VM restart — from Settings, or with `podroid-forward` inside the VM
+- **Language:** System default · English · 中文 (Chinese)
 - **Advanced QEMU args:** full `-cpu` / `-accel` / RNG / device line, editable
 - **Advanced kernel cmdline:** extras appended to the boot cmdline
 - **Full App Reset:** wipe the persistent storage image and start over
@@ -226,7 +233,7 @@ Contributions of every size are welcome: bug reports, kernel-config tweaks, new 
 
 - **Pull requests:** read [CONTRIBUTING.md](CONTRIBUTING.md) first. Keep changes scoped, run `./build-all.sh test` before pushing, and explain *why* in the PR description.
 - **Bug reports:** [open an issue](https://github.com/ExTV/Podroid/issues/new) with your device + Android version, a short repro, and the diagnostic log (**Settings → Export Diagnostic Log** in the app).
-- **Diving into the engine:** [`skill.md`](skill.md) is the deep map: boot pipeline, every native binary, every quirk. AI assistants should read it before touching anything.
+- **Diving into the engine:** [`CLAUDE.md`](CLAUDE.md) is the deep map: the `VmEngine` abstraction and both VM backends, the boot pipeline, every native binary, the build pipelines, and the project's quirks. AI assistants (and humans) should read it before touching anything — it's written so you can open a PR that fits the codebase.
 
 ## Credits
 

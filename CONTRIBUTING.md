@@ -2,7 +2,7 @@
 
 Thanks for considering a contribution. Bug reports, feature requests, and pull requests are all welcome.
 
-Before you start, please skim [`skill.md`](skill.md). It documents the boot pipeline, every native binary, and the design quirks you need to know to make changes that don't regress.
+Before you start, please skim [`CLAUDE.md`](CLAUDE.md). It documents the VM-engine abstraction and both backends, the boot pipeline, every native binary, and the design quirks you need to know to make changes that don't regress.
 
 ## Getting started
 
@@ -60,7 +60,7 @@ adb shell run-as com.excp.podroid.debug cat files/console.log
 1. Fork the repository and create a topic branch (`fix/issue-42`, `feature/whatever`).
 2. Keep pull requests focused: one fix or one feature per PR.
 3. Test on a real arm64 device before submitting. Emulators do not exercise the QEMU + native binary path the way real hardware does.
-4. If your change is user-facing, update [`README.md`](README.md). If it changes the boot pipeline, terminal layer, or kernel options, update [`skill.md`](skill.md) and [`CLAUDE.md`](CLAUDE.md) too.
+4. If your change is user-facing, update [`README.md`](README.md). If it changes the architecture, boot pipeline, terminal layer, or kernel options, update [`CLAUDE.md`](CLAUDE.md) too.
 5. Match the existing code style of the file you are editing.
 
 ## Project layout

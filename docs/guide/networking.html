@@ -122,6 +122,34 @@ podman run -d -p 8080:80 nginx
 # Then from your laptop on the same Wi-Fi:</span>
 curl http://&lt;phone-ip&gt;:8080</code></pre>
 
+      <h2>Talking back to Android from the guest</h2>
+      <p>Two command-line tools ship inside the VM so scripts and shell sessions can reach the Android side directly, without the in-app UI. Both work on the QEMU and AVF backends.</p>
+
+      <h3><code>podroid-forward</code> - manage port forwards from the shell</h3>
+      <pre><code><span class="c"># forward phone :8888 -&gt; guest :80</span>
+podroid-forward add 8888 80 tcp
+<span class="c"># shorthand for "add ... tcp"</span>
+podroid-forward 8888 80
+<span class="c"># list current rules</span>
+podroid-forward list
+<span class="c"># drop a rule</span>
+podroid-forward remove 8888 tcp</code></pre>
+      <p>Rules created this way are identical to ones added in Settings: they apply live, persist across reboots, and appear in the Settings list. UDP is QEMU-only (ignored on AVF), the same as the UI.</p>
+
+      <h3><code>podroid-notify</code> - post an Android notification</h3>
+      <pre><code><span class="c"># simplest form</span>
+podroid-notify "build finished"
+<span class="c"># with a title and priority (low | normal | high)</span>
+podroid-notify --title Podroid --priority high "container crashed"
+<span class="c"># reuse --id to update the same notification in place</span>
+podroid-notify --id 7 "progress 50%"</code></pre>
+      <p>Handy for long builds, downloads, cron jobs and container health alerts. Tapping the notification opens Podroid. Requires the standard Android notification permission, requested at first run.</p>
+
+      <div class="callout note">
+        <span class="label">How it works</span>
+        <p>A small guest daemon (<code>podroid-hostd</code>) relays each request to the Android side over the same control transport the app already uses - a virtio-console port on QEMU, vsock on AVF - which then posts the notification or writes the port-forward rule. Any process that can reach the guest socket can use these, so they work from a container too if you bind-mount <code>/run/podroid-host.sock</code> into it.</p>
+      </div>
+
       <h2>LAN reachability</h2>
       <p>All port forward listeners bind <code>0.0.0.0</code>, not <code>127.0.0.1</code>. This means any device on the same Wi-Fi network can reach the phone by its local IP address. The phone's current IP is shown in <strong>Settings</strong>.</p>
 
@@ -169,7 +197,7 @@ curl http://&lt;phone-ip&gt;:8080</code></pre>
         <a class="prev" href="backends.html"><span class="dir">Previous</span>&larr; Backends: QEMU &amp; AVF</a>
         <a class="next" href="packages.html"><span class="dir">Next</span>Packages &amp; services &rarr;</a>
       </div>
-      <p class="docfoot">Podroid is free software (GPL). Docs for v1.2.1. Found something inaccurate? <a href="https://github.com/ExTV/Podroid/issues">Open an issue</a>.</p>
+      <p class="docfoot">Podroid is free software (GPL). Docs for v1.2.3. Found something inaccurate? <a href="https://github.com/ExTV/Podroid/issues">Open an issue</a>.</p>
     </main>
   </div>
 

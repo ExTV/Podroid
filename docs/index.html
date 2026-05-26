@@ -610,7 +610,7 @@
           <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
         </div>
         <h3>Port Forwarding</h3>
-        <p>Expose any VM port to your Android device at runtime via QMP control. Run a web server, database, or API and hit it from your phone's browser.</p>
+        <p>Expose any VM port to your Android device at runtime. Run a web server, database, or API and hit it from your phone's browser — from Settings, or with <code>podroid-forward</code> right inside the VM.</p>
       </div>
 
       <div class="feature-card">
@@ -619,6 +619,14 @@
         </div>
         <h3>Built-in SSH</h3>
         <p>Dropbear SSH server on port 9922 (configurable). Connect from your laptop, VS Code Remote, or any SSH client on the same network.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        </div>
+        <h3>Notify from the VM</h3>
+        <p>Run <code>podroid-notify "build done"</code> inside the guest and it pops an Android notification — with a title, priority, and an <code>--id</code> to update one in place. Perfect for long builds, downloads, and cron jobs. Works on both backends.</p>
       </div>
 
       <div class="feature-card">
@@ -651,6 +659,14 @@
         </div>
         <h3>Tuned for Software Emulation</h3>
         <p>KVM needs root, so we leaned hard on TCG instead. Multi-thread TCG with a 512 MB translation cache, a dedicated I/O thread for the rootfs disk, ZRAM lz4 swap at half RAM, and <code>mitigations=off</code> in the guest combine for a 5–15% CPU win. Native 16 KB page alignment, so Pixel 8/9/10 are first-class.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        </div>
+        <h3>English &amp; 中文</h3>
+        <p>Fully localized interface in English and Chinese, switchable in Settings or following your device language.</p>
       </div>
 
     </div>
