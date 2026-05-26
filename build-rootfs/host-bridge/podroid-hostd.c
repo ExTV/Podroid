@@ -28,6 +28,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/un.h>
+#include <termios.h>
 #include <unistd.h>
 
 #define SOCK_PATH   "/run/podroid-host.sock"
@@ -143,6 +144,22 @@ static int read_line_timeout(int fd, char *buf, size_t cap, int timeout_s) {
     return (int)n;
 }
 
+/* Discard any bytes already readable on the host channel before we send a new
+ * request. Android answers exactly one response per request, so anything
+ * pending here is stale - an orphaned response from an exchange that was
+ * abandoned on timeout, or buffered across a daemon restart / device reopen.
+ * Draining it keeps the channel self-synchronising: the response we read after
+ * write_line() then always corresponds to the request we just sent, instead of
+ * the stream drifting one message behind permanently. */
+static void drain_pending(int fd) {
+    int fl = fcntl(fd, F_GETFL, 0);
+    if (fl < 0) return;
+    if (fcntl(fd, F_SETFL, fl | O_NONBLOCK) < 0) return;
+    char buf[4096];
+    while (read(fd, buf, sizeof(buf)) > 0) { /* discard stale bytes */ }
+    fcntl(fd, F_SETFL, fl);  /* restore blocking */
+}
+
 /* Connects to the daemon, sends `req`, reads one response line into resp. */
 static int cli_roundtrip(const char *req, char *resp, size_t cap) {
     int fd = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -239,6 +256,20 @@ static int cli_forward(int argc, char **argv) {
     return cli_report(resp, list_decode);
 }
 
+/* On QEMU the host channel is /dev/hvc2, a virtio-console TTY that defaults to
+ * cooked mode with ECHO on. Echo is fatal here: every response the guest reads
+ * gets echoed straight back out to Android, which then parses its own "OK ..."
+ * as the next request and the stream desyncs permanently after the first
+ * exchange. Put the fd in raw mode so the channel is a clean byte pipe. No-op on
+ * AVF, where the host channel is a vsock socket (isatty is false). */
+static void set_raw_if_tty(int fd) {
+    if (!isatty(fd)) return;
+    struct termios tio;
+    if (tcgetattr(fd, &tio) != 0) return;
+    cfmakeraw(&tio);
+    tcsetattr(fd, TCSANOW, &tio);
+}
+
 static int is_avf(void) {
     int fd = open("/proc/cmdline", O_RDONLY);
     if (fd < 0) return 0;
@@ -300,10 +331,12 @@ static int daemon_main(void) {
             } else {
                 host_fd = open(HVC_PATH, O_RDWR | O_NOCTTY);
             }
+            if (host_fd >= 0) set_raw_if_tty(host_fd);
         }
         if (host_fd < 0) { write_line(cli, "ERR aG9zdCBjaGFubmVsIG5vdCBjb25uZWN0ZWQ="); close(cli); continue; }
 
         char resp[8192];
+        drain_pending(host_fd);  /* clear any stale/orphaned bytes so resp matches this req */
         if (write_line(host_fd, req) < 0 ||
             read_line_timeout(host_fd, resp, sizeof(resp), HOST_TIMEOUT_S) <= 0) {
             close(host_fd); host_fd = -1;
