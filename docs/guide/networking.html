@@ -134,7 +134,7 @@ podroid-forward 8888 80
 podroid-forward list
 <span class="c"># drop a rule</span>
 podroid-forward remove 8888 tcp</code></pre>
-      <p>Rules created this way are identical to ones added in Settings: they apply live, persist across reboots, and appear in the Settings list. UDP is QEMU-only (ignored on AVF), the same as the UI.</p>
+      <p>Rules created this way are identical to ones added in Settings: they apply live, persist across reboots, and appear in the Settings list. Both TCP and UDP work on either backend.</p>
 
       <h3><code>podroid-notify</code> - post an Android notification</h3>
       <pre><code><span class="c"># simplest form</span>
@@ -176,7 +176,7 @@ podroid-notify --id 7 "progress 50%"</code></pre>
 
       <div class="callout warn">
         <span class="label">Workaround</span>
-        <p>Forward to a high host port instead of the standard one: map host <code>8080</code> to guest <code>80</code>, and host <code>8443</code> to guest <code>443</code>. Services inside the guest can still listen on port 80 or 443 as usual - only the host-side port is restricted.</p>
+        <p>Forward to a high host port instead of the standard one: map host <code>8080</code> to guest <code>80</code>, and host <code>8443</code> to guest <code>443</code>. A daemon running as guest-root can still listen on 80 or 443. A <strong>rootless Podman or Docker</strong> container is the exception: its published port is also subject to the &ge;1024 limit inside the guest, so publish to a high guest port too - e.g. a Pi-hole DNS container on guest <code>5353/udp</code>, forwarded to host <code>5353</code>, with LAN clients pointed at <code>&lt;phone-ip&gt;:5353</code>.</p>
       </div>
 
       <pre><code><span class="c"># Forward a web server on guest :80 to a high host port</span>
@@ -186,11 +186,11 @@ podroid-notify --id 7 "progress 50%"</code></pre>
 <span class="p">$</span> curl http://&lt;phone-ip&gt;:8080</code></pre>
 
       <h2>Port forwarding on AVF</h2>
-      <p>On the AVF backend, port forwarding is implemented over <strong>vsock</strong> rather than SLIRP hostfwd. Each rule creates a TCP listener on <code>0.0.0.0:hostPort</code> on the Android side, which is bridged to a vsock port on the guest via the <code>podroid-vsock-agent</code> service. The privileged-port limit applies here too, for the same reason.</p>
+      <p>On the AVF backend, port forwarding is implemented over <strong>vsock</strong> rather than SLIRP hostfwd. Each rule creates a listener on <code>0.0.0.0:hostPort</code> on the Android side, which is bridged to a vsock port on the guest via the <code>podroid-vsock-agent</code> service. The privileged-port limit applies here too, for the same reason.</p>
 
       <div class="callout note">
         <span class="label">UDP on AVF</span>
-        <p>UDP rules are ignored on the AVF backend. The vsock transport is TCP-only. If you need UDP forwarding, use the QEMU backend.</p>
+        <p>UDP forwarding works on both backends. Because vsock is a stream transport, each inbound UDP datagram is length-framed and carried over a per-client vsock connection, then delivered to the guest as a real UDP datagram - so a guest DNS server such as Pi-hole is reachable over UDP. Idle flows are reaped automatically, and the number of concurrent client flows is capped to bound resource use.</p>
       </div>
 
       <div class="pagenav">

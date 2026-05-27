@@ -82,11 +82,6 @@
             <td>AVF uses the Android Virtualization Framework, which requires a device that ships pKVM (currently Pixel 8 and later). Two one-time <code>adb</code> grants (or Shizuku) are needed before AVF can start. Devices that only support protected VMs and not non-protected VMs cannot use the AVF backend at all; Podroid falls back to QEMU automatically.</td>
           </tr>
           <tr>
-            <td>AVF networking</td>
-            <td>TCP port forwarding only</td>
-            <td>The AVF backend forwards TCP ports via the in-app port-forward rules. UDP rules are silently ignored when AVF is active. If you need UDP (e.g. DNS on port 53 serving LAN clients), switch to QEMU.</td>
-          </tr>
-          <tr>
             <td>AVF CPU count</td>
             <td>No fine-grained vCPU selection</td>
             <td>Requesting more than one vCPU under AVF gives the VM all available host cores rather than the exact count chosen in Settings. The CPU count setting has full effect on the QEMU backend only.</td>
