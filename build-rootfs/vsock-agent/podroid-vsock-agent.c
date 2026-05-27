@@ -432,7 +432,7 @@ static void udp_relay(int vsock_fd, const char *host, int gport) {
                     if (acclen < 2) break;
                     size_t plen = ((size_t)acc[0] << 8) | acc[1];
                     if (acclen < 2 + plen) break;
-                    if (plen > 0) (void)send(u, acc + 2, plen, 0); /* best-effort */
+                    (void)send(u, acc + 2, plen, 0); /* best-effort; plen 0 = valid empty datagram */
                     size_t consumed = 2 + plen;
                     memmove(acc, acc + consumed, acclen - consumed);
                     acclen -= consumed;
