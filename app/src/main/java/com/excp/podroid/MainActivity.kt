@@ -36,14 +36,37 @@ class MainActivity : ComponentActivity() {
         setContent {
             val windowSizeClass = calculateWindowSizeClass(this)
             val navVm: NavGraphViewModel = hiltViewModel()
+            val headlessVm: com.excp.podroid.ui.HeadlessViewModel = hiltViewModel()
             val darkTheme by navVm.darkTheme.collectAsStateWithLifecycle(initialValue = null)
             val dynamicColor by navVm.dynamicColorEnabled.collectAsStateWithLifecycle(initialValue = false)
+            val headlessActive by headlessVm.active.collectAsStateWithLifecycle()
+
+            // Server mode: near-zero window brightness + keep the screen on so the
+            // app stays foreground (the VM is never backgrounded -> never killed).
+            androidx.compose.runtime.LaunchedEffect(headlessActive) {
+                val lp = window.attributes
+                if (headlessActive) {
+                    lp.screenBrightness = 0.004f
+                    window.attributes = lp
+                    window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                } else {
+                    lp.screenBrightness = android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                    window.attributes = lp
+                    window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                }
+            }
+
             PodroidTheme(darkTheme = darkTheme, dynamicColor = dynamicColor) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
                 ) {
-                    PodroidNavGraph(windowSizeClass = windowSizeClass)
+                    androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+                        PodroidNavGraph(windowSizeClass = windowSizeClass)
+                        if (headlessActive) {
+                            com.excp.podroid.ui.components.HeadlessOverlay(onExit = { headlessVm.disable() })
+                        }
+                    }
                 }
             }
         }
