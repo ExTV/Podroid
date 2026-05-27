@@ -49,6 +49,7 @@ class PodroidService : Service() {
     @Inject lateinit var settingsRepository: SettingsRepository
     @Inject lateinit var usbPassthroughManager: UsbPassthroughManager
     @Inject lateinit var notificationPoster: com.excp.podroid.engine.hostbridge.AndroidNotificationPoster
+    @Inject lateinit var headlessModeManager: com.excp.podroid.engine.hostbridge.HeadlessModeManager
     private var hostRequestServer: com.excp.podroid.engine.hostbridge.HostRequestServer? = null
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -273,6 +274,9 @@ class PodroidService : Service() {
             addForward = { portForwardRepository.addRule(it) },
             removeForward = { portForwardRepository.removeRule(it) },
             listForwards = { portForwardRepository.getRulesSnapshot() },
+            openUrl = { handleOpenUrl(it) },
+            power = { handlePowerRequest(it) },
+            setHeadless = { handleHeadlessRequest(it) },
         )
         return com.excp.podroid.engine.hostbridge.HostRequestServer(
             openTransport = { engine.openHostTransport() },
@@ -413,6 +417,74 @@ class PodroidService : Service() {
     private fun updateNotification(status: String) {
         val nm = getSystemService(NotificationManager::class.java)
         nm.notify(NOTIFICATION_ID, buildNotification(status))
+    }
+
+    private fun handleOpenUrl(url: String): String {
+        val uri = runCatching { android.net.Uri.parse(url) }.getOrNull()
+        if (uri == null || uri.scheme?.lowercase() !in setOf("http", "https")) {
+            return com.excp.podroid.engine.hostbridge.HostProtocol.err("only http/https URLs are allowed")
+        }
+        return try {
+            val intent = Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            applicationContext.startActivity(intent)
+            com.excp.podroid.engine.hostbridge.HostProtocol.ok()
+        } catch (e: Throwable) {
+            com.excp.podroid.engine.hostbridge.HostProtocol.err("no app available to open this URL")
+        }
+    }
+
+    private fun handleHeadlessRequest(action: String): String = when (action) {
+        "on" -> { headlessModeManager.setActive(true); com.excp.podroid.engine.hostbridge.HostProtocol.ok() }
+        "off" -> { headlessModeManager.setActive(false); com.excp.podroid.engine.hostbridge.HostProtocol.ok() }
+        "status" -> com.excp.podroid.engine.hostbridge.HostProtocol.ok(if (headlessModeManager.active.value) "on" else "off")
+        else -> com.excp.podroid.engine.hostbridge.HostProtocol.err("usage: on|off|status")
+    }
+
+    // Reply returned now; the stop/restart is posted to the main looper so the
+    // bridge flushes the response before the VM (and this service) tear down. The
+    // Handler callbacks capture the app-scoped engine + applicationContext (NOT
+    // `this`), so they survive this service's death.
+    private fun handlePowerRequest(action: String): String {
+        val proto = com.excp.podroid.engine.hostbridge.HostProtocol
+        return when (action) {
+            "status" -> proto.ok(engine.state.value.javaClass.simpleName)
+            "stop" -> {
+                val ctx = applicationContext
+                android.os.Handler(android.os.Looper.getMainLooper())
+                    .postDelayed({ PodroidService.stop(ctx) }, 300)
+                proto.ok()
+            }
+            "restart" -> { scheduleRestart(); proto.ok() }
+            else -> proto.err("usage: stop|restart|status")
+        }
+    }
+
+    private fun scheduleRestart() {
+        val ctx = applicationContext
+        val eng = engine
+        val main = android.os.Handler(android.os.Looper.getMainLooper())
+        main.postDelayed({
+            PodroidService.stop(ctx)
+            var tries = 0
+            val poll = object : Runnable {
+                override fun run() {
+                    val s = eng.state.value
+                    // Only Stopped/Error are genuine terminals after engine.stop().
+                    // Idle is the engine's pre-start normalized state, so treating
+                    // it as terminal could fire start() during a teardown blip.
+                    val terminal = s is VmState.Stopped || s is VmState.Error
+                    when {
+                        terminal -> PodroidService.start(ctx)
+                        tries++ >= 40 -> {
+                            Log.w(TAG, "restart: VM did not reach a stopped state in time (state=$s); starting anyway")
+                            PodroidService.start(ctx)
+                        }
+                        else -> main.postDelayed(this, 250)
+                    }
+                }
+            }
+            main.postDelayed(poll, 500)
+        }, 300)
     }
 
     companion object {

@@ -15,6 +15,9 @@ class HostRequestDispatcher(
     private val addForward: suspend (PortForwardRule) -> Unit,
     private val removeForward: suspend (PortForwardRule) -> Unit,
     private val listForwards: suspend () -> List<PortForwardRule>,
+    private val openUrl: suspend (String) -> String,
+    private val power: suspend (String) -> String,
+    private val setHeadless: suspend (String) -> String,
 ) {
     private val validProtocols = setOf("tcp", "udp")
 
@@ -26,6 +29,9 @@ class HostRequestDispatcher(
                 "FWD-ADD" -> handleFwdAdd(parts)
                 "FWD-REMOVE" -> handleFwdRemove(parts)
                 "FWD-LIST" -> handleFwdList()
+                "OPEN" -> handleOpen(parts)
+                "POWER" -> handlePower(parts)
+                "HEADLESS" -> handleHeadless(parts)
                 "PING" -> "PONG"
                 else -> HostProtocol.err("bad request")
             }
@@ -73,5 +79,27 @@ class HostRequestDispatcher(
     private suspend fun handleFwdList(): String {
         val table = listForwards().joinToString("\n") { "${it.hostPort} ${it.guestPort} ${it.protocol}" }
         return HostProtocol.ok(HostProtocol.enc(table))
+    }
+
+    // OPEN <b64url>
+    private suspend fun handleOpen(p: List<String>): String {
+        if (p.size != 2) return HostProtocol.err("bad request")
+        val url = HostProtocol.dec(p[1]) ?: return HostProtocol.err("bad url encoding")
+        if (url.isBlank()) return HostProtocol.err("empty url")
+        return openUrl(url)
+    }
+
+    // POWER <stop|restart|status>
+    private suspend fun handlePower(p: List<String>): String {
+        if (p.size != 2) return HostProtocol.err("bad request")
+        if (p[1] !in setOf("stop", "restart", "status")) return HostProtocol.err("usage: stop|restart|status")
+        return power(p[1])
+    }
+
+    // HEADLESS <on|off|status>
+    private suspend fun handleHeadless(p: List<String>): String {
+        if (p.size != 2) return HostProtocol.err("bad request")
+        if (p[1] !in setOf("on", "off", "status")) return HostProtocol.err("usage: on|off|status")
+        return setHeadless(p[1])
     }
 }

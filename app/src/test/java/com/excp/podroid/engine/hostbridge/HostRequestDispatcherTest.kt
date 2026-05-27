@@ -32,11 +32,17 @@ private class FakePoster(var permitted: Boolean = true) : NotificationPoster {
 private fun dispatcher(
     poster: NotificationPoster = FakePoster(),
     rules: MutableList<PortForwardRule> = mutableListOf(),
+    openUrl: suspend (String) -> String = { HostProtocol.ok() },
+    power: suspend (String) -> String = { HostProtocol.ok() },
+    setHeadless: suspend (String) -> String = { HostProtocol.ok() },
 ) = HostRequestDispatcher(
     notifications = poster,
     addForward = { r -> rules.removeAll { it.hostPort == r.hostPort && it.protocol == r.protocol }; rules.add(r) },
     removeForward = { r -> rules.removeAll { it.hostPort == r.hostPort && it.protocol == r.protocol } },
     listForwards = { rules.toList() },
+    openUrl = openUrl,
+    power = power,
+    setHeadless = setHeadless,
 )
 
 class HostRequestDispatcherTest {
@@ -121,5 +127,34 @@ class HostRequestDispatcherTest {
     @Test fun unknownIsBadRequest() = runBlocking {
         assertTrue(dispatcher().handle("FROBNICATE x").startsWith("ERR "))
         assertTrue(dispatcher().handle("").startsWith("ERR "))
+    }
+
+    @Test fun openDecodesUrlAndDelegates() = runBlocking {
+        var seen: String? = null
+        val d = dispatcher(openUrl = { seen = it; HostProtocol.ok() })
+        val resp = d.handle("OPEN ${HostProtocol.enc("https://example.com")}")
+        assertEquals("OK", resp)
+        assertEquals("https://example.com", seen)
+    }
+
+    @Test fun openRejectsBadEncoding() = runBlocking {
+        val resp = dispatcher().handle("OPEN !!!notbase64!!!")
+        assertTrue(resp.startsWith("ERR "))
+    }
+
+    @Test fun powerValidatesActionAndDelegates() = runBlocking {
+        var seen: String? = null
+        val d = dispatcher(power = { seen = it; HostProtocol.ok("Running") })
+        assertEquals("OK Running", d.handle("POWER status"))
+        assertEquals("status", seen)
+        assertTrue(d.handle("POWER explode").startsWith("ERR "))
+    }
+
+    @Test fun headlessValidatesActionAndDelegates() = runBlocking {
+        var seen: String? = null
+        val d = dispatcher(setHeadless = { seen = it; HostProtocol.ok() })
+        assertEquals("OK", d.handle("HEADLESS on"))
+        assertEquals("on", seen)
+        assertTrue(d.handle("HEADLESS sideways").startsWith("ERR "))
     }
 }
