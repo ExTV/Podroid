@@ -164,8 +164,8 @@
       </table>
 
       <div class="callout warn">
-        <span class="label">AVF boot failures on some Pixel 8 / 8a / 9 units</span>
-        <p>Some Pixel 8, Pixel 8a, and Pixel 9 units reboot the device during AVF VM startup. This appears to be a pKVM firmware issue on certain builds. If AVF causes a reboot, switch the backend to <strong>QEMU (TCG)</strong> in Settings &rarr; Advanced. QEMU is the reliable fallback on all devices. See <a href="limitations.html">Limitations &amp; troubleshooting</a> for the current status.</p>
+        <span class="label">AVF boot failures with multiple vCPUs on some units</span>
+        <p>On some units (notably certain Pixel 8 / 8a / 9 builds) the guest fails to boot under AVF when more than one vCPU is used - the all-cores topology trips secondary-CPU bringup early in boot on those hypervisors, before any console output appears. Podroid now detects an AVF guest that fails to boot and offers in-app recovery: <strong>Use 1 core</strong> - which boots successfully on the affected units - or <strong>Switch to QEMU</strong>. You can also set CPU cores to 1 in Settings &rarr; Advanced beforehand. QEMU (TCG) remains the reliable fallback on all devices. See <a href="limitations.html">Limitations &amp; troubleshooting</a> for the current status.</p>
       </div>
 
       <div class="pagenav">

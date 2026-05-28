@@ -31,7 +31,7 @@ A real Alpine Linux VM with its own kernel - not a chroot or proot trick - so ro
 ## What you get
 
 - **Podman, Docker and LXC** - rootless, pre-installed, ready the moment it boots
-- **A real VM** - Alpine Linux on a custom kernel via QEMU, or hardware-accelerated AVF on Pixel
+- **A real VM** - Alpine Linux on a custom kernel via QEMU, or hardware-accelerated AVF on supported pKVM devices
 - **In-app terminal** - full xterm-256color, 122 color themes, 13 fonts, live resize
 - **X11 desktop** - run GUI Linux apps in a built-in viewer with touch, keyboard, mouse and audio
 - **USB passthrough**, **SSH**, **port forwarding** and a **guest-to-Android bridge**
