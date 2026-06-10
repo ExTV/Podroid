@@ -5,7 +5,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import com.excp.podroid.ui.theme.PodroidTokens
 
 /**
  * Switch wrapper that locks the colors to the Podroid palette. Material 3's
@@ -25,9 +24,9 @@ fun PodroidSwitch(
         enabled = enabled,
         modifier = modifier,
         colors = SwitchDefaults.colors(
-            checkedThumbColor    = PodroidTokens.AccentInk,
-            checkedTrackColor    = PodroidTokens.Accent,
-            checkedBorderColor   = PodroidTokens.Accent,
+            checkedThumbColor    = MaterialTheme.colorScheme.onPrimary,
+            checkedTrackColor    = MaterialTheme.colorScheme.primary,
+            checkedBorderColor   = MaterialTheme.colorScheme.primary,
             uncheckedThumbColor  = MaterialTheme.colorScheme.onSurfaceVariant,
             uncheckedTrackColor  = MaterialTheme.colorScheme.surfaceVariant,
             uncheckedBorderColor = MaterialTheme.colorScheme.outline,

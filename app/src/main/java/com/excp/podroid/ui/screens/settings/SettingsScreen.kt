@@ -41,6 +41,7 @@ import androidx.compose.material3.windowsizeclass.WindowHeightSizeClass
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -855,6 +856,20 @@ private fun AdvancedTextSetting(
         if (localValue != value) localValue = value
     }
     var hadFocus by remember { mutableStateOf(false) }
+
+    // Commit a pending edit on dispose: persistence only happens on focus loss,
+    // but pressing system back while the field is still focused disposes the
+    // composable without a focus-change event, silently dropping the edit.
+    // rememberUpdatedState so onDispose sees the latest buffered/upstream values.
+    val currentUpstream by rememberUpdatedState(value)
+    val currentOnValueChange by rememberUpdatedState(onValueChange)
+    DisposableEffect(Unit) {
+        onDispose {
+            if (hadFocus && localState.value != currentUpstream) {
+                currentOnValueChange(localState.value)
+            }
+        }
+    }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         OutlinedTextField(

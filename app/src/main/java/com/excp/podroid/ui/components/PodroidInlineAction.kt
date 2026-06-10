@@ -27,11 +27,11 @@ fun PodroidInlineAction(
     Text(
         text = label,
         style = MaterialTheme.typography.labelMedium,
-        color = PodroidTokens.AccentInk,
+        color = MaterialTheme.colorScheme.onPrimary,
         fontWeight = FontWeight.SemiBold,
         modifier = modifier
             .clip(RoundedCornerShape(PodroidTokens.Radius.Chip))
-            .background(PodroidTokens.Accent)
+            .background(MaterialTheme.colorScheme.primary)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
     )

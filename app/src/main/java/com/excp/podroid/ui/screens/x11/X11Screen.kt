@@ -25,8 +25,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -42,6 +44,7 @@ import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -81,6 +84,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -417,10 +424,23 @@ fun X11Screen(
             }
             is X11ConnectionState.Failed -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        "${stringResource(R.string.x11_not_ready)}\n${state.message}",
-                        color = MaterialTheme.colorScheme.error,
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(24.dp),
+                    ) {
+                        Text(
+                            "${stringResource(R.string.x11_not_ready)}\n${state.message}",
+                            color = MaterialTheme.colorScheme.error,
+                            textAlign = TextAlign.Center,
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        // Xvnc often isn't up yet right after boot; connect() is
+                        // idempotent so a manual retry is safe instead of forcing
+                        // the user to leave and re-enter the screen.
+                        Button(onClick = { viewModel.connect() }) {
+                            Text(stringResource(R.string.try_again))
+                        }
+                    }
                 }
             }
             X11ConnectionState.Connected -> {
@@ -793,20 +813,27 @@ private fun X11KeyButton(
         }
     }
     val tapModifier = if (repeatable) {
-        Modifier.pointerInput(sendKey) {
-            awaitEachGesture {
-                awaitFirstDown(requireUnconsumed = false)
-                onKey(sendKey)
-                pressed = true
-                try {
-                    waitForUpOrCancellation()
-                } finally {
-                    pressed = false
+        // Button semantics so TalkBack can announce/activate the repeatable keys
+        // (the raw pointerInput path is otherwise invisible to accessibility).
+        Modifier
+            .semantics {
+                role = Role.Button
+                onClick(label = sendKey) { onKey(sendKey); true }
+            }
+            .pointerInput(sendKey) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    onKey(sendKey)
+                    pressed = true
+                    try {
+                        waitForUpOrCancellation()
+                    } finally {
+                        pressed = false
+                    }
                 }
             }
-        }
     } else {
-        Modifier.clickable { onKey(sendKey) }
+        Modifier.clickable(role = Role.Button) { onKey(sendKey) }
     }
     Text(
         text = label,

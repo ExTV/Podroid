@@ -28,8 +28,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.windowsizeclass.WindowHeightSizeClass
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -37,6 +40,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.excp.podroid.BuildConfig
 import com.excp.podroid.R
@@ -74,9 +80,19 @@ fun HomeScreen(
     val isRunning  = vmState is VmState.Running
     val isStarting = vmState is VmState.Starting
     val uptimeLabel = viewModel.uptimeLabel(uptimeTick)
-    // Cache the result of the ConnectivityManager binder call so it doesn't
-    // re-run on every 1 Hz tick or incidental recomposition.
-    val phoneIp = remember { viewModel.phoneIp() }
+    // Cache the ConnectivityManager binder call so it doesn't re-run on every
+    // 1 Hz tick or incidental recomposition, but refresh it on ON_RESUME so a
+    // Wi-Fi / hotspot change (the headline SSH use case) shows the new address
+    // instead of a stale one for the screen's lifetime.
+    var phoneIp by remember { mutableStateOf(viewModel.phoneIp()) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) phoneIp = viewModel.phoneIp()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     updateInfo?.let { info ->
         AlertDialog(
@@ -88,8 +104,15 @@ fun HomeScreen(
                 TextButton(onClick = {
                     // Guard against ActivityNotFoundException (no browser) or a
                     // blank/malformed releaseUrl from the remote JSON source.
+                    // Surface a toast on failure so the tap isn't a silent no-op.
                     runCatching {
                         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(info.releaseUrl)))
+                    }.onFailure {
+                        android.widget.Toast.makeText(
+                            context,
+                            context.getString(R.string.update_open_failed),
+                            android.widget.Toast.LENGTH_LONG,
+                        ).show()
                     }
                     viewModel.dismissUpdate()
                 }) { Text(stringResource(R.string.download)) }

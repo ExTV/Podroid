@@ -5,7 +5,6 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SelectableChipColors
 import androidx.compose.runtime.Composable
-import com.excp.podroid.ui.theme.PodroidTokens
 
 /**
  * Shared FilterChip color scheme. Used wherever Material3 FilterChip appears so
@@ -23,9 +22,9 @@ import com.excp.podroid.ui.theme.PodroidTokens
 fun PodroidChipColors(): SelectableChipColors = FilterChipDefaults.filterChipColors(
     containerColor                  = MaterialTheme.colorScheme.surfaceVariant,
     labelColor                      = MaterialTheme.colorScheme.onSurface,
-    selectedContainerColor          = PodroidTokens.Accent,
-    selectedLabelColor              = PodroidTokens.AccentInk,
+    selectedContainerColor          = MaterialTheme.colorScheme.primary,
+    selectedLabelColor              = MaterialTheme.colorScheme.onPrimary,
     disabledContainerColor          = MaterialTheme.colorScheme.surfaceVariant,
     disabledLabelColor              = MaterialTheme.colorScheme.onSurfaceVariant,
-    disabledSelectedContainerColor  = PodroidTokens.Accent.copy(alpha = 0.45f),
+    disabledSelectedContainerColor  = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f),
 )

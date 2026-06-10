@@ -123,6 +123,7 @@
     <!-- Dialogs -->
     <string name="update_available">Update available</string>
     <string name="version_available">Version %1$s is available. You have %2$s.</string>
+    <string name="update_open_failed">Couldn\'t open the download page. No browser available?</string>
 
     <!-- Language -->
     <string name="language_label">Language</string>
@@ -170,6 +171,7 @@
 
     <!-- X11 -->
     <string name="x11_title">X11</string>
+    <string name="x11_open">Open X11 desktop</string>
     <string name="x11_connecting">Connecting to X11 server...</string>
     <string name="x11_not_ready">X11 server not ready — VM still booting?</string>
     <string name="fullscreen">Fullscreen</string>

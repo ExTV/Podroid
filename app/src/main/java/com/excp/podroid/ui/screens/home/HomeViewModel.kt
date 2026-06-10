@@ -204,7 +204,11 @@ class HomeViewModel @Inject constructor(
                 if (!updateRepository.isDismissed(info.latestVersion)) {
                     _updateInfo.value = info
                 }
-            } catch (_: Exception) { }
+            } catch (c: kotlinx.coroutines.CancellationException) {
+                throw c
+            } catch (e: Exception) {
+                android.util.Log.w("HomeViewModel", "update check failed", e)
+            }
         }
     }
 

@@ -34,8 +34,11 @@ fun PodroidPrimaryButton(
         modifier = modifier.fillMaxWidth().height(44.dp),
         shape = RoundedCornerShape(PodroidTokens.Radius.Button),
         colors = ButtonDefaults.buttonColors(
-            containerColor = PodroidTokens.Accent,
-            contentColor   = PodroidTokens.AccentInk,
+            // colorScheme.primary/onPrimary, not the fixed Accent literal, so the
+            // primary button re-tints when the user enables dynamic color (the
+            // fixed theme maps primary = Accent, so the default look is identical).
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor   = MaterialTheme.colorScheme.onPrimary,
         ),
     ) {
         if (icon != null) {

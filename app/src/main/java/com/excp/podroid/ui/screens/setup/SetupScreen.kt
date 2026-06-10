@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts.RequestPermission
 import androidx.compose.animation.core.animateDpAsState
@@ -110,6 +111,13 @@ fun SetupScreen(
             }
             onSetupComplete()
         }
+    }
+
+    // System back steps the wizard back one page instead of exiting the app
+    // (setup is the start destination, so an unhandled back would finish the
+    // Activity mid-wizard). Disabled on page 0 so back there behaves normally.
+    BackHandler(enabled = pagerState.currentPage > 0) {
+        scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
     }
 
     // Re-sync storageAccessEnabled against the actual OS grant on every

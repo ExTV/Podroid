@@ -123,6 +123,7 @@
     <!-- Dialogs -->
     <string name="update_available">有新版本可用</string>
     <string name="version_available">版本 %1$s 可用。当前版本 %2$s。</string>
+    <string name="update_open_failed">无法打开下载页面。没有可用的浏览器？</string>
 
     <!-- Language -->
     <string name="language_label">语言</string>
@@ -170,6 +171,7 @@
 
     <!-- X11 -->
     <string name="x11_title">X11</string>
+    <string name="x11_open">打开 X11 桌面</string>
     <string name="x11_connecting">正在连接 X11 服务器...</string>
     <string name="x11_not_ready">X11 服务器未就绪 — 虚拟机是否仍在启动？</string>
     <string name="fullscreen">全屏</string>
