@@ -6,7 +6,7 @@
   <title>Podroid: Linux containers on Android, no root required</title>
   <meta name="description" content="Podroid runs Podman, Docker, and LXC on Android in a real Alpine Linux VM with a custom Linux 7.0.10 kernel - via QEMU on any ARM64 device, or hardware-accelerated AVF (pKVM) on supported Pixels - plus an in-app X11 desktop for GUI apps. No root, no custom recovery." />
   <meta property="og:title" content="Podroid: Linux containers on Android, no root required" />
-  <meta property="og:description" content="Spin up a real Alpine Linux VM with a full Podman runtime on any Android 9+ ARM64 device. QEMU software emulation everywhere, or near-native AVF (pKVM) acceleration on supported Pixels. No root, no Magisk." />
+  <meta property="og:description" content="Spin up a real Alpine Linux VM with a full Podman runtime on any Android 8+ ARM64 device. QEMU software emulation everywhere, or near-native AVF (pKVM) acceleration on supported Pixels. No root, no Magisk." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://extv.github.io/Podroid/" />
   <meta property="og:image" content="https://extv.github.io/Podroid/logo.png" />
@@ -584,7 +584,7 @@
       View on GitHub
     </a>
   </div>
-  <p class="hero-meta">ARM64 · Android 9+ · No root · GPLv2</p>
+  <p class="hero-meta">ARM64 · Android 8+ · No root · GPLv2</p>
 </section>
 
 <!-- FEATURES -->
@@ -772,7 +772,7 @@
           </tr>
           <tr>
             <td class="row-label">Works on any ARM64</td>
-            <td class="col-podroid"><span class="check">✓ Android 9+</span></td>
+            <td class="col-podroid"><span class="check">✓ Android 8+</span></td>
             <td><span class="check">✓</span></td>
             <td><span class="cross">✗ Pixel only</span></td>
           </tr>
@@ -895,7 +895,7 @@ qmp.sock               →  runtime port-forward control</div>
         </div>
         <div class="qs-step">
           <div class="qs-step-num">2</div>
-          <p><strong>Install</strong> it on your Android device (ARM64, Android 9+).</p>
+          <p><strong>Install</strong> it on your Android device (ARM64, Android 8+).</p>
         </div>
         <div class="qs-step">
           <div class="qs-step-num">3</div>
@@ -942,7 +942,7 @@ qmp.sock               →  runtime port-forward control</div>
       <details>
         <summary>Does this require root or a modified Android?</summary>
         <div class="faq-answer">
-          No. Podroid runs entirely in userspace using QEMU's TCG (software emulation). No root, no custom recovery, no Magisk. Any stock Android 9+ ARM64 device works.
+          No. Podroid runs entirely in userspace using QEMU's TCG (software emulation). No root, no custom recovery, no Magisk. Any stock Android 8+ ARM64 device works.
         </div>
       </details>
 
@@ -956,7 +956,7 @@ qmp.sock               →  runtime port-forward control</div>
       <details>
         <summary>How is this different from Google Terminal / AVF?</summary>
         <div class="faq-answer">
-          Google's Terminal app uses Android Virtualization Framework (AVF), a system-level hypervisor available only on recent Pixel devices. It gives you a Debian VM but no container runtime and limited configurability. Podroid runs on <em>any</em> ARM64 Android 9+ device via QEMU TCG (software emulation), and on a Pixel that ships pKVM it can use AVF too for near-native speed - the same Alpine guest either way. It ships with three container engines, port forwarding, SSH, an in-app X11 desktop, and a configurable terminal.
+          Google's Terminal app uses Android Virtualization Framework (AVF), a system-level hypervisor available only on recent Pixel devices. It gives you a Debian VM but no container runtime and limited configurability. Podroid runs on <em>any</em> ARM64 Android 8+ device via QEMU TCG (software emulation), and on a Pixel that ships pKVM it can use AVF too for near-native speed - the same Alpine guest either way. It ships with three container engines, port forwarding, SSH, an in-app X11 desktop, and a configurable terminal.
         </div>
       </details>
 

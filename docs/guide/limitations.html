@@ -74,8 +74,8 @@
           </tr>
           <tr>
             <td>OS version</td>
-            <td>Android 9+ required (minSdk 28)</td>
-            <td>Features such as <code>memfd_create</code> and the required SELinux/seccomp policy are only stable from API 28. Android 8 is blocked additionally by glib/iconv linking issues in the QEMU build.</td>
+            <td>Android 8+ required (minSdk 26)</td>
+            <td>API 26 is the floor for the SELinux/seccomp policy and native ABI the VM relies on. Android 8 and 8.1 are supported as of v1.2.5; an iconv shim in the QEMU build resolved the earlier glib linking issue that previously blocked them.</td>
           </tr>
           <tr>
             <td>AVF backend</td>
@@ -85,7 +85,12 @@
           <tr>
             <td>AVF CPU count</td>
             <td>No fine-grained vCPU selection</td>
-            <td>Requesting more than one vCPU under AVF gives the VM all available host cores rather than the exact count chosen in Settings. The CPU count setting has full effect on the QEMU backend only.</td>
+            <td>The AVF API exposes only one vCPU or all host cores, not an exact count, so the CPU count setting is precise on the QEMU backend only. As of v1.2.5, multi-core AVF works reliably: if a device cannot bring up every core at boot (seen on Tensor G3/G4 Pixels), Podroid automatically retries with fewer cores and remembers the highest count that boots.</td>
+          </tr>
+          <tr>
+            <td>AVF on the Android 17 beta</td>
+            <td>VMs fail to boot (boot loop, empty console)</td>
+            <td>On the Android 17 beta, the system VM manager and its bundled crosvm disagree on guest networking, so AVF VMs reset before the guest loads. This is a platform-side beta regression, not a Podroid bug. Switch the backend to QEMU (TCG) in Settings until Google resolves it; QEMU is unaffected.</td>
           </tr>
           <tr>
             <td>USB passthrough</td>
@@ -188,7 +193,7 @@
         <a class="prev" href="settings.html"><span class="dir">Previous</span>&larr; Terminal &amp; settings</a>
         <a class="next" href="use-cases.html"><span class="dir">Next</span>Use cases &rarr;</a>
       </div>
-      <p class="docfoot">Podroid is free software (GPL). Docs for v1.2.3. Found something inaccurate? <a href="https://github.com/ExTV/Podroid/issues">Open an issue</a>.</p>
+      <p class="docfoot">Podroid is free software (GPL). Docs for v1.2.5. Found something inaccurate? <a href="https://github.com/ExTV/Podroid/issues">Open an issue</a>.</p>
     </main>
   </div>
 

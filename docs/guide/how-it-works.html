@@ -57,7 +57,7 @@
       <h2>Two backends</h2>
       <p>Podroid supports two hypervisor backends, selectable in Settings. The guest is identical either way - only the host-side virtualization layer differs.</p>
       <ul>
-        <li><strong>QEMU (default):</strong> software CPU emulation via TCG. Works on any ARM64 Android 9+ device. Slower than native because every guest instruction is translated and executed by the host CPU. See the <a href="backends.html">Backends</a> page for tuning options.</li>
+        <li><strong>QEMU (default):</strong> software CPU emulation via TCG. Works on any ARM64 Android 8+ device. Slower than native because every guest instruction is translated and executed by the host CPU. See the <a href="backends.html">Backends</a> page for tuning options.</li>
         <li><strong>AVF / pKVM:</strong> hardware virtualization via Android's Virtualization Framework. Available on recent Pixel devices that ship pKVM. Runs at near-native speed. Requires two one-time <code>adb</code> permission grants. See <a href="backends.html">Backends: QEMU &amp; AVF</a>.</li>
       </ul>
 
@@ -143,7 +143,7 @@
         <a class="prev" href="getting-started.html"><span class="dir">Previous</span>&larr; Getting started</a>
         <a class="next" href="performance.html"><span class="dir">Next</span>Performance &amp; why it's slow &rarr;</a>
       </div>
-      <p class="docfoot">Podroid is free software (GPL). Docs for v1.2.3. Found something inaccurate? <a href="https://github.com/ExTV/Podroid/issues">Open an issue</a>.</p>
+      <p class="docfoot">Podroid is free software (GPL). Docs for v1.2.5. Found something inaccurate? <a href="https://github.com/ExTV/Podroid/issues">Open an issue</a>.</p>
     </main>
   </div>
 

@@ -65,7 +65,7 @@
       </div>
 
       <h2>QEMU (TCG)</h2>
-      <p>The QEMU backend is the default and works on <strong>any ARM64 Android 9+ device</strong> with no setup beyond installing the app. The guest CPU is emulated in software via TCG (Tiny Code Generator). See <a href="performance.html">Performance &amp; why it's slow</a> for a full explanation of where the overhead comes from and what Podroid does to reduce it. The short version: simple workloads are 2-5x slower than native; JIT-heavy workloads (Node, JVM, compilers) are slower still because of double-JIT and cold-cache process-spawn costs.</p>
+      <p>The QEMU backend is the default and works on <strong>any ARM64 Android 8+ device</strong> with no setup beyond installing the app. The guest CPU is emulated in software via TCG (Tiny Code Generator). See <a href="performance.html">Performance &amp; why it's slow</a> for a full explanation of where the overhead comes from and what Podroid does to reduce it. The short version: simple workloads are 2-5x slower than native; JIT-heavy workloads (Node, JVM, compilers) are slower still because of double-JIT and cold-cache process-spawn costs.</p>
 
       <p>QEMU supports both <strong>TCP and UDP port forwarding</strong>. Rules you configure in the Port Forwarding screen work for both protocols.</p>
 
@@ -117,7 +117,7 @@
         <tbody>
           <tr>
             <td>Device requirement</td>
-            <td>Any ARM64 Android 9+</td>
+            <td>Any ARM64 Android 8+</td>
             <td>Device must ship pKVM (recent Pixels and select others)</td>
           </tr>
           <tr>
@@ -138,7 +138,7 @@
           <tr>
             <td>vCPU count</td>
             <td>Configurable (1 to device core count)</td>
-            <td>1 vCPU = one physical core; &gt;1 vCPU = all host cores</td>
+            <td>1 vCPU = one core; &gt;1 = all host cores, with automatic fallback to fewer if a device can't boot them all</td>
           </tr>
           <tr>
             <td>Terminal console</td>
@@ -163,16 +163,16 @@
         </tbody>
       </table>
 
-      <div class="callout warn">
-        <span class="label">AVF boot failures with multiple vCPUs on some units</span>
-        <p>On some units (notably certain Pixel 8 / 8a / 9 builds) the guest fails to boot under AVF when more than one vCPU is used - the all-cores topology trips secondary-CPU bringup early in boot on those hypervisors, before any console output appears. Podroid now detects an AVF guest that fails to boot and offers in-app recovery: <strong>Use 1 core</strong> - which boots successfully on the affected units - or <strong>Switch to QEMU</strong>. You can also set CPU cores to 1 in Settings &rarr; Advanced beforehand. QEMU (TCG) remains the reliable fallback on all devices. See <a href="limitations.html">Limitations &amp; troubleshooting</a> for the current status.</p>
+      <div class="callout note">
+        <span class="label">Multi-core AVF and automatic fallback</span>
+        <p>On some units (notably Tensor G3/G4 Pixels - 8 / 8a / 8 Pro and the 9 series) the all-cores topology trips secondary-CPU bringup early in boot, before any console output appears. As of v1.2.5 this is handled automatically: AVF starts with the cores you chose, and if the VM resets during boot Podroid retries with fewer cores and remembers the highest count that boots on your device - no action needed. The manual <strong>Use 1 core</strong> and <strong>Switch to QEMU</strong> options remain as fallbacks, and QEMU (TCG) is reliable on all devices. See <a href="limitations.html">Limitations &amp; troubleshooting</a>.</p>
       </div>
 
       <div class="pagenav">
         <a class="prev" href="performance.html"><span class="dir">Previous</span>&larr; Performance</a>
         <a class="next" href="networking.html"><span class="dir">Next</span>Networking &amp; ports &rarr;</a>
       </div>
-      <p class="docfoot">Podroid is free software (GPL). Docs for v1.2.3. Found something inaccurate? <a href="https://github.com/ExTV/Podroid/issues">Open an issue</a>.</p>
+      <p class="docfoot">Podroid is free software (GPL). Docs for v1.2.5. Found something inaccurate? <a href="https://github.com/ExTV/Podroid/issues">Open an issue</a>.</p>
     </main>
   </div>
 
