@@ -217,6 +217,10 @@ class SettingsViewModel @Inject constructor(
     // The caller uses the return value to show feedback instead of silently
     // closing the dialog on a duplicate.
     fun addPortForward(hostPort: Int, guestPort: Int, protocol: String = "tcp"): Boolean {
+        // Backstop the dialog's reserved-port check: these host ports back the
+        // implicit loopback-bound X11 forwards and must never be user-bound to
+        // 0.0.0.0 (the dialog rejects them with a dedicated message first).
+        if (hostPort in PortForwardRepository.RESERVED_HOST_PORTS) return false
         val protos = if (protocol == "both") listOf("tcp", "udp") else listOf(protocol)
         val existing = portForwardRules.value.toSet()
         val toAdd = protos.filter { proto ->

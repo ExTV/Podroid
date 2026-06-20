@@ -70,6 +70,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.excp.podroid.BuildConfig
 import com.excp.podroid.R
+import com.excp.podroid.data.repository.PortForwardRepository
 import com.excp.podroid.data.repository.PortForwardRule
 import com.excp.podroid.engine.EngineSelection
 import com.excp.podroid.engine.VmState
@@ -835,6 +836,10 @@ private fun AddPortForwardDialog(
                 val gp = guestPort.toIntOrNull()
                 if (hp == null || gp == null || hp !in 1..65535 || gp !in 1..65535) {
                     error = invalidPortsMsg
+                    return@TextButton
+                }
+                if (hp in PortForwardRepository.RESERVED_HOST_PORTS) {
+                    error = context.getString(R.string.port_reserved, hp)
                     return@TextButton
                 }
                 val added = onAdd(hp, gp, protocol)

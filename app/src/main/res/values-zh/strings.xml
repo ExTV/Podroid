@@ -101,6 +101,7 @@
     <string name="both">两者</string>
     <string name="enter_valid_ports">输入有效的端口号 (1-65535)</string>
     <string name="port_already_forwarded">端口 %1$d (%2$s) 已转发</string>
+    <string name="port_reserved">端口 %1$d 已保留给应用内桌面</string>
     <string name="reset">重置</string>
     <string name="remove">删除</string>
     <string name="port_forwards_count">端口转发 (%1$d)</string>

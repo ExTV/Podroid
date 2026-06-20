@@ -10,6 +10,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringSetPreferencesKey
+import com.excp.podroid.x11.X11Constants
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -86,6 +87,18 @@ class PortForwardRepository @Inject constructor(
 ) {
     companion object {
         private val KEY_PORT_FORWARDS = stringSetPreferencesKey("port_forwards")
+
+        /**
+         * Host ports owned by the implicit, loopback-bound X11 display/audio
+         * forwards (injected at launch, never persisted). A user rule on one of
+         * these would shadow the implicit rule and bind 0.0.0.0, exposing the
+         * no-auth X session + raw PCM to the whole LAN. They are rejected on add
+         * and filtered from reads here — the single chokepoint feeding the launch
+         * snapshot, the EngineHolder live-diff, and the Settings UI — so a stale
+         * rule persisted by an older build can never be surfaced or applied.
+         * SSH (9922) is intentionally LAN-reachable and is NOT reserved.
+         */
+        val RESERVED_HOST_PORTS = setOf(X11Constants.VNC_PORT, X11Constants.AUDIO_PORT)
     }
 
     val rules: Flow<List<PortForwardRule>> = context.dataStore.data
@@ -93,12 +106,14 @@ class PortForwardRepository @Inject constructor(
         .map { prefs ->
             prefs[KEY_PORT_FORWARDS]
                 ?.mapNotNull { PortForwardRule.deserialize(it) }
+                ?.filter { it.hostPort !in RESERVED_HOST_PORTS }
                 ?.sortedWith(compareBy({ it.hostPort }, { it.protocol }))
                 ?: emptyList()
         }
         .distinctUntilChanged()
 
     suspend fun addRule(rule: PortForwardRule) {
+        if (rule.hostPort in RESERVED_HOST_PORTS) return
         context.dataStore.edit { prefs ->
             val current = prefs[KEY_PORT_FORWARDS] ?: emptySet()
             prefs[KEY_PORT_FORWARDS] = deduplicatePortForwards(current, rule)
@@ -119,6 +134,7 @@ class PortForwardRepository @Inject constructor(
             .map { prefs ->
                 prefs[KEY_PORT_FORWARDS]
                     ?.mapNotNull { PortForwardRule.deserialize(it) }
+                    ?.filter { it.hostPort !in RESERVED_HOST_PORTS }
                     ?: emptyList()
             }.first()
 }

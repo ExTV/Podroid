@@ -101,6 +101,7 @@
     <string name="both">Both</string>
     <string name="enter_valid_ports">Enter valid port numbers (1–65535)</string>
     <string name="port_already_forwarded">Port %1$d (%2$s) is already forwarded</string>
+    <string name="port_reserved">Port %1$d is reserved for the in-app desktop</string>
     <string name="reset">Reset</string>
     <string name="remove">Remove</string>
     <string name="port_forwards_count">Port forwards (%1$d)</string>
