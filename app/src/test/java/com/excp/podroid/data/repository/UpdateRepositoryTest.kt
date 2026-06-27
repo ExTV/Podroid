@@ -6,6 +6,7 @@
  */
 package com.excp.podroid.data.repository
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -53,6 +54,34 @@ class UpdateRepositoryTest {
         val validity = 24 * 60 * 60 * 1000L
         // 0 = never checked; now is more than 24h past epoch, so check is due.
         assertTrue(shouldCheck(validity + 1L, 0L, validity))
+    }
+
+    // ------------------------------------------------------------------
+    // backoffStamp (transient failures earn a short retry floor, not 24h)
+    // ------------------------------------------------------------------
+
+    @Test
+    fun `backoffStamp on a transient failure re-opens the gate after the retry floor`() {
+        val validity = 24 * 60 * 60 * 1000L
+        val floor = 20 * 60 * 1000L
+        val now = 1_700_000_000_000L
+        val stamp = backoffStamp(now, transient = true, validity, floor)
+        // Gate stays closed until the floor elapses, then re-opens — not a full day.
+        assertFalse(shouldCheck(now + floor - 1L, stamp, validity))
+        assertTrue(shouldCheck(now + floor, stamp, validity))
+        // And it would NOT have re-opened this early under the full validity window.
+        assertFalse(shouldCheck(now + floor, now, validity))
+    }
+
+    @Test
+    fun `backoffStamp on a definitive failure backs off the full validity window`() {
+        val validity = 24 * 60 * 60 * 1000L
+        val floor = 20 * 60 * 1000L
+        val now = 1_700_000_000_000L
+        val stamp = backoffStamp(now, transient = false, validity, floor)
+        assertEquals(now, stamp)
+        assertFalse(shouldCheck(now + validity - 1L, stamp, validity))
+        assertTrue(shouldCheck(now + validity, stamp, validity))
     }
 
     // ------------------------------------------------------------------
