@@ -89,6 +89,11 @@
     <string name="export_diagnostic_log">Export diagnostic log</string>
     <string name="avf_diagnostic">AVF (pKVM) diagnostic</string>
     <string name="running_avf_diagnostic">Running AVF diagnostic…</string>
+    <string name="probing_avf">Probing…</string>
+    <string name="export_diagnostic_subject">Podroid Diagnostic Log</string>
+    <string name="export_diagnostic_chooser">Share diagnostic log</string>
+    <string name="export_diagnostic_failed">Export failed: %1$s</string>
+    <string name="unknown_error">unknown error</string>
     <string name="verbose_avf_logging">Verbose AVF logging</string>
     <string name="close">Close</string>
     <string name="add_port_forward">Add port forward</string>

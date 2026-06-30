@@ -9,6 +9,7 @@
 package com.excp.podroid.engine.hostbridge
 
 import com.excp.podroid.data.repository.PortForwardRule
+import kotlinx.coroutines.CancellationException
 
 class HostRequestDispatcher(
     private val notifications: NotificationPoster,
@@ -21,11 +22,15 @@ class HostRequestDispatcher(
 ) {
     private val validProtocols = setOf("tcp", "udp")
 
+    private companion object {
+        private val WHITESPACE = Regex("\\s+")
+    }
+
     suspend fun handle(line: String): String {
         // Split on runs of whitespace and drop empties so a double space (or a
         // tab) between tokens doesn't shift the field count and fail an otherwise
         // valid request.
-        val parts = line.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        val parts = line.trim().split(WHITESPACE).filter { it.isNotEmpty() }
         if (parts.isEmpty()) return HostProtocol.err("bad request")
         return try {
             when (parts[0]) {
@@ -39,8 +44,14 @@ class HostRequestDispatcher(
                 "PING" -> "PONG"
                 else -> HostProtocol.err("bad request")
             }
+        } catch (e: CancellationException) {
+            // Don't turn a coroutine cancellation into an error response — rethrow
+            // so structured concurrency can unwind (QmpClient.exec does the same).
+            throw e
         } catch (e: Exception) {
-            HostProtocol.err(e.message ?: e.javaClass.simpleName)
+            // No javaClass.simpleName fallback: R8 obfuscates it to noise like
+            // "wc2" in release, which would surface to the guest as the error text.
+            HostProtocol.err(e.message ?: "internal error")
         }
     }
 

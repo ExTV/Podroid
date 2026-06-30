@@ -14,6 +14,7 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.excp.podroid.BuildConfig
+import com.excp.podroid.R
 import com.excp.podroid.data.repository.LanguageManager
 import com.excp.podroid.data.repository.PortForwardRepository
 import com.excp.podroid.data.repository.PortForwardRule
@@ -166,8 +167,11 @@ class SettingsViewModel @Inject constructor(
     val portForwardRules: StateFlow<List<PortForwardRule>> = portForwardRepository.rules
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // Eagerly (like HomeViewModel): WhileSubscribed replays the initial Idle on
+    // re-subscription, flashing a "stopped" indicator for a frame when the screen
+    // is reopened within the stop-timeout window.
     val vmState: StateFlow<VmState> = engine.state
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), VmState.Idle)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, VmState.Idle)
 
     fun setDarkTheme(value: Boolean) {
         viewModelScope.launch { settingsRepository.setDarkTheme(value) }
@@ -319,16 +323,19 @@ class SettingsViewModel @Inject constructor(
                 val intent = Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
                     putExtra(Intent.EXTRA_STREAM, uri)
-                    putExtra(Intent.EXTRA_SUBJECT, "Podroid Diagnostic Log")
+                    putExtra(Intent.EXTRA_SUBJECT, context.getString(R.string.export_diagnostic_subject))
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                context.startActivity(Intent.createChooser(intent, "Share diagnostic log").apply {
+                context.startActivity(Intent.createChooser(intent, context.getString(R.string.export_diagnostic_chooser)).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 })
             } catch (e: Exception) {
                 Log.w(TAG, "Export failed", e)
-                _exportError.value = "Export failed: ${e.message ?: "unknown error"}"
+                _exportError.value = context.getString(
+                    R.string.export_diagnostic_failed,
+                    e.message ?: context.getString(R.string.unknown_error),
+                )
             }
         }
     }

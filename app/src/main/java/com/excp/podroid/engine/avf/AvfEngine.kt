@@ -480,14 +480,26 @@ class AvfEngine @Inject constructor(
             // promoting a VM that already stopped in the delay window.
             bootTimeoutJob = scope.launch {
                 kotlinx.coroutines.delay(BOOT_TIMEOUT_MS)
-                if (generation == vmGeneration && !cleanedUp.get() &&
-                    _state.value is VmState.Starting) {
-                    Log.w(TAG, "AVF boot timeout — forcing Running state")
-                    _bootStage.value = "Ready"
-                    _runningSinceMs = System.currentTimeMillis()
-                    _state.value = VmState.Running
-                    bringUpControlChannel()
+                // Re-check the guard AND flip state under the same monitor that
+                // onVmTerminal/cleanup hold (@Synchronized -> this). Otherwise a
+                // terminal callback running cleanup() during the delay window
+                // (which nulls vmHandle and sets cleanedUp) could be overwritten
+                // back to Running here, orphaning the engine with null handles.
+                // bringUpControlChannel() runs outside the lock — it only reads
+                // vmHandle and bails if null.
+                val promoted = synchronized(this@AvfEngine) {
+                    if (generation == vmGeneration && !cleanedUp.get() &&
+                        _state.value is VmState.Starting) {
+                        Log.w(TAG, "AVF boot timeout — forcing Running state")
+                        _bootStage.value = "Ready"
+                        _runningSinceMs = System.currentTimeMillis()
+                        _state.value = VmState.Running
+                        true
+                    } else {
+                        false
+                    }
                 }
+                if (promoted) bringUpControlChannel()
             }
         } catch (e: CancellationException) {
             // The start coroutine runs in PodroidService.serviceScope, cancelled

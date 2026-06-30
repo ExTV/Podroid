@@ -369,7 +369,7 @@ fun SettingsScreen(
                     onClick = {
                         if (avfRunning) return@PodroidGhostButton
                         avfRunning = true
-                        avfReportText = "Probing…"
+                        avfReportText = ctx.getString(R.string.probing_avf)
                         avfScope.launch {
                             val probe = AvfDiagnostics.probe(ctx)
                             val smoke = if (probe.featureSupported && probe.managePermissionGranted) {

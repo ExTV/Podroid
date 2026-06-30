@@ -97,7 +97,7 @@ fun HomeScreen(
     updateInfo?.let { info ->
         AlertDialog(
             onDismissRequest = { viewModel.dismissUpdate() },
-            icon  = { Icon(Icons.Default.SystemUpdate, contentDescription = null) },
+            icon  = { Icon(Icons.Default.SystemUpdate, contentDescription = stringResource(R.string.update_available)) },
             title = { Text(stringResource(R.string.update_available)) },
             text  = { Text(stringResource(R.string.version_available, info.latestVersion, BuildConfig.VERSION_NAME)) },
             confirmButton = {

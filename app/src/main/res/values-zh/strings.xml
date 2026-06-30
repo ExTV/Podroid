@@ -89,6 +89,11 @@
     <string name="export_diagnostic_log">导出诊断日志</string>
     <string name="avf_diagnostic">AVF (pKVM) 诊断</string>
     <string name="running_avf_diagnostic">运行 AVF 诊断…</string>
+    <string name="probing_avf">正在探测…</string>
+    <string name="export_diagnostic_subject">Podroid 诊断日志</string>
+    <string name="export_diagnostic_chooser">分享诊断日志</string>
+    <string name="export_diagnostic_failed">导出失败：%1$s</string>
+    <string name="unknown_error">未知错误</string>
     <string name="verbose_avf_logging">详细 AVF 日志</string>
     <string name="close">关闭</string>
     <string name="add_port_forward">添加端口转发</string>

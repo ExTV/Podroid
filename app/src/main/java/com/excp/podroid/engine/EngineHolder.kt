@@ -120,7 +120,10 @@ class EngineHolder @Inject constructor(
         //    awaits firstPick directly, so an early Start beats no race here.
         // runCatching: start() consumes firstPick's result, so an await() throw here
         // would otherwise be an uncaught exception on the scope thread.
-        scope.launch { runCatching { publishFirstPick(firstPick.await()) } }
+        scope.launch {
+            runCatching { publishFirstPick(firstPick.await()) }
+                .onFailure { android.util.Log.w(TAG, "init first-pick failed; start() will retry", it) }
+        }
 
         // 1. Backend swap observer — drops the first emit so we don't re-pick
         //    on cold start. Waits for Stopped/Idle/Error so we never kill a

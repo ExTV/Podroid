@@ -49,8 +49,15 @@ class QemuHostTransport private constructor(
         /** Returns null if QEMU has not created the socket yet (caller retries). */
         fun open(socketPath: String): QemuHostTransport? = runCatching {
             val s = LocalSocket()
-            s.connect(LocalSocketAddress(socketPath, LocalSocketAddress.Namespace.FILESYSTEM))
-            QemuHostTransport(s, BufferedReader(InputStreamReader(s.inputStream)), s.outputStream)
+            try {
+                s.connect(LocalSocketAddress(socketPath, LocalSocketAddress.Namespace.FILESYSTEM))
+                QemuHostTransport(s, BufferedReader(InputStreamReader(s.inputStream)), s.outputStream)
+            } catch (t: Throwable) {
+                // connect()/stream access failed after the socket was created —
+                // close it so a retry loop doesn't leak one fd per attempt.
+                runCatching { s.close() }
+                throw t
+            }
         }.getOrNull()
     }
 }
@@ -77,12 +84,22 @@ class AvfHostTransport private constructor(
     companion object {
         /** Returns null if the guest daemon is not listening yet (caller retries). */
         fun open(vm: Any): AvfHostTransport? = runCatching {
-            val p = AvfReflect.connectVsock(vm, HostTransport.AVF_VSOCK_PORT)
             // Read side owns p; write side owns a dup (each AutoClose closes one fd).
-            val pOut = p.dup()
-            val r = BufferedReader(InputStreamReader(FileInputStream(p.fileDescriptor)))
-            val o = ParcelFileDescriptor.AutoCloseOutputStream(pOut)
-            AvfHostTransport(p, pOut, r, o)
+            var p: ParcelFileDescriptor? = null
+            var pOut: ParcelFileDescriptor? = null
+            try {
+                p = AvfReflect.connectVsock(vm, HostTransport.AVF_VSOCK_PORT)
+                pOut = p.dup()
+                val r = BufferedReader(InputStreamReader(FileInputStream(p.fileDescriptor)))
+                val o = ParcelFileDescriptor.AutoCloseOutputStream(pOut)
+                AvfHostTransport(p, pOut, r, o)
+            } catch (t: Throwable) {
+                // dup()/stream construction failed after connectVsock — close the
+                // fds already opened so a retry loop doesn't leak them.
+                runCatching { pOut?.close() }
+                runCatching { p?.close() }
+                throw t
+            }
         }.getOrNull()
     }
 }

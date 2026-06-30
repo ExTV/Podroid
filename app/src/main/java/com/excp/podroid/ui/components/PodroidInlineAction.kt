@@ -9,6 +9,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.excp.podroid.ui.theme.PodroidTokens
@@ -32,7 +33,7 @@ fun PodroidInlineAction(
         modifier = modifier
             .clip(RoundedCornerShape(PodroidTokens.Radius.Chip))
             .background(MaterialTheme.colorScheme.primary)
-            .clickable(onClick = onClick)
+            .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
     )
 }

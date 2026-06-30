@@ -47,7 +47,9 @@ class VsockControlChannel(
 
     private var pfd: ParcelFileDescriptor? = null
     private var writer: PrintWriter? = null
-    private var connectJob: Job? = null
+    // @Volatile: assigned in open()/reconnect() off one thread, cancelled in the
+    // @Synchronized close() on another — without it a stale null could skip the cancel.
+    @Volatile private var connectJob: Job? = null
     @Volatile private var closed = false
     /** Set once the retry loop exhausts; further sends are dropped, not queued. */
     private var gaveUp = false

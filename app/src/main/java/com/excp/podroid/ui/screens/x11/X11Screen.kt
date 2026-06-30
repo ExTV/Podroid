@@ -851,29 +851,42 @@ private fun X11KeyButton(
 }
 
 /**
- * Compares old vs new IME buffer content, fires synthetic X11 key events
- * for the diff. ASCII 0x20-0x7E maps to the same keysym value; non-ASCII
- * Unicode codepoints map to 0x01000000 | codepoint (X11 protocol extension).
- * Counts by codepoints (not UTF-16 chars) so surrogate pairs count as one.
+ * Diffs old vs new IME buffer content and fires synthetic X11 key events for
+ * the change. ASCII 0x20-0x7E maps to the same keysym value; non-ASCII Unicode
+ * codepoints map to 0x01000000 | codepoint (X11 protocol extension).
+ *
+ * Works off the longest common prefix (by codepoint), not a raw length
+ * difference: a CJK IME REPLACES composing text on commit (pinyin "nihao" ->
+ * "你好"), so the new buffer shares no prefix with the old. Emitting only
+ * (oldCp - newCp) backspaces — the old behaviour — left the composing text in
+ * the guest and never sent the commit. Backspacing the whole divergent suffix
+ * and re-typing the new one keeps the guest buffer in sync with the IME.
  */
 private fun forwardImeDiff(old: String, new: String, vm: X11ViewModel) {
+    // Length (in chars) and codepoint count of the shared leading run.
+    var common = 0
+    var commonCp = 0
+    while (common < old.length && common < new.length) {
+        val cp = old.codePointAt(common)
+        if (cp != new.codePointAt(common)) break
+        common += Character.charCount(cp)
+        commonCp++
+    }
+    // Delete everything in old past the shared prefix.
     val oldCp = old.codePointCount(0, old.length)
-    val newCp = new.codePointCount(0, new.length)
-    if (newCp > oldCp) {
-        // Iterate added codepoints (not chars) for correct surrogate handling.
-        var i = old.length
-        while (i < new.length) {
-            val cp = new.codePointAt(i)
-            val keysym = if (cp in 0x20..0x7E) cp else 0x01000000 or cp
-            vm.sendKey(keysym, down = true)
-            vm.sendKey(keysym, down = false)
-            i += Character.charCount(cp)
-        }
-    } else if (newCp < oldCp) {
-        repeat(oldCp - newCp) {
-            vm.sendKey(XK_BackSpace, down = true)
-            vm.sendKey(XK_BackSpace, down = false)
-        }
+    repeat(oldCp - commonCp) {
+        vm.sendKey(XK_BackSpace, down = true)
+        vm.sendKey(XK_BackSpace, down = false)
+    }
+    // Type everything in new past the shared prefix (codepoint-wise so a
+    // surrogate pair is sent as a single keysym).
+    var i = common
+    while (i < new.length) {
+        val cp = new.codePointAt(i)
+        val keysym = if (cp in 0x20..0x7E) cp else 0x01000000 or cp
+        vm.sendKey(keysym, down = true)
+        vm.sendKey(keysym, down = false)
+        i += Character.charCount(cp)
     }
 }
 
