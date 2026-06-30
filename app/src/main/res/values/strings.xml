@@ -12,6 +12,9 @@
     <string name="status_running">Running</string>
     <string name="status_stopped">Stopped</string>
     <string name="status_idle">Idle</string>
+    <string name="status_stopping">Shutting down…</string>
+    <string name="stopping_vm">Stopping the VM…</string>
+    <string name="stopping_action">Stopping…</string>
 
     <!-- Network -->
     <string name="network">Network</string>

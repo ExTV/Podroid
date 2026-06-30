@@ -12,6 +12,9 @@
     <string name="status_running">运行中</string>
     <string name="status_stopped">已停止</string>
     <string name="status_idle">空闲</string>
+    <string name="status_stopping">正在关闭…</string>
+    <string name="stopping_vm">正在停止虚拟机…</string>
+    <string name="stopping_action">正在停止…</string>
 
     <!-- Network -->
     <string name="network">网络</string>

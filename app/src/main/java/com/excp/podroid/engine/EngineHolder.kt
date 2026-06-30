@@ -330,6 +330,10 @@ class EngineHolder @Inject constructor(
         .flatMapLatest { it.consoleText }
         .stateIn(scope, SharingStarted.Eagerly, "")
 
+    override val stopping: StateFlow<Boolean> = currentFlow
+        .flatMapLatest { it.stopping }
+        .stateIn(scope, SharingStarted.Eagerly, false)
+
     // ── VmEngine: imperative members — pass through to current engine ──────
     override val terminalSession: TerminalSession? get() = current.terminalSession
     override val backendId: String get() = current.backendId

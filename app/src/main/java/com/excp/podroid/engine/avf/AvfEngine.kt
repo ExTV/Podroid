@@ -91,6 +91,13 @@ class AvfEngine @Inject constructor(
     private val _consoleText = MutableStateFlow("")
     override val consoleText: StateFlow<String> = _consoleText.asStateFlow()
 
+    private val _stopping = MutableStateFlow(false)
+    override val stopping: StateFlow<Boolean> = _stopping.asStateFlow()
+
+    // @Volatile: written on the main thread (spawnBridge/createTerminalSession)
+    // and on background threads (cleanup via onVmTerminal or the IO stop path),
+    // read from both — mirrors the other lifecycle fields below.
+    @Volatile
     override var terminalSession: TerminalSession? = null
         private set
 
@@ -280,6 +287,7 @@ class AvfEngine @Inject constructor(
             // Starting under the lock so a re-entrant start() is rejected.
             lastConfig = config
             synchronized(lastPortForwards) { lastPortForwards.clear(); lastPortForwards.addAll(portForwards) }
+            _stopping.value = false
             _state.value = VmState.Starting
         }
         launchAttempt(portForwards, config, bootMsg = "Initializing AVF...")
@@ -606,6 +614,10 @@ class AvfEngine @Inject constructor(
             onVmTerminal(vmGeneration, VmState.Stopped)
             return
         }
+        // A live VM will tear down asynchronously (sync flush + framework stop +
+        // terminal callback). Signal "shutting down" now; cleared in cleanup() on
+        // the →Stopped transition, or below if the framework rejects the stop.
+        _stopping.value = true
         val generation = vmGeneration
         scope.launch {
             // Best-effort guest flush so unwritten ext4 data hits storage before
@@ -624,6 +636,9 @@ class AvfEngine @Inject constructor(
                 // error and KEEP the handle so a later real callback, or a retry,
                 // can still reach the VM. Don't run the watchdog on this path.
                 if (generation == vmGeneration && !cleanedUp.get()) {
+                    // VM still alive (handle kept); clear "shutting down" so the UI
+                    // shows the error rather than a stuck spinner.
+                    _stopping.value = false
                     _state.value = VmState.Error("AVF stop request rejected; VM may still be running")
                 }
                 return@launch
@@ -778,6 +793,7 @@ class AvfEngine @Inject constructor(
 
     private fun cleanup() {
         if (cleanedUp.getAndSet(true)) return
+        _stopping.value = false
         _runningSinceMs = null
         bootTimeoutJob?.cancel()
         bootTimeoutJob = null

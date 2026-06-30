@@ -62,6 +62,10 @@ class HomeViewModel @Inject constructor(
     val vmState: StateFlow<VmState> = engine.state
         .stateIn(viewModelScope, SharingStarted.Eagerly, VmState.Idle)
 
+    /** True while a stop is tearing the VM down (Running/Starting -> Stopped). */
+    val stopping: StateFlow<Boolean> = engine.stopping
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     val bootStage: StateFlow<String> = engine.bootStage
         .stateIn(viewModelScope, SharingStarted.Eagerly, "")
 

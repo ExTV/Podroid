@@ -57,9 +57,14 @@ class QemuEngine @Inject constructor(
     private val _consoleText = MutableStateFlow("")
     override val consoleText: StateFlow<String> = _consoleText.asStateFlow()
 
+    private val _stopping = MutableStateFlow(false)
+    override val stopping: StateFlow<Boolean> = _stopping.asStateFlow()
+
     private val _bootStage = MutableStateFlow("")
 
-    private var _terminalSession: TerminalSession? = null
+    // @Volatile: written on the main thread (autoStartBridge/createTerminalSession)
+    // and on Dispatchers.IO (cleanup), read from both — like the lifecycle fields below.
+    @Volatile private var _terminalSession: TerminalSession? = null
 
     override val terminalSession: TerminalSession? get() = _terminalSession
     override val bootStage: StateFlow<String> = _bootStage.asStateFlow()
@@ -266,6 +271,7 @@ class QemuEngine @Inject constructor(
             }
             cleanedUp.set(false)
             bootStartTime = System.currentTimeMillis()
+            _stopping.value = false
             _state.value = VmState.Starting
         }
 
@@ -451,6 +457,10 @@ class QemuEngine @Inject constructor(
      */
     override fun stop() {
         val proc = process ?: return
+        // Signal "shutting down" immediately so the UI reflects the stop while the
+        // process tears down (state stays Running until cleanup() runs). Cleared in
+        // cleanup() on the →Stopped/Error transition.
+        _stopping.value = true
         // Issue the graceful SIGTERM immediately (non-blocking), then run the
         // graceful-wait → forceful-escalation off the caller's thread. stop() is
         // called from PodroidService on the main thread, so blocking up to ~5s
@@ -497,6 +507,7 @@ class QemuEngine @Inject constructor(
     @Synchronized
     private fun cleanup() {
         if (cleanedUp.getAndSet(true)) return
+        _stopping.value = false
         bootMonitor?.release()
         bootMonitor = null
         ioScope?.cancel()

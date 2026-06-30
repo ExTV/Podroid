@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -18,6 +20,7 @@ import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -76,9 +79,15 @@ fun HomeScreen(
     val showAvfHint by viewModel.showAvfHint.collectAsStateWithLifecycle()
     val avfBootFailure by viewModel.avfBootFailure.collectAsStateWithLifecycle()
     val avfFailureAdvice by viewModel.avfFailureAdvice.collectAsStateWithLifecycle()
+    val stopping by viewModel.stopping.collectAsStateWithLifecycle()
 
     val isRunning  = vmState is VmState.Running
     val isStarting = vmState is VmState.Starting
+    // Stop is asynchronous: the engine stays Running/Starting until teardown
+    // finishes, so gate the indicator on the engine's stopping signal while the
+    // state is still active. The instant state goes terminal, this falls back to
+    // normal Stopped/Error rendering regardless of signal/state flip ordering.
+    val isStopping = stopping && (isRunning || isStarting)
     val uptimeLabel = viewModel.uptimeLabel(uptimeTick)
     // Cache the ConnectivityManager binder call so it doesn't re-run on every
     // 1 Hz tick or incidental recomposition, but refresh it on ON_RESUME so a
@@ -162,14 +171,14 @@ fun HomeScreen(
                             AvfHintBanner(onDismiss = { viewModel.dismissAvfHint() })
                         }
                         HomeStatusBlock(
-                            isStarting, isRunning, vmState, bootStage, meta, uptimeLabel,
+                            isStarting, isRunning, isStopping, vmState, bootStage, meta, uptimeLabel,
                             avfBootFailure = avfBootFailure,
                             avfFailureAdvice = avfFailureAdvice,
                             onUseOneCore = { viewModel.useOneCoreAndRetry() },
                             onSwitchToQemu = { viewModel.switchToQemuAndRetry() },
                             onRetry = { viewModel.restartVm() },
                         )
-                        HomeDataSection(isRunning, vmState, meta, phoneIp)
+                        HomeDataSection(isRunning, isStopping, vmState, meta, phoneIp)
                     }
                     Column(
                         modifier = Modifier
@@ -180,6 +189,7 @@ fun HomeScreen(
                         HomeActionButtons(
                             isRunning = isRunning,
                             isStarting = isStarting,
+                            isStopping = isStopping,
                             vmState = vmState,
                             onStart = { viewModel.startPodroid() },
                             onStop = { viewModel.stopVm() },
@@ -203,6 +213,7 @@ fun HomeScreen(
                     HomeStatusBlock(
                         isStarting = isStarting,
                         isRunning = isRunning,
+                        isStopping = isStopping,
                         vmState = vmState,
                         bootStage = bootStage,
                         meta = meta,
@@ -213,11 +224,12 @@ fun HomeScreen(
                         onSwitchToQemu = { viewModel.switchToQemuAndRetry() },
                         onRetry = { viewModel.restartVm() },
                     )
-                    HomeDataSection(isRunning, vmState, meta, phoneIp)
+                    HomeDataSection(isRunning, isStopping, vmState, meta, phoneIp)
                     Spacer(Modifier.weight(1f))
                     HomeActionButtons(
                         isRunning = isRunning,
                         isStarting = isStarting,
+                        isStopping = isStopping,
                         vmState = vmState,
                         onStart = { viewModel.startPodroid() },
                         onStop = { viewModel.stopVm() },
@@ -275,6 +287,7 @@ private fun AvfHintBanner(onDismiss: () -> Unit) {
 private fun HomeStatusBlock(
     isStarting: Boolean,
     isRunning: Boolean,
+    isStopping: Boolean,
     vmState: VmState,
     bootStage: String,
     meta: HomeMeta,
@@ -288,12 +301,14 @@ private fun HomeStatusBlock(
     PodroidSectionLabel(stringResource(R.string.vm_status))
     Text(
         text = when {
+            isStopping -> stringResource(R.string.status_stopping)
             isStarting -> stringResource(R.string.status_starting)
             isRunning  -> stringResource(R.string.status_running)
             else       -> stringResource(R.string.status_stopped)
         },
         style = MaterialTheme.typography.displayLarge,
         color = when {
+            isStopping -> MaterialTheme.colorScheme.tertiary
             isRunning  -> MaterialTheme.colorScheme.primary
             isStarting -> MaterialTheme.colorScheme.tertiary
             else       -> MaterialTheme.colorScheme.onSurface
@@ -305,12 +320,28 @@ private fun HomeStatusBlock(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val (dot, label) = when {
-            isRunning  -> PodroidStatusColors.Running  to (uptimeLabel ?: stringResource(R.string.up))
-            isStarting -> PodroidStatusColors.Starting to bootStage.ifEmpty { stringResource(R.string.status_starting) }
-            else       -> PodroidStatusColors.Stopped  to stringResource(R.string.status_idle)
+        if (isStopping) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.tertiary,
+                )
+                Spacer(Modifier.width(PodroidTokens.Spacing.SM))
+                Text(
+                    text = stringResource(R.string.stopping_vm),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
+            val (dot, label) = when {
+                isRunning  -> PodroidStatusColors.Running  to (uptimeLabel ?: stringResource(R.string.up))
+                isStarting -> PodroidStatusColors.Starting to bootStage.ifEmpty { stringResource(R.string.status_starting) }
+                else       -> PodroidStatusColors.Stopped  to stringResource(R.string.status_idle)
+            }
+            PodroidStatus(label = label, dotColor = dot)
         }
-        PodroidStatus(label = label, dotColor = dot)
         Text(
             text = meta.resourcesLabel,
             style = MaterialTheme.typography.bodyMedium,
@@ -366,13 +397,14 @@ private fun HomeStatusBlock(
 @Composable
 private fun HomeDataSection(
     isRunning: Boolean,
+    isStopping: Boolean,
     vmState: VmState,
     meta: HomeMeta,
     phoneIp: String,
 ) {
     val showStarting = vmState is VmState.Starting
     val showError = vmState is VmState.Error
-    if (showStarting || showError) return
+    if (showStarting || showError || isStopping) return
     Spacer(Modifier.height(PodroidTokens.Spacing.MD))
     if (isRunning) {
         PodroidSectionLabel(stringResource(R.string.network))
@@ -419,13 +451,23 @@ private fun formatBootDuration(ms: Long): String {
 private fun HomeActionButtons(
     isRunning: Boolean,
     isStarting: Boolean,
+    isStopping: Boolean,
     vmState: VmState,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onRestart: () -> Unit,
     onOpenTerminal: () -> Unit,
 ) {
-    if (isRunning) {
+    if (isStopping) {
+        // Teardown in progress: one disabled affordance so the user can't
+        // double-stop or start over a stop that's already running. The spinner
+        // lives in the status block above.
+        PodroidPrimaryButton(
+            text = stringResource(R.string.stopping_action),
+            onClick = {},
+            enabled = false,
+        )
+    } else if (isRunning) {
         PodroidPrimaryButton(text = stringResource(R.string.open_terminal), onClick = onOpenTerminal)
         Spacer(Modifier.height(PodroidTokens.Spacing.SM))
         Row(horizontalArrangement = Arrangement.spacedBy(PodroidTokens.Spacing.SM)) {

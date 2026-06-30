@@ -24,6 +24,16 @@ interface VmEngine {
     val state: StateFlow<VmState>
     val bootStage: StateFlow<String>
     val consoleText: StateFlow<String>
+
+    /**
+     * True from the moment a user-initiated stop begins tearing the VM down
+     * until it reaches a terminal state. The underlying [state] stays
+     * Running/Starting during teardown, so this is a separate signal the UI can
+     * use to show a "shutting down" indicator. Additive: it changes no [state]
+     * transitions.
+     */
+    val stopping: StateFlow<Boolean>
+
     val terminalSession: TerminalSession?
 
     /** Identifier for logs + the diagnostic dialog. Stable, lowercase. */
