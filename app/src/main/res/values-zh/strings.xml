@@ -125,14 +125,39 @@
 
     <!-- Status monitor -->
     <string name="status_page_title">状态监控</string>
+    <string name="status_tab_phone">手机</string>
+    <string name="status_tab_vm">虚拟机镜像</string>
     <string name="status_phone_section">手机</string>
     <string name="status_vm_section">虚拟机</string>
+    <string name="status_phone_details">详情</string>
+    <string name="status_vm_details">详情</string>
     <string name="status_load_average">平均负载（1 / 5 / 15 分钟）</string>
     <string name="status_vm_ram_allocated">虚拟机内存（已分配）</string>
     <string name="status_emulator_rss">模拟器占用 %1$s</string>
     <string name="status_vm_disk">虚拟机磁盘镜像</string>
+    <string name="status_unavailable">—</string>
     <string name="status_error">错误</string>
-    <string name="status_refresh_hint">此页面打开时每 2 秒自动刷新。</string>
+    <string name="status_refresh_hint">正在采集实时数据…</string>
+    <string name="status_live_badge">实时</string>
+    <string name="status_live_hint">每秒更新 2 次</string>
+    <string name="status_chart_window">最近约 1 分钟</string>
+    <string name="status_resource_phone">手机</string>
+    <string name="status_resource_vm">Podroid 虚拟机</string>
+    <string name="status_metric_phone_cpu">CPU（平均）</string>
+    <string name="status_metric_phone_ram">内存（手机）</string>
+    <string name="status_metric_phone_storage">存储（手机）</string>
+    <string name="status_metric_network">网络（总量）</string>
+    <string name="status_metric_network_in">网络入站</string>
+    <string name="status_metric_network_out">网络出站</string>
+    <string name="status_metric_vm_cpu">CPU（平均）</string>
+    <string name="status_metric_vm_memory">内存（模拟器）</string>
+    <string name="status_metric_vm_disk">磁盘字节（总量）</string>
+    <string name="status_metric_vm_disk_activity">磁盘活动</string>
+    <string name="status_metric_vm_availability">虚拟机可用性</string>
+    <string name="status_metric_cpu_legend">CPU 使用率（平均）</string>
+    <string name="status_metric_memory_legend">模拟器 RSS</string>
+    <string name="status_metric_disk_write_legend">磁盘增长</string>
+    <string name="status_metric_availability_legend">虚拟机可用性（平均）</string>
     <string name="status_vm_load_graph_title">虚拟机 CPU 负载</string>
     <string name="status_vm_load_current">当前：%1$d%%</string>
     <string name="status_vm_load_collecting">正在采集数据…</string>
@@ -140,7 +165,7 @@
     <string name="status_vm_load_stopped">虚拟机未运行</string>
     <string name="status_vm_load_avf_only">负载图表仅在 QEMU 后端且虚拟机运行时可用</string>
     <string name="status_vm_load_graph_hint">根据手机上模拟器进程的 CPU 占用计算，并按虚拟机分配的核心数归一化。</string>
-    <string name="status_vm_load_axis" formatted="false">最近约 2 分钟 · 0%（空闲）→ 100%（全部核心繁忙）</string>
+    <string name="status_vm_load_axis" formatted="false">最近约 1 分钟 · 0%（空闲）→ 100%（全部核心繁忙）</string>
 
     <!-- Container backup -->
     <string name="container_backup_title">容器备份</string>
