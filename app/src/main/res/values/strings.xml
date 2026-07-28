@@ -125,14 +125,39 @@
 
     <!-- Status monitor -->
     <string name="status_page_title">Status</string>
+    <string name="status_tab_phone">Phone</string>
+    <string name="status_tab_vm">VM image</string>
     <string name="status_phone_section">Phone</string>
     <string name="status_vm_section">Virtual machine</string>
+    <string name="status_phone_details">Details</string>
+    <string name="status_vm_details">Details</string>
     <string name="status_load_average">Load average (1 / 5 / 15 min)</string>
     <string name="status_vm_ram_allocated">VM RAM (allocated)</string>
     <string name="status_emulator_rss">Emulator using %1$s</string>
     <string name="status_vm_disk">VM disk image</string>
+    <string name="status_unavailable">—</string>
     <string name="status_error">Error</string>
-    <string name="status_refresh_hint">Refreshes every 2 seconds while this screen is open.</string>
+    <string name="status_refresh_hint">Collecting live metrics…</string>
+    <string name="status_live_badge">LIVE</string>
+    <string name="status_live_hint">2 updates per second</string>
+    <string name="status_chart_window">Last ~1 min</string>
+    <string name="status_resource_phone">Phone</string>
+    <string name="status_resource_vm">Podroid VM</string>
+    <string name="status_metric_phone_cpu">CPU (average)</string>
+    <string name="status_metric_phone_ram">Memory (phone)</string>
+    <string name="status_metric_phone_storage">Storage (phone)</string>
+    <string name="status_metric_network">Network (total)</string>
+    <string name="status_metric_network_in">Network In</string>
+    <string name="status_metric_network_out">Network Out</string>
+    <string name="status_metric_vm_cpu">CPU (average)</string>
+    <string name="status_metric_vm_memory">Memory (emulator)</string>
+    <string name="status_metric_vm_disk">Disk bytes (total)</string>
+    <string name="status_metric_vm_disk_activity">Disk activity</string>
+    <string name="status_metric_vm_availability">VM availability</string>
+    <string name="status_metric_cpu_legend">Percentage CPU (Avg)</string>
+    <string name="status_metric_memory_legend">Emulator RSS</string>
+    <string name="status_metric_disk_write_legend">Disk growth</string>
+    <string name="status_metric_availability_legend">VM Availability (Avg)</string>
     <string name="status_vm_load_graph_title">VM CPU load</string>
     <string name="status_vm_load_current">Current: %1$d%%</string>
     <string name="status_vm_load_collecting">Collecting samples…</string>
@@ -140,7 +165,7 @@
     <string name="status_vm_load_stopped">VM is not running</string>
     <string name="status_vm_load_avf_only">Load graph is available on the QEMU backend while the VM is running</string>
     <string name="status_vm_load_graph_hint">Tracks the emulator process CPU use on your phone, normalized to the VM\'s allocated cores.</string>
-    <string name="status_vm_load_axis" formatted="false">Last ~2 min · 0% (idle) → 100% (all VM cores busy)</string>
+    <string name="status_vm_load_axis" formatted="false">Last ~1 min · 0% (idle) → 100% (all VM cores busy)</string>
 
     <!-- Container backup -->
     <string name="container_backup_title">Container backup</string>
