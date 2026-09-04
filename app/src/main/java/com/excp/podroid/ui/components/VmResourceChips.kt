@@ -15,7 +15,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.excp.podroid.R
 import com.excp.podroid.ui.theme.PodroidTokens
@@ -53,12 +52,7 @@ fun VmRamChips(
                     selected = mb == currentMb,
                     enabled = enabled,
                     onClick = { onChange(mb) },
-                    label = {
-                        Text(
-                            formatRam(mb),
-                            fontWeight = if (mb == currentMb) FontWeight.Bold else FontWeight.Normal,
-                        )
-                    },
+                    label = { Text(formatRam(mb)) },
                     shape = RoundedCornerShape(PodroidTokens.Radius.Chip),
                     colors = PodroidChipColors(),
                 )
@@ -102,12 +96,7 @@ fun VmCpuChips(
                     selected = n == currentCpus,
                     enabled = enabled,
                     onClick = { onChange(n) },
-                    label = {
-                        Text(
-                            "$n",
-                            fontWeight = if (n == currentCpus) FontWeight.Bold else FontWeight.Normal,
-                        )
-                    },
+                    label = { Text("$n") },
                     shape = RoundedCornerShape(PodroidTokens.Radius.Chip),
                     colors = PodroidChipColors(),
                 )
@@ -164,12 +153,7 @@ fun VmStorageChips(
                     selected = gb == currentGb,
                     enabled = enabled && gb >= minGb,
                     onClick = { onChange(gb) },
-                    label = {
-                        Text(
-                            "$gb GB",
-                            fontWeight = if (gb == currentGb) FontWeight.Bold else FontWeight.Normal,
-                        )
-                    },
+                    label = { Text("$gb GB") },
                     shape = RoundedCornerShape(PodroidTokens.Radius.Chip),
                     colors = PodroidChipColors(),
                 )
@@ -219,12 +203,7 @@ fun VmBandwidthChips(
                     selected = mbps == currentMbps,
                     enabled = enabled,
                     onClick = { onChange(mbps) },
-                    label = {
-                        Text(
-                            formatBandwidth(mbps),
-                            fontWeight = if (mbps == currentMbps) FontWeight.Bold else FontWeight.Normal,
-                        )
-                    },
+                    label = { Text(formatBandwidth(mbps)) },
                     shape = RoundedCornerShape(PodroidTokens.Radius.Chip),
                     colors = PodroidChipColors(),
                 )
