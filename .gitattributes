@@ -39,7 +39,6 @@ build-rootfs/files/etc/init.d/podroid-hostd     text eol=lf
 build-rootfs/files/etc/init.d/podroid-migrate   text eol=lf
 build-rootfs/files/etc/inittab                  text eol=lf
 build-rootfs/files/etc/rc.conf                  text eol=lf
-build-rootfs/files/etc/conf.d/podroid           text eol=lf
 build-rootfs/files/usr/local/bin/podroid-getty  text eol=lf
 build-rootfs/files/usr/local/bin/podroid-login  text eol=lf
 build-rootfs/files/usr/local/bin/podroid-resize text eol=lf
