@@ -58,7 +58,19 @@ done
 #   guest's flushes reach storage.img through QEMU's writeback cache, which
 #   honors flushes, keeping the on-disk journal consistent for recovery.
 if ! mount -t ext4 -o rw,noatime,commit=1,barrier=1 /dev/vda /mnt/persist 2>/dev/null; then
-    e2fsck -y /dev/vda >/dev/null 2>&1 || mkfs.ext4 -q -F /dev/vda
+    # The first mount failed. e2fsck searches the backup superblocks by itself
+    # when the primary is damaged. Exit codes: 0 clean, 1 corrected, 2 corrected
+    # (reboot advised), 4 uncorrected, >=8 no usable filesystem or operational
+    # error. Never reformat a disk e2fsck could read: only a brand-new, all-zero
+    # storage.img (first boot) gets mkfs.
+    rc=0
+    e2fsck -y /dev/vda > /dev/console 2>&1 || rc=$?
+    if [ "$rc" -ge 8 ] && [ -z "$(dd if=/dev/vda bs=1M count=1 2>/dev/null | tr -d '\000' | head -c 1)" ]; then
+        mkfs.ext4 -q -F /dev/vda
+    elif [ "$rc" -ge 4 ]; then
+        echo "FATAL: persistent ext4 (/dev/vda) could not be repaired (e2fsck rc=$rc); not reformatting, to keep the data" > /dev/console
+        exec sh
+    fi
     mount -t ext4 -o rw,noatime,commit=1,barrier=1 /dev/vda /mnt/persist \
         || { echo "FATAL: persistent ext4 (/dev/vda) mount failed" > /dev/console; ls -l /dev/vd* > /dev/console 2>&1; exec sh; }
 fi
