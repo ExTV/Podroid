@@ -3,7 +3,8 @@
  * Copyright (C) 2024-2026 Podroid contributors
  *
  * Minimal RFB 3.8 client. Supports SecurityType None, Raw + CopyRect +
- * ExtendedDesktopSize + ZRLE encodings. Designed for loopback (SLIRP).
+ * ExtendedDesktopSize + ZRLE encodings. Used over a loopback connection on
+ * both backends (the VNC port is an implicit loopback forward).
  */
 package com.excp.podroid.x11
 
@@ -38,8 +39,9 @@ object VncClient {
     /**
      * Performs the RFB 3.8 handshake. Reads the server greeting from `inp`,
      * writes our responses to `out`, and returns the framebuffer dimensions
-     * (the only ServerInit fields we need for v1 — pixel format is fixed
-     * 32-bit BGRA via SetPixelFormat sent later by the caller).
+     * (the only ServerInit fields we need for v1: pixel format is fixed to
+     * 32bpp little-endian, depth 24, R shift 16 / G shift 8 / B shift 0 via
+     * SetPixelFormat sent later by the caller).
      *
      * Throws RfbProtocolException on protocol mismatch.
      */
@@ -119,20 +121,19 @@ object VncClient {
     private const val ENC_EXTENDED_DESKTOP_SIZE = -308
 
     // Default SetEncodings list: CopyRect, Raw, ExtendedDesktopSize(-308). ZRLE
-    // is deliberately not in the default: the historical desync cause is fixed
-    // (ZrleDecoder now feeds the inflater on demand and bounds-checks palette
-    // indices/run lengths instead of dropping >4KB blocks), but re-enabling it
-    // changes what the server streams, so it stays gated until validated
-    // on-device against real Firefox/xfce tiles. Exposed for the debug-only
-    // encoding switch (x11-debug.conf, read only when BuildConfig.DEBUG).
+    // is opt-in only, via the debug-only x11-debug.conf switch (read only when
+    // BuildConfig.DEBUG); a ZRLE session that hits a protocol error falls back
+    // to this Raw list for the rest of the ViewModel's lifetime (see
+    // EncodingPolicy). The release default stays Raw.
     val DEFAULT_ENCODINGS: IntArray = intArrayOf(ENC_COPY_RECT, ENC_RAW, ENC_EXTENDED_DESKTOP_SIZE)
     val ZRLE_ENCODINGS: IntArray = intArrayOf(ENC_ZRLE, ENC_COPY_RECT, ENC_RAW, ENC_EXTENDED_DESKTOP_SIZE)
 
     /**
-     * Sends SetPixelFormat to lock the server to 32-bit BGRA, then SetEncodings
-     * to advertise [encodings] (default: Raw + CopyRect + ExtendedDesktopSize,
-     * byte-identical to the previously hardcoded list). Call once after
-     * handshake before requesting any framebuffer update.
+     * Sends SetPixelFormat to lock the server to 32bpp little-endian, depth 24,
+     * R shift 16 / G shift 8 / B shift 0, then SetEncodings to advertise
+     * [encodings] (default: Raw + CopyRect + ExtendedDesktopSize, byte-identical
+     * to the previously hardcoded list). Call once after handshake before
+     * requesting any framebuffer update.
      */
     fun negotiatePixelFormat(out: OutputStream, encodings: IntArray = DEFAULT_ENCODINGS) {
         // SetPixelFormat (msg=0): pad[3] + 16-byte PixelFormat

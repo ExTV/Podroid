@@ -225,7 +225,9 @@ class ZrleDecoder {
 
     /**
      * Thin wrapper around [Inflater] that provides byte-level and CPIXEL reads.
-     * The inflater's input was already loaded by [decode]; this just drains output.
+     * Compressed input is fed to the inflater on demand via [feedChunk], bounded
+     * by the enclosing rect's compressed length ([remaining]); this class only
+     * drains inflated output.
      */
     private inner class ZInput(private val inf: Inflater) {
         private val buf = ByteArray(256)

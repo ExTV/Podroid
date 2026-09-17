@@ -10,8 +10,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.excp.podroid.BuildConfig
 import com.excp.podroid.data.repository.SettingsRepository
-import com.excp.podroid.engine.VmEngine
-import com.excp.podroid.engine.VmState
 import com.excp.podroid.x11.AudioStreamer
 import com.excp.podroid.x11.DamageTracker
 import com.excp.podroid.x11.EncodingPolicy
@@ -58,12 +56,9 @@ sealed interface X11ConnectionState {
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class X11ViewModel @Inject constructor(
-    val engine: VmEngine,
     private val settings: SettingsRepository,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
-
-    val vmState: StateFlow<VmState> = engine.state
 
     private val _connection = MutableStateFlow<X11ConnectionState>(X11ConnectionState.Disconnected)
     val connection: StateFlow<X11ConnectionState> = _connection.asStateFlow()
@@ -79,7 +74,7 @@ class X11ViewModel @Inject constructor(
     @Volatile private var fbH = X11Constants.FB_HEIGHT
     @Volatile var framebuffer: IntArray = IntArray(fbW * fbH); private set
     // Dedicated lock object so synchronized() is never on the reassigned framebuffer field.
-    val fbLock = Any()
+    private val fbLock = Any()
     @Volatile private var scratch: IntArray = IntArray(fbW * fbH)
     private val zrle = ZrleDecoder()
     @Volatile private var screenId = 0
@@ -91,11 +86,6 @@ class X11ViewModel @Inject constructor(
     // renderer can schedule a redraw without the read loop depending on a
     // StateFlow (which conflates and can silently drop damage between ticks).
     @Volatile var onFrame: (() -> Unit)? = null
-
-    /** Takes fbLock and drains pending damage. Prefer [withFrame] when the pixel
-     *  data is needed too, so the drain and the pixel copy share one critical
-     *  section instead of two separate locks. */
-    fun drainDamage(): List<VncRect> = synchronized(fbLock) { damageTracker.drain() }
 
     /** Atomically hands the current framebuffer, its dimensions, and the drained
      *  pending damage to [block] under fbLock. */
@@ -118,8 +108,9 @@ class X11ViewModel @Inject constructor(
     // x11-debug.conf and the Raw fallback, debug builds only); read cross-thread
     // by the renderer.
     @Volatile private var debugEncodingName = "raw"
-    // Effective present mode for the current session (used by Task F3);
-    // parsed here so the control file's format is settled before that lands.
+    // Effective present mode for the current session: whether the renderer
+    // should try a hardware canvas, read from x11-debug.conf's present= key
+    // (debug builds only; release always stays sw).
     @Volatile var debugPresentHw: Boolean = false; private set
 
     /** Debug-only: atomically snapshots and resets (bytesRead, updates, copyNanos, rxNanos). */
@@ -184,9 +175,9 @@ class X11ViewModel @Inject constructor(
                     zrle.reset()
 
                     // Debug-only (BuildConfig.DEBUG): x11-debug.conf lets a developer
-                    // request ZRLE (and, for Task F3, the present mode) without a
-                    // rebuild. Release builds never read this file and never want ZRLE,
-                    // so they always advertise VncClient.DEFAULT_ENCODINGS.
+                    // request ZRLE (and the present mode) without a rebuild. Release
+                    // builds never read this file and never want ZRLE, so they always
+                    // advertise VncClient.DEFAULT_ENCODINGS.
                     val wantZrle = if (BuildConfig.DEBUG) {
                         val cfg = X11DebugConfig.read(context)
                         debugPresentHw = cfg.presentHw
@@ -442,11 +433,11 @@ class X11ViewModel @Inject constructor(
 
 /**
  * Debug-only (BuildConfig.DEBUG) reader for `filesDir/x11-debug.conf`: lets a
- * developer flip the advertised SetEncodings list, and (Task F3) the present
- * mode, without a rebuild. Read once per connect(), only when
- * BuildConfig.DEBUG; release builds never call [read]. Format is `key=value`
- * lines; a missing/unreadable file or an unrecognized value falls back to the
- * default for that key.
+ * developer flip the advertised SetEncodings list and the present mode
+ * without a rebuild. Read once per connect(), only when BuildConfig.DEBUG;
+ * release builds never call [read]. Format is `key=value` lines; a
+ * missing/unreadable file or an unrecognized value falls back to the default
+ * for that key.
  */
 private object X11DebugConfig {
     class Config(val wantZrle: Boolean, val encodingName: String, val presentHw: Boolean)

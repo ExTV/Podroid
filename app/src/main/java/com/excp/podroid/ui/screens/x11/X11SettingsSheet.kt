@@ -3,8 +3,8 @@
  * Copyright (C) 2024-2026 Podroid contributors
  *
  * Bottom sheet for X11 viewer settings: resolution mode/preset/custom
- * and rotation lock. TOUCH (Phase 4) and DISPLAY (Phase 5) sections
- * will be appended to the Column below the rotation section.
+ * (plus render scale in MATCH mode), rotation lock, touch mode, and
+ * display (DPI) sections, in that order down the Column.
  */
 package com.excp.podroid.ui.screens.x11
 

@@ -57,9 +57,9 @@ class X11SurfaceRenderer(
     // X11ViewModel.debugSnapshotAndReset: only called when BuildConfig.DEBUG,
     // once per second, to assemble the combined X11Stats log line below.
     private val debugRfbStats: () -> RfbDebugSnapshot,
-    // X11ViewModel.debugPresentHw: the F2 debug control file's present=hw|sw
-    // setting for this session. Always false (sw) in release builds, which
-    // never read that file. Consulted once per Surface, at its first present.
+    // X11ViewModel.debugPresentHw: x11-debug.conf's present=hw|sw setting for
+    // this session. Always false (sw) in release builds, which never read
+    // that file. Consulted once per Surface, at its first present.
     private val presentHw: () -> Boolean,
 ) {
     private val thread = HandlerThread("X11Render").apply { start() }
