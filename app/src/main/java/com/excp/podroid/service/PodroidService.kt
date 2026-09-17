@@ -42,6 +42,35 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.combine
 import javax.inject.Inject
 
+/**
+ * Runs [action], swallowing a denied foreground-service start instead of
+ * letting it crash the caller. Both a cold [VmControlReceiver] dispatch and
+ * a guest-requested [PodroidService.scheduleRestart] can call
+ * [PodroidService.start] outside a foreground context, where Android may
+ * deny it with a [android.app.ForegroundServiceStartNotAllowedException]
+ * (API 31+, extends [IllegalStateException]; pre-31 the same denial surfaces
+ * as a plain [IllegalStateException] from `startService()`). Never silent:
+ * logs one warning naming the cure (launch Podroid so its START_VM activity
+ * intent runs in the foreground, or exempt the app from battery
+ * optimization).
+ */
+private fun runIgnoringBackgroundFgsDenial(tag: String, action: () -> Unit) {
+    try {
+        action()
+    } catch (e: IllegalStateException) {
+        val backgroundFgsDenied = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            e is android.app.ForegroundServiceStartNotAllowedException
+        Log.w(
+            tag,
+            "could not start/stop the VM from the background " +
+                "(${if (backgroundFgsDenied) "foreground service start disallowed" else e.message}) - " +
+                "launch Podroid so its START_VM activity intent runs in the foreground, " +
+                "or exempt the app from battery optimization",
+            e,
+        )
+    }
+}
+
 @AndroidEntryPoint
 class PodroidService : Service() {
 
@@ -504,10 +533,10 @@ class PodroidService : Service() {
                     // it as terminal could fire start() during a teardown blip.
                     val terminal = s is VmState.Stopped || s is VmState.Error
                     when {
-                        terminal -> PodroidService.start(ctx)
+                        terminal -> runIgnoringBackgroundFgsDenial(TAG) { PodroidService.start(ctx) }
                         tries++ >= 40 -> {
                             Log.w(TAG, "restart: VM did not reach a stopped state in time (state=$s); starting anyway")
-                            PodroidService.start(ctx)
+                            runIgnoringBackgroundFgsDenial(TAG) { PodroidService.start(ctx) }
                         }
                         else -> main.postDelayed(this, 250)
                     }
@@ -583,30 +612,8 @@ class VmControlReceiver : BroadcastReceiver() {
         }
     }
 
-    /**
-     * Runs a start()/stop() dispatch, swallowing a denied foreground-service
-     * start instead of letting it crash the receiver. Never silent: logs one
-     * warning naming the cure (launch Podroid itself so its activity's
-     * START_VM intent-filter fires the start in the foreground, or exempt
-     * the app from battery optimization so a cold background start is
-     * allowed).
-     */
-    private fun dispatch(action: () -> Unit) {
-        try {
-            action()
-        } catch (e: IllegalStateException) {
-            val backgroundFgsDenied = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-                e is android.app.ForegroundServiceStartNotAllowedException
-            Log.w(
-                TAG,
-                "VmControlReceiver could not start/stop the VM from the background " +
-                    "(${if (backgroundFgsDenied) "foreground service start disallowed" else e.message}) - " +
-                    "launch Podroid so its START_VM activity intent runs in the foreground, " +
-                    "or exempt the app from battery optimization",
-                e,
-            )
-        }
-    }
+    /** See [runIgnoringBackgroundFgsDenial] for what this guards against. */
+    private fun dispatch(action: () -> Unit) = runIgnoringBackgroundFgsDenial(TAG, action)
 
     companion object {
         private const val TAG = "VmControlReceiver"

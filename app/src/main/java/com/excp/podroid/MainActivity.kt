@@ -36,7 +36,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        handleStartVmIntent(intent)
+        if (savedInstanceState == null) {
+            handleStartVmIntent(intent)
+        }
         setContent {
             val windowSizeClass = calculateWindowSizeClass(this)
             val navVm: NavGraphViewModel = hiltViewModel()
@@ -100,10 +102,11 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Foreground-launch path for automation (#78 fix round): a cold
-     * background receiver may be denied a foreground-service start, but an
-     * Activity launch is always foreground, so this route is reliable on
-     * both cold start (onCreate) and warm delivery (onNewIntent).
+     * Foreground-launch path for automation: a cold background receiver may
+     * be denied a foreground-service start, but an Activity launch is always
+     * foreground, so this route is reliable on both cold start (onCreate,
+     * only when there is no saved state to restore) and warm delivery
+     * (onNewIntent).
      */
     private fun handleStartVmIntent(intent: Intent?) {
         if (intent?.action == VmControlReceiver.ACTION_START_VM) {
