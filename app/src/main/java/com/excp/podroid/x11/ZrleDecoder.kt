@@ -108,6 +108,10 @@ class ZrleDecoder {
             }
             ty += 64
         }
+        // The tiles can finish before this rect's compressed bytes are all read: a
+        // SYNC_FLUSH block ends with bytes that inflate to nothing (00 00 FF FF).
+        // Consume them so the socket stays aligned on the next rect header.
+        zi.consumeRest()
     }
 
     private fun decodeTile(zi: ZInput, tx: Int, ty: Int, tw: Int, th: Int, target: IntArray, stride: Int) {
@@ -229,12 +233,7 @@ class ZrleDecoder {
                 // Feed the next compressed chunk on demand, bounded by this rect's
                 // remaining budget. Each chunk is fully consumed before its buffer
                 // is reused, and we never read past compLen.
-                if (inf.needsInput() && remaining > 0) {
-                    val nIn = minOf(remaining, inputScratch.size)
-                    inputStream!!.readFully(inputScratch, 0, nIn)
-                    inf.setInput(inputScratch, 0, nIn)
-                    remaining -= nIn
-                }
+                if (inf.needsInput() && remaining > 0) feedChunk()
                 val n = inf.inflate(buf)
                 if (n > 0) { pos = 0; avail = n }
                 // n == 0 with needsInput means all input was consumed; if finished() is false
@@ -243,6 +242,22 @@ class ZrleDecoder {
                 // n == 0, not finished, not needsInput → needsDictionary or a stuck
                 // stream: bail rather than spin forever.
                 else throw IOException("ZRLE: inflater made no progress")
+            }
+        }
+
+        private fun feedChunk() {
+            val nIn = minOf(remaining, inputScratch.size)
+            inputStream!!.readFully(inputScratch, 0, nIn)
+            inf.setInput(inputScratch, 0, nIn)
+            remaining -= nIn
+        }
+
+        /** Reads and inflates this rect's unread compressed bytes, which must yield no pixels. */
+        fun consumeRest() {
+            while (remaining > 0) {
+                if (inf.needsInput()) feedChunk()
+                if (inf.inflate(buf) > 0) throw IOException("ZRLE: rect data longer than its tiles")
+                if (!inf.needsInput()) throw IOException("ZRLE: inflater made no progress")
             }
         }
 
