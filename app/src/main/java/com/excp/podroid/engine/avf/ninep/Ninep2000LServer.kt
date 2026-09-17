@@ -175,7 +175,7 @@ class Ninep2000LServer(
                 val maxSize = if (negotiated) msize.toInt() else NinepCodec.MAX_FRAME_SIZE
                 val frame = try {
                     NinepCodec.readFrame(input, maxSize) ?: break
-                } catch (e: EOFException) {
+                } catch (_: EOFException) {
                     break
                 } catch (e: Throwable) {
                     // Covers IllegalArgumentException (bad or oversized size prefix),
@@ -229,7 +229,7 @@ class Ninep2000LServer(
             }
         } catch (e: IOException) {
             throw e
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // A malformed request body (short read past the array bounds, etc.) fails
             // this one request, not the whole session.
             replyError(frame.tag, output, EIO)
@@ -385,7 +385,7 @@ class Ninep2000LServer(
         if (!isDir) {
             val channel = try {
                 openChannel(state.file, flags)
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 replyError(frame.tag, output, EIO)
                 return
             }
@@ -421,10 +421,10 @@ class Ninep2000LServer(
             Files.createFile(target.toPath())
             applyPosixMode(target, mode)
             openChannel(target, flags)
-        } catch (e: FileAlreadyExistsException) {
+        } catch (_: FileAlreadyExistsException) {
             replyError(frame.tag, output, EEXIST)
             return
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             replyError(frame.tag, output, EIO)
             return
         }
@@ -462,7 +462,7 @@ class Ninep2000LServer(
         val buf = ByteBuffer.allocate(cap)
         val n = try {
             channel.read(buf, offset)
-        } catch (e: IOException) {
+        } catch (_: IOException) {
             replyError(frame.tag, output, EIO)
             return
         }
@@ -487,7 +487,7 @@ class Ninep2000LServer(
         }
         val n = try {
             channel.write(ByteBuffer.wrap(data), offset)
-        } catch (e: IOException) {
+        } catch (_: IOException) {
             replyError(frame.tag, output, EIO)
             return
         }
@@ -507,7 +507,7 @@ class Ninep2000LServer(
         }
         val entries = try {
             buildDirEntries(dir)
-        } catch (e: IOException) {
+        } catch (_: IOException) {
             replyError(frame.tag, output, EIO)
             return
         }
@@ -593,7 +593,7 @@ class Ninep2000LServer(
             }
             // uid/gid changes are silently ignored (unsupported for an unprivileged app)
             // rather than erroring, so callers like "cp -p" still succeed overall.
-        } catch (e: IOException) {
+        } catch (_: IOException) {
             replyError(frame.tag, output, EIO)
             return
         }
@@ -621,10 +621,10 @@ class Ninep2000LServer(
         try {
             Files.createDirectory(target.toPath())
             applyPosixMode(target, mode)
-        } catch (e: FileAlreadyExistsException) {
+        } catch (_: FileAlreadyExistsException) {
             replyError(frame.tag, output, EEXIST)
             return
-        } catch (e: IOException) {
+        } catch (_: IOException) {
             replyError(frame.tag, output, EIO)
             return
         }
@@ -661,7 +661,7 @@ class Ninep2000LServer(
                 replyError(frame.tag, output, ENOENT)
                 return
             }
-        } catch (e: IOException) {
+        } catch (_: IOException) {
             replyError(frame.tag, output, EIO)
             return
         }
@@ -681,7 +681,7 @@ class Ninep2000LServer(
         }
         try {
             Files.deleteIfExists(state.file.toPath())
-        } catch (e: IOException) {
+        } catch (_: IOException) {
             replyError(frame.tag, output, EIO)
             return
         }
@@ -710,7 +710,7 @@ class Ninep2000LServer(
 
         try {
             Files.move(source.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
-        } catch (e: IOException) {
+        } catch (_: IOException) {
             replyError(frame.tag, output, EIO)
             return
         }
@@ -724,7 +724,7 @@ class Ninep2000LServer(
 
         try {
             fids[fid]?.channel?.force(true)
-        } catch (e: IOException) {
+        } catch (_: IOException) {
             // An fsync failure must never surface as an error to the client: 9p clients
             // treat a failed flush as a write failure, and the write itself succeeded.
         }
@@ -745,7 +745,7 @@ class Ninep2000LServer(
     private fun FileChannel.closeQuietly() {
         try {
             close()
-        } catch (e: IOException) {
+        } catch (_: IOException) {
             // ignored: best-effort cleanup, the fid is going away regardless
         }
     }
@@ -783,7 +783,7 @@ class Ninep2000LServer(
     private fun applyPosixMode(file: File, mode: Long) {
         try {
             Files.setPosixFilePermissions(file.toPath(), modeToPosixPermissions(mode))
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // ignored: see comment above
         }
     }
@@ -836,7 +836,7 @@ class Ninep2000LServer(
         } else {
             current.parentFile ?: current
         }
-    } catch (e: IOException) {
+    } catch (_: IOException) {
         current
     }
 
@@ -845,13 +845,13 @@ class Ninep2000LServer(
         val rootPath = root.canonicalFile.path
         val filePath = file.canonicalFile.path
         filePath == rootPath || filePath.startsWith(rootPath + File.separator)
-    } catch (e: IOException) {
+    } catch (_: IOException) {
         false
     }
 
     private fun statOrNull(path: String): StatInfo? = try {
         stat.lstat(path)
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         null
     }
 

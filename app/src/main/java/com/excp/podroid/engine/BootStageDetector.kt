@@ -71,7 +71,7 @@ class BootStageDetector(
          * matcher. Keep this list in sync with the `when` search strings —
          * the longest one drives how much prior text is re-scanned.
          */
-        val MARKERS = listOf(
+        private val MARKERS = listOf(
             "Ready!" to "Ready",
             "Almost ready" to "Almost ready...",
             "Starting SSH" to "Starting SSH...",

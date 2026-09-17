@@ -36,7 +36,7 @@ public final class TextStyle {
     /** If true (24-bit) color is used for the cell for foreground. */
     private final static int CHARACTER_ATTRIBUTE_TRUECOLOR_BACKGROUND= 1 << 10;
     /** If true, character represents a {@link TerminalBitmap} slice, not text. */
-    public final static int TERMINAL_BITMAP = 1 << 15;
+    private final static int TERMINAL_BITMAP = 1 << 15;
 
     public final static int COLOR_INDEX_FOREGROUND = 256;
     public final static int COLOR_INDEX_BACKGROUND = 257;

@@ -66,7 +66,7 @@ class QmpClient(private val socketPath: String) {
          * [classifyQmpFields]; returns null for async-event lines so the read
          * loop knows to keep reading for the real reply.
          */
-        fun classifyQmpResponse(json: JSONObject): Result<JSONObject>? =
+        private fun classifyQmpResponse(json: JSONObject): Result<JSONObject>? =
             when (val v = classifyQmpFields(json.has("error"), json.has("event"), json.opt("return"))) {
                 is QmpVerdict.Success -> Result.success(json)
                 is QmpVerdict.Failure -> Result.failure(RuntimeException(v.reason))

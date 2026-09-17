@@ -1,5 +1,6 @@
 package com.termux.terminal;
 
+import androidx.annotation.VisibleForTesting;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
@@ -59,12 +60,12 @@ public final class TerminalBuffer {
      * character at a row/coloumn index is a bitmap instead of text by calling
      * `TextStyle.isTerminalBitmap()`.
      */
-    public static final int TERMINAL_BITMAP__NUM_START = 0;
+    private static final int TERMINAL_BITMAP__NUM_START = 0;
 
     /**
      * The bitmap number end for {@link #mTerminalBitmaps} keys.
      */
-    public static final int TERMINAL_BITMAP__NUM_END = Integer.MAX_VALUE;
+    private static final int TERMINAL_BITMAP__NUM_END = Integer.MAX_VALUE;
 
 
     // ── OSC 8 hyperlinks ─────────────────────────────────────────────────────
@@ -170,16 +171,9 @@ public final class TerminalBuffer {
     }
 
 
+    @VisibleForTesting
     public String getTranscriptText() {
         return getSelectedText(0, -getActiveTranscriptRows(), mColumns, mScreenRows).trim();
-    }
-
-    public String getTranscriptTextWithoutJoinedLines() {
-        return getSelectedText(0, -getActiveTranscriptRows(), mColumns, mScreenRows, false).trim();
-    }
-
-    public String getTranscriptTextWithFullLinesJoined() {
-        return getSelectedText(0, -getActiveTranscriptRows(), mColumns, mScreenRows, true, true).trim();
     }
 
     public String getSelectedText(int selX1, int selY1, int selX2, int selY2) {
@@ -238,6 +232,7 @@ public final class TerminalBuffer {
         return builder.toString();
     }
 
+    @VisibleForTesting
     public String getWordAtLocation(int x, int y) {
         // Set y1 and y2 to the lines where the wrapped line starts and ends.
         // I.e. if a line that is wrapped to 3 lines starts at line 4, and this
@@ -638,12 +633,12 @@ public final class TerminalBuffer {
 
 
 
-    public synchronized TerminalBitmap getTerminalBitmap(long style) {
+    private synchronized TerminalBitmap getTerminalBitmap(long style) {
         int bitmapNum = TextStyle.getTerminalBitmapNum(style);
         return bitmapNum >= TERMINAL_BITMAP__NUM_START ? mTerminalBitmaps.get(bitmapNum): null;
     }
 
-    public synchronized void clearTerminalBitmaps() {
+    private synchronized void clearTerminalBitmaps() {
         mTerminalBitmaps.clear();
     }
 
@@ -781,7 +776,7 @@ public final class TerminalBuffer {
 
 
     /** Remove bitmaps that are completely scrolled out. */
-    public synchronized void removeScrolledOutTerminalBitmaps(int row) {
+    private synchronized void removeScrolledOutTerminalBitmaps(int row) {
         Set<Integer> bitmapsToRemove = new HashSet<>();
 
         for (int column = 0; column < mColumns; column++) {

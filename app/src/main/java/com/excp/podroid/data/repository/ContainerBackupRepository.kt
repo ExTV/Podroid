@@ -29,7 +29,7 @@ class ContainerBackupRepository @Inject constructor() {
         const val BACKUP_SUBDIR = "Podroid/backups"
     }
 
-    fun backupDirectory(): File {
+    private fun backupDirectory(): File {
         val downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
         return File(downloads, BACKUP_SUBDIR)
     }
@@ -38,7 +38,7 @@ class ContainerBackupRepository @Inject constructor() {
         if (isDownloadsReachable()) "/mnt/downloads/Podroid/backups"
         else "/var/backups/podroid"
 
-    fun isDownloadsReachable(): Boolean {
+    private fun isDownloadsReachable(): Boolean {
         val dir = backupDirectory()
         // Create Downloads/Podroid/backups if absent: the app holds All-files
         // access whenever Downloads sharing is on, so a successful mkdirs both
@@ -90,7 +90,7 @@ class ContainerBackupRepository @Inject constructor() {
 
     fun listCommand(): String = "podroid-backup list"
 
-    fun fallbackExportCommand(containerName: String): String {
+    private fun fallbackExportCommand(containerName: String): String {
         val q = ShellQuote.quote(containerName.trim())
         val root = guestBackupPathLabel()
         return "mkdir -p $root && podman export $q -o $root/\$(echo $q | tr -cd 'A-Za-z0-9._-')-\$(date +%Y%m%d-%H%M%S).tar"

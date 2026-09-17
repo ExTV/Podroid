@@ -28,8 +28,8 @@ final class GestureAndScaleRecognizer {
 
     private final GestureDetector mGestureDetector;
     private final ScaleGestureDetector mScaleDetector;
-    final Listener mListener;
-    boolean isAfterLongPress;
+    private final Listener mListener;
+    private boolean isAfterLongPress;
 
     public GestureAndScaleRecognizer(Context context, Listener listener) {
         mListener = listener;

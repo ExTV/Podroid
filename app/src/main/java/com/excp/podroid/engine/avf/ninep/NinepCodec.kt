@@ -1,5 +1,6 @@
 package com.excp.podroid.engine.avf.ninep
 
+import androidx.annotation.VisibleForTesting
 import java.io.ByteArrayOutputStream
 import java.io.EOFException
 import java.io.InputStream
@@ -67,6 +68,7 @@ object NinepCodec {
 
     /** Reads little-endian primitives out of an in-memory byte array with a cursor. */
     class Reader(private val data: ByteArray, private var pos: Int = 0) {
+        @VisibleForTesting
         fun readU8(): Int {
             val v = data[pos].toInt() and 0xFF
             pos += 1

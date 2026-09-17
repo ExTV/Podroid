@@ -20,7 +20,7 @@ class LanguageManager @Inject constructor(
     private val settingsRepository: SettingsRepository,
 ) {
     companion object {
-        const val LANGUAGE_AUTO = "auto"
+        private const val LANGUAGE_AUTO = "auto"
         const val LANGUAGE_ZH = "zh"
         const val LANGUAGE_EN = "en"
 
@@ -47,7 +47,7 @@ class LanguageManager @Inject constructor(
          * Persists the language preference to the cache file so it's available
          * synchronously on the next process start.
          */
-        fun persistLanguage(ctx: Context, language: String) {
+        private fun persistLanguage(ctx: Context, language: String) {
             try {
                 File(ctx.filesDir, LANG_CACHE_FILE).writeText(language)
             } catch (e: Exception) {
@@ -113,12 +113,4 @@ class LanguageManager @Inject constructor(
         persistLanguage(context, language)
     }
 
-    suspend fun getCurrentLanguage(): String {
-        val prefLanguage = settingsRepository.getLanguageSnapshot()
-        return when (prefLanguage) {
-            LANGUAGE_AUTO -> getSystemLanguage()
-            LANGUAGE_ZH, LANGUAGE_EN -> prefLanguage
-            else -> getSystemLanguage()
-        }
-    }
 }

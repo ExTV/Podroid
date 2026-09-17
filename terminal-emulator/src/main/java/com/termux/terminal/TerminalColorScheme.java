@@ -112,7 +112,7 @@ public final class TerminalColorScheme {
      * background color and if its below the threshold (too dark), we use white cursor and if its
      * above (too bright), we use black cursor.
      */
-    public void setCursorColorForBackground() {
+    private void setCursorColorForBackground() {
         int backgroundColor = mDefaultColors[TextStyle.COLOR_INDEX_BACKGROUND];
         int brightness = TerminalColors.getPerceivedBrightnessOfColor(backgroundColor);
         if (brightness > 0) {

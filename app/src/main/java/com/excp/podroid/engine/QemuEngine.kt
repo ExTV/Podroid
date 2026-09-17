@@ -101,7 +101,7 @@ class QemuEngine @Inject constructor(
     val serialSockPath: String get() = "${context.filesDir.absolutePath}/serial.sock"
     val terminalSockPath: String get() = "${context.filesDir.absolutePath}/terminal.sock"
     val ctrlSockPath: String get() = "${context.filesDir.absolutePath}/ctrl.sock"
-    val hostSockPath: String get() = "${context.filesDir.absolutePath}/host.sock"
+    private val hostSockPath: String get() = "${context.filesDir.absolutePath}/host.sock"
 
     /**
      * Last QEMU process exit code (null until it exits) + a bounded tail of

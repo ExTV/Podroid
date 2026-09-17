@@ -19,7 +19,6 @@ val PodroidLightSurface2  = Color(0xFFF4F4F5)
 val PodroidLightBorder    = Color(0xFFE4E4E7)
 val PodroidLightText      = Color(0xFF0A0A0A)
 val PodroidLightTextMute  = Color(0xFF525252)
-val PodroidLightTextFaint = Color(0xFF737373)
 
 // Accent (mode-invariant)
 val PodroidAccent     = Color(0xFF4ADE80)

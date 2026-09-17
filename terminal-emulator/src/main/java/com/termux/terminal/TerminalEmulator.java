@@ -235,9 +235,9 @@ public final class TerminalEmulator {
     private int mCellWidthPixels, mCellHeightPixels;
 
     /** The number of terminal transcript rows that can be scrolled back to. */
-    public static final int TERMINAL_TRANSCRIPT_ROWS_MIN = 100;
-    public static final int TERMINAL_TRANSCRIPT_ROWS_MAX = 50000;
-    public static final int DEFAULT_TERMINAL_TRANSCRIPT_ROWS = 2000;
+    private static final int TERMINAL_TRANSCRIPT_ROWS_MIN = 100;
+    private static final int TERMINAL_TRANSCRIPT_ROWS_MAX = 50000;
+    private static final int DEFAULT_TERMINAL_TRANSCRIPT_ROWS = 2000;
 
 
     /* The supported terminal cursor styles. */
@@ -245,8 +245,8 @@ public final class TerminalEmulator {
     public static final int TERMINAL_CURSOR_STYLE_BLOCK = 0;
     public static final int TERMINAL_CURSOR_STYLE_UNDERLINE = 1;
     public static final int TERMINAL_CURSOR_STYLE_BAR = 2;
-    public static final int DEFAULT_TERMINAL_CURSOR_STYLE = TERMINAL_CURSOR_STYLE_BLOCK;
-    public static final Integer[] TERMINAL_CURSOR_STYLES_LIST = new Integer[]{TERMINAL_CURSOR_STYLE_BLOCK, TERMINAL_CURSOR_STYLE_UNDERLINE, TERMINAL_CURSOR_STYLE_BAR};
+    private static final int DEFAULT_TERMINAL_CURSOR_STYLE = TERMINAL_CURSOR_STYLE_BLOCK;
+    private static final Integer[] TERMINAL_CURSOR_STYLES_LIST = new Integer[]{TERMINAL_CURSOR_STYLE_BLOCK, TERMINAL_CURSOR_STYLE_UNDERLINE, TERMINAL_CURSOR_STYLE_BAR};
 
     /** The terminal cursor styles. */
     private int mCursorStyle = DEFAULT_TERMINAL_CURSOR_STYLE;
@@ -487,7 +487,7 @@ public final class TerminalEmulator {
         }
     }
 
-    static int mapDecSetBitToInternalBit(int decsetBit) {
+    private static int mapDecSetBitToInternalBit(int decsetBit) {
         switch (decsetBit) {
             case 1:
                 return DECSET_BIT_APPLICATION_CURSOR_KEYS;
@@ -651,7 +651,7 @@ public final class TerminalEmulator {
     }
 
     /** Set the terminal cursor style. */
-    public void setCursorStyle() {
+    private void setCursorStyle() {
         Integer cursorStyle = null;
 
         if (mClient != null)
@@ -799,7 +799,7 @@ public final class TerminalEmulator {
         }
     }
 
-    public void processCodePoint(int b) {
+    private void processCodePoint(int b) {
         mScreen.doTerminalBitmapsGC(300000);
 
         if (mEscapeState == ESC_OSC && mIsFastPathOsc) {
@@ -1386,7 +1386,7 @@ public final class TerminalEmulator {
         }
     }
 
-    public void clearDcsTypeVariables() {
+    private void clearDcsTypeVariables() {
         ESC_DCS__ESC = false;
         mIsFastPathDcs = false;
 
@@ -1836,7 +1836,7 @@ public final class TerminalEmulator {
         }
     }
 
-    public void doDecSetOrReset(boolean setting, int externalBit) {
+    private void doDecSetOrReset(boolean setting, int externalBit) {
         int internalBit = mapDecSetBitToInternalBit(externalBit);
         if (internalBit != -1) {
             setDecsetinternalBit(internalBit, setting);
@@ -2768,11 +2768,6 @@ public final class TerminalEmulator {
         }
     }
 
-    /**
-     * Clear {@link #ESC_APC} type variables.
-     */
-    public void clearApcTypeVariables() {}
-
     // Real doApc() implementation lives at line ~2670 (Kitty graphics handler).
 
 
@@ -2821,7 +2816,7 @@ public final class TerminalEmulator {
     /**
      * Set {@link #ESC_OSC} type variables.
      */
-    void setOscTypeVariables() {
+    private void setOscTypeVariables() {
         if (mOscType >= 0) return;
         if (mTerminalControlArgs.indexOf(":") < 0) return;
 
@@ -2881,7 +2876,7 @@ public final class TerminalEmulator {
     /**
      * Clear {@link #ESC_OSC} type variables.
      */
-    public void clearOscTypeVariables() {
+    private void clearOscTypeVariables() {
         mOscType = -1;
         mIsFastPathOsc = false;
         mIgnoreCrLfForOsc = false;
@@ -3627,10 +3622,6 @@ public final class TerminalEmulator {
 
     public boolean isAutoScrollDisabled() {
         return mAutoScrollDisabled;
-    }
-
-    public void toggleAutoScrollDisabled() {
-        mAutoScrollDisabled = !mAutoScrollDisabled;
     }
 
 

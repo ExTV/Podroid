@@ -45,7 +45,6 @@ class ZrleDecoder {
     // Scratch buffer for compressed input read from the socket.
     private var inputScratch = ByteArray(4096)
     // Decompressed output buffer; re-used across inflate calls within one decode() call.
-    private var outputBuf = ByteArray(4096)
 
     // Remaining compressed bytes in the current rect that have not yet been fed to the inflater.
     private var remaining = 0

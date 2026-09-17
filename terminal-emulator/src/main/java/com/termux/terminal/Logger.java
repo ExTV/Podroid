@@ -47,7 +47,7 @@ public class Logger {
         logError(client, tag, getMessageAndStackTraceString(message, throwable));
     }
 
-    public static String getMessageAndStackTraceString(String message, Throwable throwable) {
+    private static String getMessageAndStackTraceString(String message, Throwable throwable) {
         if (message == null && throwable == null)
             return null;
         else if (message != null && throwable != null)
@@ -58,7 +58,7 @@ public class Logger {
             return getStackTraceString(throwable);
     }
 
-    public static String getStackTraceString(Throwable throwable) {
+    private static String getStackTraceString(Throwable throwable) {
         if (throwable == null) return null;
 
         String stackTraceString = null;

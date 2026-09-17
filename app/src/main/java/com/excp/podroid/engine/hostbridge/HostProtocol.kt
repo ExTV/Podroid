@@ -13,7 +13,7 @@ import java.util.Base64
 
 object HostProtocol {
     const val PRIO_LOW = "low"
-    const val PRIO_NORMAL = "normal"
+    private const val PRIO_NORMAL = "normal"
     const val PRIO_HIGH = "high"
     val VALID_PRIORITIES = setOf(PRIO_LOW, PRIO_NORMAL, PRIO_HIGH)
 

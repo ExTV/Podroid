@@ -48,7 +48,7 @@ public final class TerminalRow {
     /** The style bits of each cell in the row. See {@link TextStyle}. */
     final long[] mStyle;
     /** If this row might contain chars with width != 1, used for deactivating fast path */
-    boolean mHasNonOneWidthOrSurrogateChars;
+    private boolean mHasNonOneWidthOrSurrogateChars;
     /** If this row has a {@link TerminalBitmap}. Used for performance only. */
     public boolean mHasTerminalBitmap;
 
