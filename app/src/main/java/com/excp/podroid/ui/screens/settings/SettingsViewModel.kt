@@ -553,10 +553,13 @@ class SettingsViewModel @Inject constructor(
          * new component starts logging, or its lines won't reach the export.
          */
         private val APP_LOG_TAGS = listOf(
-            "AudioStreamer", "AvfEngine", "AvfReflect", "ConsoleFanout",
-            "EngineHolder", "PodroidApp", "PodroidService", "PodroidVM-err",
-            "QemuEngine", "QmpClient", "SettingsViewModel", "TerminalVM",
-            "VsockControlChannel", "VsockPortForwarder",
+            "AudioStreamer", "AvfDownloadsShare", "AvfEngine", "AvfReflect",
+            "ConsoleFanout", "EngineHolder", "HomeViewModel", "HostRequestServer",
+            "LanguageManager", "Ninep2000LServer", "PodroidApp", "PodroidService",
+            "PodroidVM-err", "QemuBootMonitor", "QemuEngine", "QmpClient",
+            "SettingsViewModel", "TerminalVM", "UpdateRepository", "UsbPassthrough",
+            "VmControlReceiver", "VsockControlChannel", "VsockPortForwarder",
+            "VsockUdpForwarder", "X11Stats", "X11ViewModel",
         )
     }
 }
