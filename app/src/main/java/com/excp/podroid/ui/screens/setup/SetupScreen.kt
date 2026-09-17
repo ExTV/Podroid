@@ -87,6 +87,17 @@ fun SetupScreen(
     var loadBalanceEnabled by rememberSaveable { mutableStateOf(true) }
     var sshEnabled by rememberSaveable { mutableStateOf(true) }
     var storageAccessEnabled by rememberSaveable { mutableStateOf(false) }
+    var hasStoragePermission by remember {
+        mutableStateOf(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                Environment.isExternalStorageManager()
+            } else {
+                ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.WRITE_EXTERNAL_STORAGE
+                ) == PackageManager.PERMISSION_GRANTED
+            }
+        )
+    }
     var usbPassthroughEnabled by rememberSaveable { mutableStateOf(false) }
     val usbPassthroughAvailable = remember { viewModel.usbPassthroughAvailable() }
     val setupComplete by viewModel.setupComplete.collectAsStateWithLifecycle()
@@ -134,8 +145,9 @@ fun SetupScreen(
         scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
     }
 
-    // Re-sync storageAccessEnabled against the actual OS grant on every
-    // resume (the user may have denied the all-files-access screen we sent them to).
+    // Re-sync storageAccessEnabled and hasStoragePermission against the actual OS
+    // grant on every resume (the user may have granted or denied the
+    // all-files-access screen we sent them to).
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -143,6 +155,7 @@ fun SetupScreen(
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
             ) {
                 storageAccessEnabled = storageAccessEnabled && Environment.isExternalStorageManager()
+                hasStoragePermission = Environment.isExternalStorageManager()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -198,6 +211,8 @@ fun SetupScreen(
                     2 -> StorageAccessPage(
                         windowSizeClass = windowSizeClass,
                         storageAccessEnabled = storageAccessEnabled,
+                        hasStoragePermission = hasStoragePermission,
+                        onStoragePermissionChanged = { hasStoragePermission = it },
                         onStorageAccessToggle = { enabled ->
                             storageAccessEnabled = enabled
                             if (enabled &&
@@ -485,25 +500,16 @@ private fun VmConfigPage(
 private fun StorageAccessPage(
     windowSizeClass: WindowSizeClass,
     storageAccessEnabled: Boolean,
+    hasStoragePermission: Boolean,
+    onStoragePermissionChanged: (Boolean) -> Unit,
     onStorageAccessToggle: (Boolean) -> Unit,
     onOpenStorageAccessSettings: () -> Unit,
     onBack: () -> Unit,
     onNext: () -> Unit,
 ) {
-    val context = LocalContext.current
     val canManageAllFiles = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-    var hasStoragePermission by remember {
-        mutableStateOf(
-            when {
-                canManageAllFiles -> Environment.isExternalStorageManager()
-                else -> ContextCompat.checkSelfPermission(
-                    context, Manifest.permission.WRITE_EXTERNAL_STORAGE
-                ) == PackageManager.PERMISSION_GRANTED
-            }
-        )
-    }
     val writeStoragePermLauncher = rememberLauncherForActivityResult(RequestPermission()) { granted ->
-        hasStoragePermission = granted
+        onStoragePermissionChanged(granted)
     }
 
     SetupPageLayout(

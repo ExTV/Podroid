@@ -67,7 +67,7 @@
     <string name="storage_access_description">Optional. Mount your Android Downloads folder into the VM over virtio-9p.</string>
     <string name="enable_downloads_sharing">Enable Downloads sharing</string>
     <string name="grant_storage_access">Grant storage access</string>
-    <string name="requires_android_11">Requires Android 11+. On this device the toggle is for future-OS upgrades only.</string>
+    <string name="requires_android_11">On this device, sharing needs the storage permission granted below (Android 11+ uses all-files access instead).</string>
     <string name="storage_access_warning">Warning: on some devices this can crash the VM. Disable it if start fails.</string>
 
     <!-- Settings Sections -->

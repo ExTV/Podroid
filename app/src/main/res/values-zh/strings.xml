@@ -67,7 +67,7 @@
     <string name="storage_access_description">可选。通过 virtio-9p 将 Android 下载文件夹挂载到虚拟机。</string>
     <string name="enable_downloads_sharing">启用下载文件夹共享</string>
     <string name="grant_storage_access">授予存储权限</string>
-    <string name="requires_android_11">需要 Android 11+。在此设备上，此开关仅用于未来系统升级。</string>
+    <string name="requires_android_11">在此设备上，共享需要授予下方的存储权限（Android 11 及以上使用完整文件访问权限）。</string>
     <string name="storage_access_warning">警告：某些设备上这可能导致虚拟机崩溃。如果启动失败，请禁用。</string>
 
     <!-- Settings Sections -->
