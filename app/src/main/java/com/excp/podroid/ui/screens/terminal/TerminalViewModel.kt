@@ -645,47 +645,16 @@ class TerminalViewModel @Inject constructor(
             val shift = e.isShiftPressed
             val ctrl = e.isCtrlPressed || extraCtrl
             val alt = e.isAltPressed || extraAlt
-            // xterm CSI modifier: 1=none, 2=shift, 3=alt, 4=shift+alt, 5=ctrl,
-            // 6=ctrl+shift, 7=ctrl+alt, 8=all. Used for "ESC [1;<m><final>".
-            val mod = 1 + (if (shift) 1 else 0) + (if (alt) 2 else 0) + (if (ctrl) 4 else 0)
-            val appCursor = cursorKeysApplicationMode(session?.emulator)
-            fun arrow(final: Char): ByteArray =
-                if (mod == 1) {
-                    if (cursorKeysApplicationMode(session?.emulator)) "\u001bO$final".toByteArray()
-                    else "\u001b[$final".toByteArray()
-                } else {
-                    "\u001b[1;$mod$final".toByteArray()
-                }
+            val mod = xtermModifier(shift, alt, ctrl)
 
             val bytes = when (keyCode) {
-                KeyEvent.KEYCODE_ENTER        -> byteArrayOf(13)
-                KeyEvent.KEYCODE_DEL          -> byteArrayOf(127)
-                KeyEvent.KEYCODE_FORWARD_DEL  -> "\u001b[3~".toByteArray()
-                KeyEvent.KEYCODE_TAB          ->
-                    if (shift) "\u001b[Z".toByteArray() else byteArrayOf(9)
-                KeyEvent.KEYCODE_ESCAPE       -> byteArrayOf(27)
-                KeyEvent.KEYCODE_DPAD_UP      -> arrow('A')
-                KeyEvent.KEYCODE_DPAD_DOWN    -> arrow('B')
-                KeyEvent.KEYCODE_DPAD_RIGHT   -> arrow('C')
-                KeyEvent.KEYCODE_DPAD_LEFT    -> arrow('D')
-                KeyEvent.KEYCODE_MOVE_HOME    -> arrow('H')
-                KeyEvent.KEYCODE_MOVE_END     -> arrow('F')
-                KeyEvent.KEYCODE_PAGE_UP      -> "\u001b[5~".toByteArray()
-                KeyEvent.KEYCODE_PAGE_DOWN    -> "\u001b[6~".toByteArray()
-                KeyEvent.KEYCODE_INSERT       -> "\u001b[2~".toByteArray()
-                KeyEvent.KEYCODE_F1           -> "\u001bOP".toByteArray()
-                KeyEvent.KEYCODE_F2           -> "\u001bOQ".toByteArray()
-                KeyEvent.KEYCODE_F3           -> "\u001bOR".toByteArray()
-                KeyEvent.KEYCODE_F4           -> "\u001bOS".toByteArray()
-                KeyEvent.KEYCODE_F5           -> "\u001b[15~".toByteArray()
-                KeyEvent.KEYCODE_F6           -> "\u001b[17~".toByteArray()
-                KeyEvent.KEYCODE_F7           -> "\u001b[18~".toByteArray()
-                KeyEvent.KEYCODE_F8           -> "\u001b[19~".toByteArray()
-                KeyEvent.KEYCODE_F9           -> "\u001b[20~".toByteArray()
-                KeyEvent.KEYCODE_F10          -> "\u001b[21~".toByteArray()
-                KeyEvent.KEYCODE_F11          -> "\u001b[23~".toByteArray()
-                KeyEvent.KEYCODE_F12          -> "\u001b[24~".toByteArray()
-                else -> null
+                KeyEvent.KEYCODE_ENTER  -> byteArrayOf(13)
+                KeyEvent.KEYCODE_DEL    -> byteArrayOf(127)
+                KeyEvent.KEYCODE_TAB    -> if (shift) "\u001b[Z".toByteArray() else byteArrayOf(9)
+                KeyEvent.KEYCODE_ESCAPE -> byteArrayOf(27)
+                else -> termKeyForKeyCode(keyCode)?.let {
+                    encode(it, mod, cursorKeysApplicationMode(session?.emulator))
+                }
             }
             if (bytes != null) {
                 session?.write(bytes, 0, bytes.size)
@@ -803,30 +772,13 @@ class TerminalViewModel @Inject constructor(
         val bytes = when (key) {
             "ESC"  -> byteArrayOf(27)
             "TAB"  -> byteArrayOf(9)
-            "UP"   -> if (cursorKeysApplicationMode(session?.emulator)) "\u001bOA".toByteArray() else "\u001b[A".toByteArray()
-            "DOWN" -> if (cursorKeysApplicationMode(session?.emulator)) "\u001bOB".toByteArray() else "\u001b[B".toByteArray()
-            "LEFT" -> if (cursorKeysApplicationMode(session?.emulator)) "\u001bOD".toByteArray() else "\u001b[D".toByteArray()
-            "RIGHT"-> if (cursorKeysApplicationMode(session?.emulator)) "\u001bOC".toByteArray() else "\u001b[C".toByteArray()
-            "HOME" -> if (cursorKeysApplicationMode(session?.emulator)) "\u001bOH".toByteArray() else "\u001b[H".toByteArray()
-            "END"  -> if (cursorKeysApplicationMode(session?.emulator)) "\u001bOF".toByteArray() else "\u001b[F".toByteArray()
-            "PGUP" -> "\u001b[5~".toByteArray()
-            "PGDN" -> "\u001b[6~".toByteArray()
-            "F1"   -> "\u001bOP".toByteArray()
-            "F2"   -> "\u001bOQ".toByteArray()
-            "F3"   -> "\u001bOR".toByteArray()
-            "F4"   -> "\u001bOS".toByteArray()
-            "F5"   -> "\u001b[15~".toByteArray()
-            "F6"   -> "\u001b[17~".toByteArray()
-            "F7"   -> "\u001b[18~".toByteArray()
-            "F8"   -> "\u001b[19~".toByteArray()
-            "F9"   -> "\u001b[20~".toByteArray()
-            "F10"  -> "\u001b[21~".toByteArray()
-            "F11"  -> "\u001b[23~".toByteArray()
-            "F12"  -> "\u001b[24~".toByteArray()
-            "-"    -> "-".toByteArray()
-            "|"    -> "|".toByteArray()
-            "/"    -> "/".toByteArray()
-            else   -> return
+            "-"    -> if (extraAlt) byteArrayOf(27) + "-".toByteArray() else "-".toByteArray()
+            "|"    -> if (extraAlt) byteArrayOf(27) + "|".toByteArray() else "|".toByteArray()
+            "/"    -> if (extraAlt) byteArrayOf(27) + "/".toByteArray() else "/".toByteArray()
+            else   -> termKeyForLabel(key)?.let {
+                val mod = xtermModifier(false, extraAlt, extraCtrl)
+                encode(it, mod, cursorKeysApplicationMode(session?.emulator))
+            } ?: return
         }
         session?.write(bytes, 0, bytes.size)
         extraCtrl = false
