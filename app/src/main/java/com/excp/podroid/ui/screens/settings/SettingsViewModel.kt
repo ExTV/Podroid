@@ -15,6 +15,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.excp.podroid.BuildConfig
 import com.excp.podroid.R
+import com.excp.podroid.data.repository.AddRuleResult
 import com.excp.podroid.data.repository.LanguageManager
 import com.excp.podroid.data.repository.PortForwardRepository
 import com.excp.podroid.data.repository.PortForwardRule
@@ -300,8 +301,18 @@ class SettingsViewModel @Inject constructor(
         }
         if (toAdd.isEmpty()) return false
         viewModelScope.launch {
-            toAdd.forEach { proto ->
-                portForwardRepository.addRule(PortForwardRule(hostPort, guestPort, proto))
+            // "both" can add TCP then hit the table ceiling on UDP (or vice
+            // versa): the dialog already closed on the true return below, so
+            // that partial outcome would otherwise vanish silently.
+            val notAdded = toAdd.filter { proto ->
+                portForwardRepository.addRule(PortForwardRule(hostPort, guestPort, proto)) != AddRuleResult.ADDED
+            }
+            if (notAdded.isNotEmpty() && notAdded.size < toAdd.size) {
+                _portForwardPartialWarning.value = context.getString(
+                    R.string.port_forward_partial_add,
+                    hostPort,
+                    notAdded.joinToString(", ") { it.uppercase() },
+                )
             }
         }
         return true
@@ -330,6 +341,14 @@ class SettingsViewModel @Inject constructor(
     val exportError: StateFlow<String?> = _exportError.asStateFlow()
 
     fun clearExportError() { _exportError.value = null }
+
+    private val _portForwardPartialWarning = MutableStateFlow<String?>(null)
+    /** One-shot warning when a "both" add only added one protocol (e.g. the
+     *  table filled between the TCP and UDP rule); clear after showing with
+     *  [clearPortForwardPartialWarning]. */
+    val portForwardPartialWarning: StateFlow<String?> = _portForwardPartialWarning.asStateFlow()
+
+    fun clearPortForwardPartialWarning() { _portForwardPartialWarning.value = null }
 
     fun removePortForward(rule: PortForwardRule) {
         viewModelScope.launch { portForwardRepository.removeRule(rule) }

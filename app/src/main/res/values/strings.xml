@@ -121,6 +121,7 @@
     <string name="port_already_forwarded">Port %1$d (%2$s) is already forwarded</string>
     <string name="port_reserved">Port %1$d is reserved for the in-app desktop</string>
     <string name="port_forward_table_full">Limit of %1$d port forwards reached. Remove one first.</string>
+    <string name="port_forward_partial_add">Port %1$d: %2$s could not be added, the port forward limit was reached.</string>
     <string name="reset">Reset</string>
     <string name="remove">Remove</string>
     <string name="port_forward_purpose_ssh">SSH</string>

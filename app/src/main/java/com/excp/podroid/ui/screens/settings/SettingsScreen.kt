@@ -124,6 +124,7 @@ fun SettingsScreen(
     val portForwardRules by viewModel.portForwardRules.collectAsStateWithLifecycle()
     val vmState by viewModel.vmState.collectAsStateWithLifecycle()
     val exportError by viewModel.exportError.collectAsStateWithLifecycle()
+    val portForwardPartialWarning by viewModel.portForwardPartialWarning.collectAsStateWithLifecycle()
     val usbPassthrough by viewModel.usbPassthroughEnabled.collectAsStateWithLifecycle()
     val autostartOnBoot by viewModel.autostartOnBoot.collectAsStateWithLifecycle()
 
@@ -167,6 +168,11 @@ fun SettingsScreen(
         val msg = exportError ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(msg)
         viewModel.clearExportError()
+    }
+    LaunchedEffect(portForwardPartialWarning) {
+        val msg = portForwardPartialWarning ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(msg)
+        viewModel.clearPortForwardPartialWarning()
     }
 
     Scaffold(
