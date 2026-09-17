@@ -695,7 +695,8 @@ fun X11Screen(
                             // Combine the sticky CTRL/ALT with the typed character
                             // (e.g. tap CTRL then type L → Ctrl+L to clear the
                             // terminal). sendWithModifiers clears the one-shot after.
-                            sendWithModifiers(addedText[0].code)
+                            val cp = addedText[0].code
+                            sendWithModifiers(if (cp in 0x20..0x7E) cp else 0x01000000 or cp)
                             // Reset buffer after ctrl/alt combo to keep it short.
                             imeBuf = TextFieldValue("")
                         } else {
