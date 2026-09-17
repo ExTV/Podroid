@@ -409,10 +409,13 @@ class EngineHolder @Inject constructor(
         }
         publishFirstPick(picked)
         // Capture the launch set for the diff loop's →Running seeding, and mark
-        // this engine started so its state passes through un-normalized.
+        // this engine started so its state passes through un-normalized. Read
+        // `current` once: a concurrent swap between the two reads would mark
+        // one engine started while starting the other.
         launchRules = portForwards.toSet()
-        startedEngine = current
-        current.start(portForwards, config)
+        val eng = current
+        startedEngine = eng
+        eng.start(portForwards, config)
     }
     override fun stop() = current.stop()
     override fun createTerminalSession(client: TerminalSessionClient) =
