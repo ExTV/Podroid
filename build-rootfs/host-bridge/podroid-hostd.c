@@ -116,38 +116,12 @@ static int write_line(int fd, const char *s) {
  * garbage rather than failing. */
 #define LINE_TOO_LONG (-2)
 
-/* Reads one LF-terminated line into buf (NUL-terminated, LF stripped).
- * Returns line length, 0 on EOF, -1 on error/timeout, LINE_TOO_LONG if the line
- * did not fit. In that case the rest of the line is consumed, so the stream is
- * still positioned at the start of the next one. */
-static int read_line(int fd, char *buf, size_t cap) {
-    size_t n = 0;
-    while (n < cap - 1) {
-        char c;
-        ssize_t r = read(fd, &c, 1);
-        if (r < 0) { if (errno == EINTR) continue; return -1; }
-        if (r == 0) return n == 0 ? 0 : (int)n;
-        if (c == '\n') { buf[n] = '\0'; return (int)n; }
-        buf[n++] = c;
-    }
-    buf[n] = '\0';
-    /* Buffer full. If the next byte ends the line then it fit exactly; otherwise
-     * discard the overflow so the next read starts on a line boundary. Either
-     * way the terminator is consumed, which the plain loop above cannot do. */
-    int over = 0;
-    for (;;) {
-        char c;
-        ssize_t r = read(fd, &c, 1);
-        if (r < 0) { if (errno == EINTR) continue; return -1; }
-        if (r == 0 || c == '\n') break;
-        over = 1;
-    }
-    return over ? LINE_TOO_LONG : (int)n;
-}
-
-/* Like read_line but waits at most timeout_s for activity before each byte;
- * returns line length, 0 on EOF, -1 on error/timeout. poll() works on both
- * char devices (/dev/hvc2) and sockets, unlike SO_RCVTIMEO. */
+/* Reads one LF-terminated line into buf (NUL-terminated, LF stripped), waiting
+ * at most timeout_s for activity before each byte. Returns line length, 0 on
+ * EOF, -1 on error or timeout, LINE_TOO_LONG if the line did not fit. In that
+ * case the rest of the line is consumed, so the stream is still positioned at
+ * the start of the next one. poll() works on both char devices (/dev/hvc2) and
+ * sockets, unlike SO_RCVTIMEO. */
 static int read_line_timeout(int fd, char *buf, size_t cap, int timeout_s) {
     size_t n = 0;
     while (n < cap - 1) {
@@ -163,7 +137,10 @@ static int read_line_timeout(int fd, char *buf, size_t cap, int timeout_s) {
         buf[n++] = c;
     }
     buf[n] = '\0';
-    int over = 0;  /* see read_line: distinguish an exact fit from an overflow */
+    /* Buffer full. If the next byte ends the line then it fit exactly; otherwise
+     * discard the overflow so the next read starts on a line boundary. Either
+     * way the terminator is consumed, which the plain loop above cannot do. */
+    int over = 0;
     for (;;) {
         struct pollfd pfd = { .fd = fd, .events = POLLIN };
         int pr = poll(&pfd, 1, timeout_s * 1000);
@@ -203,7 +180,9 @@ static int cli_roundtrip(const char *req, char *resp, size_t cap) {
     strncpy(sa.sun_path, SOCK_PATH, sizeof(sa.sun_path) - 1);
     if (connect(fd, (struct sockaddr *)&sa, sizeof(sa)) < 0) { close(fd); return -1; }
     if (write_line(fd, req) < 0) { close(fd); return -1; }
-    int n = read_line(fd, resp, cap);
+    /* Bound the response read: a daemon wedged waiting on the host channel
+     * must not hang the CLI forever too. */
+    int n = read_line_timeout(fd, resp, cap, HOST_TIMEOUT_S);
     close(fd);
     if (n == LINE_TOO_LONG) return LINE_TOO_LONG;
     return n <= 0 ? -1 : 0;
@@ -320,8 +299,14 @@ static int cli_open(int argc, char **argv) {
     if (argc < 2) { fprintf(stderr, "usage: podroid-open <url>\n"); return 2; }
     char *b64 = b64encode((const unsigned char *)argv[1], strlen(argv[1]));
     char req[8192];
-    snprintf(req, sizeof(req), "OPEN %s", b64 ? b64 : "");
+    int reqlen = snprintf(req, sizeof(req), "OPEN %s", b64 ? b64 : "");
     free(b64);
+    /* A URL over ~6 KB truncates the base64 mid-string, which the host decodes
+     * as a confusing "bad url encoding". Report a clear error instead. */
+    if (reqlen < 0 || (size_t)reqlen >= sizeof(req)) {
+        fprintf(stderr, "podroid: url too long\n");
+        return 2;
+    }
     char resp[8192];
     int rc = cli_roundtrip(req, resp, sizeof(resp));
     if (rc < 0) return cli_roundtrip_failed(rc);
@@ -430,7 +415,14 @@ static int daemon_main(void) {
 
         if (host_fd < 0) {
             if (avf) {
-                host_fd = accept(vsock_listener, NULL, NULL);
+                /* Bound the wait for Android's vsock connection: without this,
+                 * a slow or absent Android side would block accept() forever,
+                 * wedging the single-threaded loop and every other podroid-*
+                 * call behind this one CLI connection. */
+                struct pollfd pfd = { .fd = vsock_listener, .events = POLLIN };
+                int pr;
+                do { pr = poll(&pfd, 1, HOST_TIMEOUT_S * 1000); } while (pr < 0 && errno == EINTR);
+                if (pr > 0) host_fd = accept(vsock_listener, NULL, NULL);
             } else {
                 host_fd = open(HVC_PATH, O_RDWR | O_NOCTTY);
             }
