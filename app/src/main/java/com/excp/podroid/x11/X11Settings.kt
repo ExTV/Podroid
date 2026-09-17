@@ -30,6 +30,7 @@ data class X11Settings(
     val rotationLock: RotationLock = RotationLock.AUTO,
     val showExtraKeys: Boolean = true,
     val dpi: Int = 96,
+    val renderScale: Int = 100,
 )
 
 object ResolutionPolicy {
@@ -40,7 +41,10 @@ object ResolutionPolicy {
 
     /** Target X-desktop size for the given settings + current viewport (device px). */
     fun target(s: X11Settings, viewportW: Int, viewportH: Int): VncSize = when (s.resolutionMode) {
-        ResolutionMode.MATCH -> VncSize(norm(viewportW, MIN), norm(viewportH, 240))
+        ResolutionMode.MATCH -> {
+            val scale = s.renderScale / 100f
+            VncSize(norm((viewportW * scale).toInt(), MIN), norm((viewportH * scale).toInt(), 240))
+        }
         ResolutionMode.CUSTOM -> VncSize(norm(s.customW, MIN), norm(s.customH, 240))
         ResolutionMode.PRESET -> {
             val landscape = viewportW >= viewportH

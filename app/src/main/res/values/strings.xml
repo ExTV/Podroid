@@ -277,6 +277,8 @@
     <string name="res_900p">900p</string>
     <string name="res_1080p">1080p</string>
     <string name="res_1440p">1440p</string>
+    <string name="x11_render_scale">Render scale</string>
+    <string name="x11_render_scale_hint">Lower is faster. The desktop is scaled up to fit the screen.</string>
     <string name="rotation">Rotation</string>
     <string name="auto_rotation">Auto</string>
     <string name="landscape">Landscape</string>

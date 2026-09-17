@@ -89,6 +89,7 @@ class SettingsRepository @Inject constructor(
         val KEY_X11_ROTATION        = stringPreferencesKey("x11_rotation_lock")
         val KEY_X11_SHOW_EXTRA_KEYS = booleanPreferencesKey("x11_show_extra_keys")
         val KEY_X11_DPI             = intPreferencesKey("x11_dpi")
+        val KEY_X11_RENDER_SCALE    = intPreferencesKey("x11_render_scale")
         val KEY_LANGUAGE              = stringPreferencesKey("language")
 
         /**
@@ -254,6 +255,7 @@ class SettingsRepository @Inject constructor(
             rotationLock = runCatching { com.excp.podroid.x11.RotationLock.valueOf(p[KEY_X11_ROTATION] ?: "AUTO") }.getOrDefault(com.excp.podroid.x11.RotationLock.AUTO),
             showExtraKeys = p[KEY_X11_SHOW_EXTRA_KEYS] ?: true,
             dpi = p[KEY_X11_DPI] ?: 96,
+            renderScale = (p[KEY_X11_RENDER_SCALE] ?: 100).let { if (it == 100 || it == 75 || it == 50) it else 100 },
         )
     }
 
@@ -269,6 +271,7 @@ class SettingsRepository @Inject constructor(
     suspend fun setX11Rotation(v: String) = set(KEY_X11_ROTATION, v)
     suspend fun setX11ShowExtraKeys(v: Boolean) = set(KEY_X11_SHOW_EXTRA_KEYS, v)
     suspend fun setX11Dpi(v: Int) = set(KEY_X11_DPI, v)
+    suspend fun setX11RenderScale(v: Int) = set(KEY_X11_RENDER_SCALE, v)
     suspend fun getX11DpiSnapshot() = (x11Settings.first()).dpi
     suspend fun getLanguageSnapshot()                    = language.first()
 

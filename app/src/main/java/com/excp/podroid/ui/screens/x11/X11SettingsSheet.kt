@@ -123,6 +123,30 @@ fun X11SettingsSheet(viewModel: X11ViewModel, onDismiss: () -> Unit) {
                 )
             }
 
+            if (s.resolutionMode == ResolutionMode.MATCH) {
+                Spacer(Modifier.height(PodroidTokens.Spacing.SM))
+                PodroidSectionLabel(stringResource(R.string.x11_render_scale))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(PodroidTokens.Spacing.SM),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    listOf(100, 75, 50).forEach { scale ->
+                        FilterChip(
+                            selected = s.renderScale == scale,
+                            onClick = { viewModel.setRenderScale(scale) },
+                            label = { Text("$scale%") },
+                            shape = RoundedCornerShape(PodroidTokens.Radius.Chip),
+                            colors = PodroidChipColors(),
+                        )
+                    }
+                }
+                Text(
+                    stringResource(R.string.x11_render_scale_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
             // ── ROTATION ──────────────────────────────────────────────
             PodroidSectionLabel(stringResource(R.string.rotation))
 

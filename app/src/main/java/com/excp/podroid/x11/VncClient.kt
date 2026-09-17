@@ -100,12 +100,23 @@ object VncClient {
     private const val ENC_ZRLE = 16
     private const val ENC_EXTENDED_DESKTOP_SIZE = -308
 
+    // Default SetEncodings list: CopyRect, Raw, ExtendedDesktopSize(-308). ZRLE
+    // is deliberately not in the default: the historical desync cause is fixed
+    // (ZrleDecoder now feeds the inflater on demand and bounds-checks palette
+    // indices/run lengths instead of dropping >4KB blocks), but re-enabling it
+    // changes what the server streams, so it stays gated until validated
+    // on-device against real Firefox/xfce tiles. Exposed for the debug-only
+    // encoding switch (x11-debug.conf, read only when BuildConfig.DEBUG).
+    val DEFAULT_ENCODINGS: IntArray = intArrayOf(ENC_COPY_RECT, ENC_RAW, ENC_EXTENDED_DESKTOP_SIZE)
+    val ZRLE_ENCODINGS: IntArray = intArrayOf(ENC_ZRLE, ENC_COPY_RECT, ENC_RAW, ENC_EXTENDED_DESKTOP_SIZE)
+
     /**
      * Sends SetPixelFormat to lock the server to 32-bit BGRA, then SetEncodings
-     * to advertise Raw + CopyRect. Call once after handshake before requesting
-     * any framebuffer update.
+     * to advertise [encodings] (default: Raw + CopyRect + ExtendedDesktopSize,
+     * byte-identical to the previously hardcoded list). Call once after
+     * handshake before requesting any framebuffer update.
      */
-    fun negotiatePixelFormat(out: OutputStream) {
+    fun negotiatePixelFormat(out: OutputStream, encodings: IntArray = DEFAULT_ENCODINGS) {
         // SetPixelFormat (msg=0): pad[3] + 16-byte PixelFormat
         val pf = byteArrayOf(
             0x00, 0x00, 0x00, 0x00,                         // msg + 3 pad
@@ -116,18 +127,10 @@ object VncClient {
         )
         out.write(pf)
 
-        // SetEncodings (msg=2): CopyRect, Raw, ExtendedDesktopSize(-308).
-        // ZRLE is still NOT advertised, but the historical desync cause is now
-        // fixed: ZrleDecoder fed the inflater in chunks without draining, dropping
-        // all but the last 4 KB of any block >4096 bytes ("invalid distance code").
-        // It now feeds on demand and bounds-checks palette indices and run lengths.
-        // Re-enabling ZRLE changes what the server streams, so it stays gated until
-        // validated on-device against real Firefox/xfce tiles (a separate change).
-        val se = java.nio.ByteBuffer.allocate(4 + 3 * 4)
-        se.put(2.toByte()); se.put(0.toByte()); se.putShort(3)
-        se.putInt(1)      // CopyRect
-        se.putInt(0)      // Raw
-        se.putInt(-308)   // ExtendedDesktopSize
+        // SetEncodings (msg=2): header + one int32 per encoding, in order.
+        val se = java.nio.ByteBuffer.allocate(4 + encodings.size * 4)
+        se.put(2.toByte()); se.put(0.toByte()); se.putShort(encodings.size.toShort())
+        for (enc in encodings) se.putInt(enc)
         out.write(se.array()); out.flush()
     }
 
@@ -155,13 +158,27 @@ object VncClient {
 
     data class RfbUpdate(val newSize: VncSize?, val damage: List<VncRect>)
 
-    fun readFramebufferUpdate(inp: InputStream, targetArgb: IntArray, stride: Int, zrle: ZrleDecoder): RfbUpdate {
+    /**
+     * [onMessageStart], when non-null, is invoked exactly once, right when the
+     * message-type byte for the FramebufferUpdate itself is read (i.e. once
+     * its first byte is available on the wire), not for any Bell/
+     * SetColourMapEntries/ServerCutText messages skipped beforehand. Callers
+     * use this to time transfer + decode of one update without VncClient
+     * depending on any timing/stats type itself.
+     */
+    fun readFramebufferUpdate(
+        inp: InputStream,
+        targetArgb: IntArray,
+        stride: Int,
+        zrle: ZrleDecoder,
+        onMessageStart: (() -> Unit)? = null,
+    ): RfbUpdate {
         val din = DataInputStream(inp)
         var msgType: Int
         while (true) {
             msgType = din.readUnsignedByte()
             when (msgType) {
-                MSG_FRAMEBUFFER_UPDATE -> break
+                MSG_FRAMEBUFFER_UPDATE -> { onMessageStart?.invoke(); break }
                 1 -> { skipFully(din, 1); din.readUnsignedShort(); val n = din.readUnsignedShort(); skipFully(din, n * 6) }
                 2 -> { }
                 3 -> { skipFully(din, 3); val len = din.readInt(); if (len in 0..(1 shl 20)) skipFully(din, len) else throw java.io.IOException("ServerCutText absurd length=$len") }
@@ -191,14 +208,17 @@ object VncClient {
                     val rowPixels = rowBuf?.takeIf { it.size >= needed } ?: ByteArray(needed).also { rowBuf = it }
                     for (row in 0 until h) {
                         din.readFully(rowPixels, 0, needed)
-                        var off = 0; val base = (y + row) * stride + x
-                        for (col in 0 until w) {
-                            val b = rowPixels[off].toInt() and 0xFF
-                            val g = rowPixels[off + 1].toInt() and 0xFF
-                            val r = rowPixels[off + 2].toInt() and 0xFF
-                            targetArgb[base + col] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
-                            off += 4
-                        }
+                        val base = (y + row) * stride + x
+                        // Wire pixel is BGRX little-endian, so reading it as one
+                        // little-endian int32 gives 0xXXRRGGBB directly (R shift
+                        // 16, G shift 8, B shift 0); no per-byte masking needed.
+                        // OR-ing 0xFF000000 forces alpha to 0xFF regardless of the
+                        // padding byte X, matching the old per-byte loop exactly.
+                        java.nio.ByteBuffer.wrap(rowPixels, 0, needed)
+                            .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                            .asIntBuffer()
+                            .get(targetArgb, base, w)
+                        for (col in base until base + w) targetArgb[col] = targetArgb[col] or (0xFF shl 24)
                     }
                     damage.add(VncRect(x, y, w, h))
                 }

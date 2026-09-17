@@ -4,15 +4,20 @@
  */
 package com.excp.podroid.ui.screens.x11
 
+import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.excp.podroid.BuildConfig
 import com.excp.podroid.data.repository.SettingsRepository
 import com.excp.podroid.engine.VmEngine
 import com.excp.podroid.engine.VmState
 import com.excp.podroid.x11.AudioStreamer
+import com.excp.podroid.x11.DamageTracker
 import com.excp.podroid.x11.ResolutionMode
 import com.excp.podroid.x11.ResolutionPolicy
 import com.excp.podroid.x11.ResolutionPreset
+import com.excp.podroid.x11.RfbDebugSnapshot
 import com.excp.podroid.x11.RotationLock
 import com.excp.podroid.x11.TouchMode
 import com.excp.podroid.x11.VncClient
@@ -22,6 +27,7 @@ import com.excp.podroid.x11.X11Constants
 import com.excp.podroid.x11.X11Settings
 import com.excp.podroid.x11.ZrleDecoder
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -33,6 +39,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.io.File
+import java.io.FilterInputStream
+import java.io.InputStream
 import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -50,6 +59,7 @@ sealed interface X11ConnectionState {
 class X11ViewModel @Inject constructor(
     val engine: VmEngine,
     private val settings: SettingsRepository,
+    @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     val vmState: StateFlow<VmState> = engine.state
@@ -73,10 +83,49 @@ class X11ViewModel @Inject constructor(
     private val zrle = ZrleDecoder()
     @Volatile private var screenId = 0
     @Volatile private var desiredW = 0; @Volatile private var desiredH = 0
-    @Volatile var lastDamage: List<VncRect> = emptyList(); private set
+    // Guarded by fbLock, like framebuffer itself.
+    private val damageTracker = DamageTracker()
 
-    private val _frameCounter = MutableStateFlow(0)
-    val frameCounter: StateFlow<Int> = _frameCounter.asStateFlow()
+    // Renderer hook: invoked outside fbLock after each recorded update so the
+    // renderer can schedule a redraw without the read loop depending on a
+    // StateFlow (which conflates and can silently drop damage between ticks).
+    @Volatile var onFrame: (() -> Unit)? = null
+
+    /** Takes fbLock and drains pending damage. Prefer [withFrame] when the pixel
+     *  data is needed too, so the drain and the pixel copy share one critical
+     *  section instead of two separate locks. */
+    fun drainDamage(): List<VncRect> = synchronized(fbLock) { damageTracker.drain() }
+
+    /** Atomically hands the current framebuffer, its dimensions, and the drained
+     *  pending damage to [block] under fbLock. */
+    fun <T> withFrame(block: (fb: IntArray, fbW: Int, fbH: Int, damage: List<VncRect>) -> T): T =
+        synchronized(fbLock) { block(framebuffer, fbW, fbH, damageTracker.drain()) }
+
+    // Debug-only (BuildConfig.DEBUG) stats for the once-per-second X11Stats log
+    // assembled in X11SurfaceRenderer: bytes read off the RFB socket, framebuffer
+    // updates applied, time spent copying damaged rows + updating the damage
+    // tracker, and time from a FramebufferUpdate message's first byte to its
+    // full decode (rx = transfer + decode). Written from the single-threaded
+    // read loop in connect(), read and reset from the render thread via
+    // debugSnapshotAndReset(); the lock only guards this snapshot, never fbLock.
+    private val debugStatsLock = Any()
+    private var debugBytes = 0L
+    private var debugUpdates = 0L
+    private var debugCopyNanos = 0L
+    private var debugRxNanos = 0L
+    // Effective encoding for the current session (set once at connect() from
+    // x11-debug.conf, debug builds only); read cross-thread by the renderer.
+    @Volatile private var debugEncodingName = "raw"
+    // Effective present mode for the current session (used by Task F3);
+    // parsed here so the control file's format is settled before that lands.
+    @Volatile var debugPresentHw: Boolean = false; private set
+
+    /** Debug-only: atomically snapshots and resets (bytesRead, updates, copyNanos, rxNanos). */
+    fun debugSnapshotAndReset(): RfbDebugSnapshot = synchronized(debugStatsLock) {
+        val s = RfbDebugSnapshot(debugBytes, debugUpdates, debugCopyNanos, debugRxNanos, debugEncodingName)
+        debugBytes = 0L; debugUpdates = 0L; debugCopyNanos = 0L; debugRxNanos = 0L
+        s
+    }
 
     private val audio = AudioStreamer()
     private var sessionJob: Job? = null
@@ -109,7 +158,12 @@ class X11ViewModel @Inject constructor(
             try {
                 rfbSocket = sock
                 sock.connect(InetSocketAddress("127.0.0.1", X11Constants.VNC_PORT), 2000)
-                val inp = sock.getInputStream()
+                val rawInp = sock.getInputStream()
+                // Debug-only (BuildConfig.DEBUG): counts bytes read off the RFB
+                // socket for the X11Stats log; never wrapped in a release build.
+                val inp: InputStream = if (BuildConfig.DEBUG) {
+                    CountingInputStream(rawInp) { n -> synchronized(debugStatsLock) { debugBytes += n } }
+                } else rawInp
                 val out = sock.getOutputStream()
                 rfbOut = out
                 // Each RFB session is a fresh zlib stream; reset the ZRLE inflater
@@ -117,22 +171,45 @@ class X11ViewModel @Inject constructor(
                 // inflater (which yields corrupt output or DataFormatException).
                 zrle.reset()
 
+                // Debug-only (BuildConfig.DEBUG): x11-debug.conf lets a developer
+                // flip the advertised encoding list (and, for Task F3, the present
+                // mode) without a rebuild. Release builds never read this file and
+                // always advertise VncClient.DEFAULT_ENCODINGS.
+                val encodings = if (BuildConfig.DEBUG) {
+                    val cfg = X11DebugConfig.read(context)
+                    debugEncodingName = cfg.encodingName
+                    debugPresentHw = cfg.presentHw
+                    Log.d("X11Stats", "debug-config encoding=${cfg.encodingName} present=${if (cfg.presentHw) "hw" else "sw"}")
+                    cfg.encodings
+                } else {
+                    VncClient.DEFAULT_ENCODINGS
+                }
+
                 VncClient.handshake(inp, out)
-                VncClient.negotiatePixelFormat(out)
+                VncClient.negotiatePixelFormat(out, encodings)
                 if (desiredW > 0) VncClient.requestDesktopSize(out, screenId, desiredW, desiredH)
                 VncClient.requestFramebufferUpdate(out, w = fbW, h = fbH, incremental = false)
                 _connection.value = X11ConnectionState.Connected
                 audio.start(viewModelScope)
+                var rxT0 = 0L
                 while (isActive) {
-                    val upd = VncClient.readFramebufferUpdate(inp, scratch, fbW, zrle)
+                    val upd = VncClient.readFramebufferUpdate(
+                        inp, scratch, fbW, zrle,
+                        onMessageStart = if (BuildConfig.DEBUG) { { rxT0 = System.nanoTime() } } else null,
+                    )
+                    if (BuildConfig.DEBUG) {
+                        val rxElapsed = System.nanoTime() - rxT0
+                        synchronized(debugStatsLock) { debugRxNanos += rxElapsed }
+                    }
                     val ns = upd.newSize
                     if (ns != null && (ns.w != fbW || ns.h != fbH)) {
                         fbW = ns.w; fbH = ns.h
                         val fresh = IntArray(fbW * fbH)
-                        // Clear damage in the same critical section that swaps the
-                        // framebuffer so a recomposition between resize and the next
-                        // full frame can't blit stale damage rects against the new size.
-                        synchronized(fbLock) { framebuffer = fresh; lastDamage = emptyList() }
+                        // Swap the framebuffer and mark the whole new frame dirty in
+                        // the same critical section, so a recomposition between resize
+                        // and the next full frame can't blit stale damage rects (or a
+                        // stale bounding box) against the new size.
+                        synchronized(fbLock) { framebuffer = fresh; damageTracker.invalidateAll(fbW, fbH) }
                         scratch = IntArray(fbW * fbH)
                         _fbSize.value = ns
                         cursor.value = android.graphics.Point(fbW / 2, fbH / 2)
@@ -149,11 +226,24 @@ class X11ViewModel @Inject constructor(
                         // incremental request.
                         continue
                     }
+                    val debugT0 = if (BuildConfig.DEBUG) System.nanoTime() else 0L
                     synchronized(fbLock) {
-                        System.arraycopy(scratch, 0, framebuffer, 0, framebuffer.size)
-                        lastDamage = upd.damage
+                        // scratch stays the authoritative full image (CopyRect reads
+                        // from it), so only the damaged row-ranges need copying into
+                        // the framebuffer the renderer reads.
+                        for (r in upd.damage) {
+                            for (row in 0 until r.h) {
+                                val base = (r.y + row) * fbW + r.x
+                                System.arraycopy(scratch, base, framebuffer, base, r.w)
+                            }
+                        }
+                        damageTracker.add(upd.damage)
                     }
-                    _frameCounter.value = _frameCounter.value + 1
+                    if (BuildConfig.DEBUG) {
+                        val elapsed = System.nanoTime() - debugT0
+                        synchronized(debugStatsLock) { debugUpdates++; debugCopyNanos += elapsed }
+                    }
+                    onFrame?.invoke()
                     // Same serialized path as input writes: queued FIFO behind any
                     // in-flight pointer/key message rather than colliding with it on
                     // the socket. Cadence is unchanged (one request per frame); the
@@ -272,6 +362,12 @@ class X11ViewModel @Inject constructor(
         viewModelScope.launch { settings.setX11Dpi(v) }
     }
 
+    fun setRenderScale(v: Int) {
+        viewModelScope.launch { settings.setX11RenderScale(v) }
+        val explicit = x11Settings.value.copy(renderScale = v)
+        reapplyResolution(explicit)
+    }
+
     private fun reapplyResolution(explicit: X11Settings) {
         if (lastViewportW <= 0) return
         val t = ResolutionPolicy.target(explicit, lastViewportW, lastViewportH)
@@ -313,5 +409,60 @@ class X11ViewModel @Inject constructor(
         // Sane desktop ceiling; also <= 0xFFFF so a custom value never wraps the
         // 16-bit width/height fields of the SetDesktopSize wire message.
         const val MAX_RESOLUTION = 7680
+    }
+}
+
+/**
+ * Debug-only (BuildConfig.DEBUG) reader for `filesDir/x11-debug.conf`: lets a
+ * developer flip the advertised SetEncodings list, and (Task F3) the present
+ * mode, without a rebuild. Read once per connect(), only when
+ * BuildConfig.DEBUG; release builds never call [read]. Format is `key=value`
+ * lines; a missing/unreadable file or an unrecognized value falls back to the
+ * default for that key.
+ */
+private object X11DebugConfig {
+    class Config(val encodings: IntArray, val encodingName: String, val presentHw: Boolean)
+
+    fun read(context: Context): Config {
+        var encodingName = "raw"
+        var presentName = "sw"
+        runCatching {
+            val f = File(context.filesDir, "x11-debug.conf")
+            if (f.isFile) {
+                f.forEachLine { line ->
+                    val parts = line.split("=", limit = 2)
+                    if (parts.size == 2) {
+                        when (parts[0].trim()) {
+                            "encoding" -> encodingName = parts[1].trim()
+                            "present" -> presentName = parts[1].trim()
+                        }
+                    }
+                }
+            }
+        }
+        val zrle = encodingName == "zrle"
+        return Config(
+            encodings = if (zrle) VncClient.ZRLE_ENCODINGS else VncClient.DEFAULT_ENCODINGS,
+            encodingName = if (zrle) "zrle" else "raw",
+            presentHw = presentName == "hw",
+        )
+    }
+}
+
+/**
+ * Debug-only (BuildConfig.DEBUG) counting wrapper around the RFB socket's
+ * InputStream, feeding [X11ViewModel.debugSnapshotAndReset] for the
+ * once-per-second X11Stats log. Never constructed in a release build.
+ */
+private class CountingInputStream(inp: InputStream, private val onBytes: (Int) -> Unit) : FilterInputStream(inp) {
+    override fun read(): Int {
+        val b = super.read()
+        if (b >= 0) onBytes(1)
+        return b
+    }
+    override fun read(b: ByteArray, off: Int, len: Int): Int {
+        val n = super.read(b, off, len)
+        if (n > 0) onBytes(n)
+        return n
     }
 }

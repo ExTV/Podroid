@@ -80,6 +80,42 @@ class VncClientTest {
         assertEquals(0xFF00FF00.toInt(), target[1])  // green
     }
 
+    @Test
+    fun `Raw decode matches per-byte reference and ignores the padding byte`() {
+        // Multi-row rect (2x2) with a non-zero, varying padding byte on every
+        // pixel: the fast IntBuffer decode must produce byte-identical ARGB to
+        // an independent per-byte reference implementation, and the padding
+        // byte must never leak into the alpha channel (always 0xFF).
+        fun refDecode(bgrx: ByteArray): Int {
+            val b = bgrx[0].toInt() and 0xFF
+            val g = bgrx[1].toInt() and 0xFF
+            val r = bgrx[2].toInt() and 0xFF
+            return (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+        }
+        val pixel00 = byteArrayOf(0x11, 0x22, 0x33, 0x00)          // padding 0x00
+        val pixel01 = byteArrayOf(0x44, 0x55, 0x66, 0x7F)          // padding non-zero
+        val pixel10 = byteArrayOf(0xAA.toByte(), 0xBB.toByte(), 0xCC.toByte(), 0xFF.toByte())
+        val pixel11 = byteArrayOf(0x00, 0x00, 0x00, 0x01)          // padding non-zero, black pixel
+
+        val bos = java.io.ByteArrayOutputStream()
+        val d = java.io.DataOutputStream(bos)
+        d.writeByte(0); d.writeByte(0); d.writeShort(1)            // msg, pad, numRects
+        d.writeShort(0); d.writeShort(0); d.writeShort(2); d.writeShort(2)  // x=0,y=0,w=2,h=2
+        d.writeInt(0)                                              // encoding = Raw
+        d.write(pixel00); d.write(pixel01)                          // row 0
+        d.write(pixel10); d.write(pixel11)                          // row 1
+
+        val target = IntArray(4)
+        VncClient.readFramebufferUpdate(java.io.ByteArrayInputStream(bos.toByteArray()), target, 2, ZrleDecoder())
+
+        assertEquals(refDecode(pixel00), target[0])
+        assertEquals(refDecode(pixel01), target[1])
+        assertEquals(refDecode(pixel10), target[2])
+        assertEquals(refDecode(pixel11), target[3])
+        // Explicit alpha check: every pixel's top byte is 0xFF regardless of padding.
+        for (px in target) assertEquals(0xFF, (px ushr 24) and 0xFF)
+    }
+
     @Test fun `requestDesktopSize serializes type 251 single-screen layout`() {
         val out = java.io.ByteArrayOutputStream()
         VncClient.requestDesktopSize(out, screenId = 7, width = 1920, height = 1080)
@@ -182,6 +218,93 @@ class VncClientTest {
         d.writeInt(0x7FFFFFFF)                                    // unknown encoding
         val target = IntArray(1280 * 720)
         VncClient.readFramebufferUpdate(java.io.ByteArrayInputStream(bos.toByteArray()), target, 1280, ZrleDecoder())
+    }
+
+    @Test fun `negotiatePixelFormat with default encodings is byte-identical to the old hardcoded SetEncodings`() {
+        val out = java.io.ByteArrayOutputStream()
+        VncClient.negotiatePixelFormat(out)
+        val sent = out.toByteArray()
+        // SetPixelFormat is fixed-size (20 bytes); SetEncodings follows it.
+        val setEncodings = sent.copyOfRange(20, sent.size)
+        val expected = byteArrayOf(
+            0x02, 0x00, 0x00, 0x03,                         // msg=2, pad, count=3
+            0x00, 0x00, 0x00, 0x01,                         // CopyRect
+            0x00, 0x00, 0x00, 0x00,                         // Raw
+            0xFF.toByte(), 0xFF.toByte(), 0xFE.toByte(), 0xCC.toByte(), // ExtendedDesktopSize (-308)
+        )
+        assertArrayEquals(expected, setEncodings)
+        // Passing DEFAULT_ENCODINGS explicitly must produce the exact same bytes.
+        val out2 = java.io.ByteArrayOutputStream()
+        VncClient.negotiatePixelFormat(out2, VncClient.DEFAULT_ENCODINGS)
+        assertArrayEquals(sent, out2.toByteArray())
+    }
+
+    @Test fun `negotiatePixelFormat with ZRLE_ENCODINGS advertises ZRLE first`() {
+        val out = java.io.ByteArrayOutputStream()
+        VncClient.negotiatePixelFormat(out, VncClient.ZRLE_ENCODINGS)
+        val setEncodings = out.toByteArray().copyOfRange(20, out.size())
+        val expected = byteArrayOf(
+            0x02, 0x00, 0x00, 0x04,                         // msg=2, pad, count=4
+            0x00, 0x00, 0x00, 0x10,                         // ZRLE (16)
+            0x00, 0x00, 0x00, 0x01,                         // CopyRect
+            0x00, 0x00, 0x00, 0x00,                         // Raw
+            0xFF.toByte(), 0xFF.toByte(), 0xFE.toByte(), 0xCC.toByte(), // ExtendedDesktopSize (-308)
+        )
+        assertArrayEquals(expected, setEncodings)
+    }
+
+    @Test fun `onMessageStart fires once when the FramebufferUpdate message-type byte is read`() {
+        val msg = byteArrayOf(
+            0x00, 0x00,             // msg-type, padding
+            0x00, 0x01,             // num rects
+            0x00, 0x00, 0x00, 0x00, // x=0, y=0
+            0x00, 0x01, 0x00, 0x01, // w=1, h=1
+            0x00, 0x00, 0x00, 0x00, // encoding = 0 (Raw)
+            0, 0, 0, 0,              // 1 BGRA pixel
+        )
+        var calls = 0
+        VncClient.readFramebufferUpdate(
+            inp = java.io.ByteArrayInputStream(msg),
+            targetArgb = IntArray(1),
+            stride = 1,
+            zrle = ZrleDecoder(),
+            onMessageStart = { calls++ },
+        )
+        assertEquals(1, calls)
+    }
+
+    @Test fun `ZRLE-encoded rectangle round-trips through readFramebufferUpdate`() {
+        // Solid-color 4x4 ZRLE tile (subencoding 1), zlib-compressed per RFB 6.4 -
+        // same vector shape as ZrleDecoderTest's solid-tile case, but wrapped in a
+        // full FramebufferUpdate message so it exercises the ENC_ZRLE dispatch too.
+        fun cpixel(argb: Int) = byteArrayOf(
+            (argb and 0xFF).toByte(),
+            ((argb shr 8) and 0xFF).toByte(),
+            ((argb shr 16) and 0xFF).toByte(),
+        )
+        val red = 0xFFFF0000.toInt()
+        val plain = byteArrayOf(1) + cpixel(red) // subencoding 1 = solid
+        val deflater = java.util.zip.Deflater(java.util.zip.Deflater.DEFAULT_COMPRESSION, false)
+        deflater.setInput(plain); deflater.finish()
+        val zbuf = ByteArray(4096)
+        val zout = java.io.ByteArrayOutputStream()
+        while (!deflater.finished()) { val n = deflater.deflate(zbuf); zout.write(zbuf, 0, n) }
+        val compressed = zout.toByteArray()
+
+        val bos = java.io.ByteArrayOutputStream()
+        val d = java.io.DataOutputStream(bos)
+        d.writeByte(0); d.writeByte(0); d.writeShort(1)              // msg, pad, numRects
+        d.writeShort(0); d.writeShort(0); d.writeShort(4); d.writeShort(4)  // x=0,y=0,w=4,h=4
+        d.writeInt(16)                                                // encoding = ZRLE
+        d.writeInt(compressed.size)
+        d.write(compressed)
+
+        val target = IntArray(4 * 4)
+        val r = VncClient.readFramebufferUpdate(java.io.ByteArrayInputStream(bos.toByteArray()), target, 4, ZrleDecoder())
+
+        assertEquals(red, target[0])
+        assertEquals(red, target[15])
+        assertEquals(listOf(VncRect(0, 0, 4, 4)), r.damage)
     }
 
     @Test fun `ExtendedDesktopSize rect reports new size and writes no pixels`() {

@@ -277,6 +277,8 @@
     <string name="res_900p">900p</string>
     <string name="res_1080p">1080p</string>
     <string name="res_1440p">1440p</string>
+    <string name="x11_render_scale">渲染比例</string>
+    <string name="x11_render_scale_hint">数值越低越流畅，桌面会放大以适应屏幕。</string>
     <string name="rotation">旋转</string>
     <string name="auto_rotation">自动</string>
     <string name="landscape">横屏</string>

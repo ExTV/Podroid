@@ -5,8 +5,6 @@
 package com.excp.podroid.ui.screens.x11
 
 import android.content.pm.ActivityInfo
-import android.graphics.Bitmap
-import android.graphics.Rect
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
@@ -106,8 +104,10 @@ import com.excp.podroid.ui.components.PodroidTopBar
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.abs
+import com.excp.podroid.x11.RenderGeometry
 import com.excp.podroid.x11.TouchMode
 import com.excp.podroid.x11.VncClient
+import com.excp.podroid.x11.X11SurfaceRenderer
 
 // X11 keysyms used outside the label table.
 private const val XK_BackSpace = 0xFF08
@@ -167,11 +167,18 @@ fun X11Screen(
     viewModel: X11ViewModel = hiltViewModel(),
 ) {
     val connection by viewModel.connection.collectAsStateWithLifecycle()
-    val frameCount by viewModel.frameCounter.collectAsStateWithLifecycle()
     val fb by viewModel.fbSize.collectAsStateWithLifecycle()
-    val bitmap = remember(fb) { Bitmap.createBitmap(fb.w, fb.h, Bitmap.Config.ARGB_8888) }
     val s by viewModel.x11Settings.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { viewModel.connect() }
+
+    // Owned by the AndroidView factory below; the ViewModel's onFrame hook
+    // (fired from the RFB read thread) just wakes it up to present on the
+    // next vsync instead of driving Compose recomposition per frame.
+    var renderer by remember { mutableStateOf<X11SurfaceRenderer?>(null) }
+    DisposableEffect(Unit) {
+        viewModel.onFrame = { renderer?.requestFrame() }
+        onDispose { viewModel.onFrame = null }
+    }
 
     val activity = LocalActivity.current
     // Restore orientation when leaving; without this the lock persists onto
@@ -231,20 +238,17 @@ fun X11Screen(
     // beyond this baseline (or a width change) is a real surface resize.
     var svGenuineHeight by remember { mutableIntStateOf(0) }
 
-    // Letterbox / pillarbox dst rect, pinned to top so the soft keyboard
-    // (and the extra-keys row) live in the empty bottom strip.
-    val (dstX, dstY, dstW, dstH) = remember(svWidth, svHeight, fb) {
-        val fbW = fb.w.toFloat()
-        val fbH = fb.h.toFloat()
-        val viewW = svWidth.toFloat().coerceAtLeast(1f)
-        val viewH = svHeight.toFloat().coerceAtLeast(1f)
-        val scale = minOf(viewW / fbW, viewH / fbH)
-        val dW = (fbW * scale).toInt().coerceAtLeast(1)
-        val dH = (fbH * scale).toInt().coerceAtLeast(1)
-        val dX = ((viewW - dW) / 2f).toInt()
-        val dY = 0
-        IntArray4(dX, dY, dW, dH)
+    // Letterbox / pillarbox geometry, pinned to top so the soft keyboard (and
+    // the extra-keys row) live in the empty bottom strip. dstX/dstY/dstW/dstH
+    // (view px) drive input mapping below; the buffer-px fields drive
+    // X11SurfaceRenderer's setFixedSize + drawBitmap.
+    val geometry = remember(svWidth, svHeight, fb) {
+        RenderGeometry.compute(svWidth, svHeight, fb.w, fb.h)
     }
+    val dstX = geometry.dstX
+    val dstY = geometry.dstY
+    val dstW = geometry.dstW
+    val dstH = geometry.dstH
 
     val focusRequester = remember { FocusRequester() }
     val viewerFocus = remember { FocusRequester() }
@@ -619,72 +623,52 @@ fun X11Screen(
                         },
                     factory = { ctx ->
                         SurfaceView(ctx).apply {
+                            val r = X11SurfaceRenderer(
+                                holder = holder,
+                                frameBufferSize = { viewModel.framebuffer.size },
+                                withFrame = { block -> viewModel.withFrame(block) },
+                                debugRfbStats = { viewModel.debugSnapshotAndReset() },
+                                presentHw = { viewModel.debugPresentHw },
+                            )
+                            renderer = r
                             holder.addCallback(object : SurfaceHolder.Callback {
-                                override fun surfaceCreated(h: SurfaceHolder) {}
-                                override fun surfaceChanged(h: SurfaceHolder, f: Int, w: Int, hh: Int) {
-                                    // Ignore height changes caused by the IME opening/closing;
-                                    // those reflow the layout but don't change the genuine surface
-                                    // size. A width change resets the baseline (rotation/relayout);
-                                    // otherwise only a height BEYOND the largest non-IME height seen
-                                    // counts as a real resize. An IME dismiss grows hh back up to the
-                                    // baseline and is correctly skipped.
-                                    val widthChanged = w != svWidth
-                                    if (widthChanged) svGenuineHeight = 0
-                                    val heightGrew = hh > svGenuineHeight
-                                    svWidth = w
-                                    svHeight = hh
-                                    if (heightGrew) svGenuineHeight = hh
-                                    if (widthChanged || heightGrew) {
-                                        viewModel.requestResolution(w, hh)
-                                    }
-                                }
+                                override fun surfaceCreated(h: SurfaceHolder) { r.onSurfaceCreated() }
+                                override fun surfaceChanged(h: SurfaceHolder, f: Int, w: Int, hh: Int) { r.onSurfaceChanged() }
                                 override fun surfaceDestroyed(h: SurfaceHolder) {}
                             })
-                        }
-                    },
-                    update = { sv ->
-                        @Suppress("UNUSED_EXPRESSION")
-                        frameCount
-                        // Lock the IntArray for the copy into Bitmap pixels so
-                        // we never observe a half-written frame from the RFB
-                        // decoder thread (paired with synchronized(fbLock)
-                        // in X11ViewModel.connect).
-                        synchronized(viewModel.fbLock) {
-                            val src = viewModel.framebuffer
-                            val bw = bitmap.width
-                            val bh = bitmap.height
-                            // During a resolution change the framebuffer array is
-                            // reallocated on the RFB thread while the Bitmap is
-                            // recreated on a (slightly later) recomposition. Blit
-                            // only when array and Bitmap agree in size, and clamp
-                            // against the Bitmap's OWN dimensions — otherwise skip
-                            // this frame (the next is consistent). Guards the
-                            // "y + height must be <= bitmap.height()" crash on open.
-                            if (src.size == bw * bh) {
-                                val damage = viewModel.lastDamage
-                                if (damage.isEmpty()) {
-                                    bitmap.setPixels(src, 0, bw, 0, 0, bw, bh)
-                                } else {
-                                    for (r in damage) {
-                                        val rx = r.x.coerceIn(0, bw)
-                                        val ry = r.y.coerceIn(0, bh)
-                                        val rw = (r.x + r.w).coerceAtMost(bw) - rx
-                                        val rh = (r.y + r.h).coerceAtMost(bh) - ry
-                                        if (rw <= 0 || rh <= 0) continue
-                                        bitmap.setPixels(src, ry * bw + rx, bw, rx, ry, rw, rh)
-                                    }
+                            // holder.setFixedSize (below, via the renderer) makes
+                            // SurfaceHolder.Callback.surfaceChanged report the BUFFER
+                            // size, not the view size, so the viewport used for
+                            // requestResolution must come from layout size instead:
+                            // otherwise feeding the buffer size back in would create a
+                            // resize feedback loop. Same IME baseline rule as before:
+                            // ignore height changes from the soft keyboard opening/
+                            // closing (a width change resets the baseline; otherwise
+                            // only a height BEYOND the largest non-IME height seen
+                            // counts as a real resize; an IME dismiss grows height back
+                            // up to the baseline and is correctly skipped).
+                            addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+                                val w = right - left
+                                val hh = bottom - top
+                                if (w == oldRight - oldLeft && hh == oldBottom - oldTop) return@addOnLayoutChangeListener
+                                val widthChanged = w != svWidth
+                                if (widthChanged) svGenuineHeight = 0
+                                val heightGrew = hh > svGenuineHeight
+                                svWidth = w
+                                svHeight = hh
+                                if (heightGrew) svGenuineHeight = hh
+                                if (widthChanged || heightGrew) {
+                                    viewModel.requestResolution(w, hh)
                                 }
                             }
                         }
-                        val holder = sv.holder
-                        val canvas = holder.lockCanvas() ?: return@AndroidView
-                        try {
-                            canvas.drawColor(android.graphics.Color.BLACK)
-                            val dst = Rect(dstX, dstY, dstX + dstW, dstY + dstH)
-                            canvas.drawBitmap(bitmap, null, dst, null)
-                        } finally {
-                            holder.unlockCanvasAndPost(canvas)
-                        }
+                    },
+                    update = {
+                        renderer?.updateGeometry(fb.w, fb.h, geometry)
+                    },
+                    onRelease = {
+                        renderer?.release()
+                        renderer = null
                     },
                 )
 
@@ -889,5 +873,3 @@ private fun forwardImeDiff(old: String, new: String, vm: X11ViewModel) {
         i += Character.charCount(cp)
     }
 }
-
-private data class IntArray4(val a: Int, val b: Int, val c: Int, val d: Int)
