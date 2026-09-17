@@ -2,7 +2,7 @@
 description="Podroid VM ready marker (consumed by Android boot detector)"
 
 depend() {
-    need podroid-network
+    after podroid-network
     after dropbear *
 }
 
@@ -20,7 +20,7 @@ start() {
         done
     done
 
-    # Emit the boot stages PodroidQemu.detectBootStage() expects.
+    # Emit the boot stages BootStageDetector expects.
     if [ -x /usr/local/bin/podroid-update-stats ]; then
         /usr/local/bin/podroid-update-stats || true
     fi
