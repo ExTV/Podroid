@@ -52,5 +52,4 @@ object PodroidStatusColors {
     val Running = PodroidTokens.Accent
     val Starting = PodroidTokens.Amber
     val Stopped = PodroidDarkTextFaint
-    val Error = PodroidTokens.Red
 }

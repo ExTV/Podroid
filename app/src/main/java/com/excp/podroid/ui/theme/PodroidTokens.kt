@@ -26,8 +26,6 @@ object PodroidTokens {
         val LG  = 16.dp
         val XL  = 20.dp
         val XL2 = 24.dp
-        val XL3 = 32.dp
-        val XL4 = 40.dp
     }
 
     object Radius {
@@ -35,7 +33,6 @@ object PodroidTokens {
         val Button = 8.dp
         val Card   = 12.dp
         val Sheet  = 20.dp
-        val Large  = 24.dp
     }
 
     object TypeSize {

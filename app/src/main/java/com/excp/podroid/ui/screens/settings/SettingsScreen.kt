@@ -11,8 +11,6 @@ import androidx.activity.result.contract.ActivityResultContracts.RequestPermissi
 import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,7 +18,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -33,7 +30,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -61,7 +57,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -115,7 +110,6 @@ private fun languageDisplayName(language: String, systemDefaultLanguage: String)
 fun SettingsScreen(
     windowSizeClass: WindowSizeClass,
     onNavigateBack: () -> Unit,
-    onThemeOrFontChanged: () -> Unit = {},
     onLanguageChanged: () -> Unit = {},
     onNavigateToContainerBackup: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
@@ -210,10 +204,7 @@ fun SettingsScreen(
                     rightSlot = {
                         PodroidSwitch(
                             checked = ui.darkTheme,
-                            onCheckedChange = {
-                                viewModel.setDarkTheme(it)
-                                onThemeOrFontChanged()
-                            },
+                            onCheckedChange = { viewModel.setDarkTheme(it) },
                         )
                     },
                 )
@@ -222,10 +213,7 @@ fun SettingsScreen(
                     rightSlot = {
                         PodroidSwitch(
                             checked = ui.dynamicColorEnabled,
-                            onCheckedChange = {
-                                viewModel.setDynamicColorEnabled(it)
-                                onThemeOrFontChanged()
-                            },
+                            onCheckedChange = { viewModel.setDynamicColorEnabled(it) },
                         )
                     },
                 )

@@ -78,24 +78,9 @@ class SettingsViewModel @Inject constructor(
     @ApplicationScope private val externalScope: CoroutineScope,
 ) : ViewModel() {
 
-    val vmRamMb: StateFlow<Int> = settingsRepository.vmRamMb
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 512)
-
-    val vmCpus: StateFlow<Int> = settingsRepository.vmCpus
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1)
-
-    val qemuExtraArgs: StateFlow<String> = settingsRepository.qemuExtraArgs
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsRepository.DEFAULT_QEMU_EXTRA_ARGS)
-
-    val kernelExtraCmdline: StateFlow<String> = settingsRepository.kernelExtraCmdline
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsRepository.DEFAULT_KERNEL_EXTRA_CMDLINE)
-
     /**
      * Single combined stream of the 8 form-style rows. SettingsScreen can collect
      * this once with collectAsStateWithLifecycle instead of subscribing 8 times.
-     * The original per-flow StateFlows above are kept so callers that want one
-     * value (e.g. the About section reading storageSizeGb) don't pay for the
-     * combined object on every emit.
      */
     val uiState: StateFlow<SettingsUiState> = combine(
         combine(
@@ -164,9 +149,6 @@ class SettingsViewModel @Inject constructor(
     fun resetKernelExtraCmdline() {
         externalScope.launch { settingsRepository.setKernelExtraCmdline(SettingsRepository.DEFAULT_KERNEL_EXTRA_CMDLINE) }
     }
-
-    val storageSizeGb: StateFlow<Int> = settingsRepository.storageSizeGb
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 2)
 
     fun setSshEnabled(value: Boolean) {
         viewModelScope.launch { settingsRepository.setSshEnabled(value) }
@@ -271,18 +253,6 @@ class SettingsViewModel @Inject constructor(
                 settingsRepository.setStorageSizeGb(maxOf(profile.storageGb, current))
             }
         }
-    }
-
-    fun setTerminalFontSize(value: Int) {
-        viewModelScope.launch { settingsRepository.setTerminalFontSize(value) }
-    }
-
-    fun setTerminalColorTheme(value: String) {
-        viewModelScope.launch { settingsRepository.setTerminalColorTheme(value) }
-    }
-
-    fun setTerminalFont(value: String) {
-        viewModelScope.launch { settingsRepository.setTerminalFont(value) }
     }
 
     // "both" expands into separate TCP + UDP rules. Returns true if at least one
