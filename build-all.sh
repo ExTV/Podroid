@@ -42,7 +42,6 @@ Commands:
   clean         Remove build artifacts and temporary containers
 
 Options:
-  --fast        Skip QEMU native builds if binaries already exist
   --help        Show this help message
 
 EOF
@@ -165,7 +164,6 @@ build_apk() {
 
 deploy_apk() {
     log "Deploying to device..."
-    adb uninstall com.excp.podroid.debug || warn "Uninstall failed (likely not installed)."
     adb install -r app/build/outputs/apk/debug/app-debug.apk
     success "Deployed and ready."
 }
@@ -185,9 +183,8 @@ run_boot_test() {
     deploy_apk
     
     # Reset State
-    log "Resetting VM storage for clean test..."
+    log "Resetting boot log for clean test..."
     adb shell am force-stop "$pkg" 2>/dev/null || true
-    adb shell run-as "$pkg" rm -f files/storage.img 2>/dev/null || true
     adb shell run-as "$pkg" rm -f files/console.log 2>/dev/null || true
     
     # Launch
@@ -221,7 +218,7 @@ run_boot_test() {
     console=$(adb shell run-as "$pkg" cat files/console.log 2>/dev/null || echo "")
     
     local errors=0
-    local checks=("Podroid - Alpine Linux" "IP:" "Ready!" "Loading kernel modules")
+    local checks=("Loading kernel modules" "Network found" "Almost ready" "Ready!")
     for check in "${checks[@]}"; do
         if echo "$console" | grep -q "$check"; then
             success "Check passed: $check"
@@ -241,9 +238,6 @@ run_boot_test() {
 # ── Main Logic ────────────────────────────────────────────────────────────────
 
 [ $# -eq 0 ] && { show_help; exit 1; }
-
-FAST=false
-for arg in "$@"; do [ "$arg" == "--fast" ] && FAST=true; done
 
 case "$1" in
     kernel)    build_kernel ;;

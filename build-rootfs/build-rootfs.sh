@@ -53,8 +53,8 @@ apk -X "https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_BRANCH}/main" \
 # does this, but we set them explicitly so the squashfs ships with the
 # correct security.capability xattr (preserved by mksquashfs without -no-xattrs).
 if command -v setcap >/dev/null 2>&1; then
-    setcap cap_setuid+ep "$ROOTFS/usr/bin/newuidmap" 2>/dev/null || true
-    setcap cap_setgid+ep "$ROOTFS/usr/bin/newgidmap" 2>/dev/null || true
+    setcap cap_setuid+ep "$ROOTFS/usr/bin/newuidmap"
+    setcap cap_setgid+ep "$ROOTFS/usr/bin/newgidmap"
 fi
 
 # Ensure doas and sudo are setuid-root. apk usually does this, but on
@@ -132,8 +132,6 @@ ln -sf podroid-hostd "$ROOTFS/usr/local/bin/podroid-power"
 ln -sf podroid-hostd "$ROOTFS/usr/local/bin/podroid-headless"
 ln -sf podroid-hostd "$ROOTFS/usr/local/bin/podroid-server"
 chmod +x "$ROOTFS/usr/local/bin/podroid-"*
-mkdir -p "$ROOTFS/etc/conf.d"
-cp /work/files/etc/conf.d/podroid "$ROOTFS/etc/conf.d/"
 # vsock agent's initial forward table (read at podroid-vsock startup).
 mkdir -p "$ROOTFS/etc/podroid"
 cp /work/files/etc/podroid/forwards.conf "$ROOTFS/etc/podroid/forwards.conf"
