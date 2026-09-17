@@ -218,14 +218,15 @@ class X11ViewModel @Inject constructor(
                         }
                         val ns = upd.newSize
                         if (ns != null && (ns.w != fbW || ns.h != fbH)) {
-                            fbW = ns.w; fbH = ns.h
-                            val fresh = IntArray(fbW * fbH)
-                            // Swap the framebuffer and mark the whole new frame dirty in
-                            // the same critical section, so a recomposition between resize
-                            // and the next full frame can't blit stale damage rects (or a
+                            val nw = ns.w; val nh = ns.h
+                            val fresh = IntArray(nw * nh)
+                            // Swap the framebuffer, width, and height, and mark the whole new
+                            // frame dirty in the same critical section, so a recomposition
+                            // between resize and the next full frame can't read a mismatched
+                            // fbW/fbH against the old array, or blit stale damage rects (or a
                             // stale bounding box) against the new size.
-                            synchronized(fbLock) { framebuffer = fresh; damageTracker.invalidateAll(fbW, fbH) }
-                            scratch = IntArray(fbW * fbH)
+                            synchronized(fbLock) { framebuffer = fresh; fbW = nw; fbH = nh; damageTracker.invalidateAll(nw, nh) }
+                            scratch = IntArray(nw * nh)
                             _fbSize.value = ns
                             cursor.value = android.graphics.Point(fbW / 2, fbH / 2)
                             // Route through the serialized writer so this full-update
