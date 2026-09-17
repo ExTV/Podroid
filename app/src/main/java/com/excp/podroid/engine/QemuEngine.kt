@@ -626,11 +626,10 @@ class QemuEngine @Inject constructor(
         if (config.storageAccessEnabled &&
             hasStorageAccess &&
             downloadsDir.exists()) {
-            // security_model=mapped-xattr keeps QEMU's 9p worker out of the
-            // chmod/chown syscall path that has triggered SIGILL on Tensor /
-            // ARMv9.2 PAC devices (Pixel 10) — uid/gid/mode are stored as
-            // xattrs on the host file instead of being applied directly.
-            // Falls back gracefully on filesystems without xattr support.
+            // security_model=none passes file ownership/mode straight through
+            // with no xattr mapping. mapped-xattr routed through QEMU's 9p
+            // chmod/chown syscall path, which triggered SIGILL on Tensor /
+            // ARMv9.2 PAC devices (Pixel 10), so it was reverted to none.
             args += "-fsdev"
             args += "local,id=fsdev0,path=${downloadsDir.absolutePath},security_model=none"
             args += "-device"
