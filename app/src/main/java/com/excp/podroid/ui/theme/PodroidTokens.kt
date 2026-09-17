@@ -91,8 +91,16 @@ object PodroidTokens {
         val outFile = File(context.filesDir, assetPath)
         if (outFile.exists() && outFile.length() > 0) return outFile
         outFile.parentFile?.mkdirs()
+        // Write to a tmp file and rename onto outFile so a process killed
+        // mid-copy never leaves a half-written font at the canonical path
+        // (the exists()+length() check above would otherwise treat it as done).
+        val tmpFile = File(outFile.parentFile, outFile.name + ".tmp")
         context.assets.open(assetPath).use { input ->
-            FileOutputStream(outFile).use { output -> input.copyTo(output) }
+            FileOutputStream(tmpFile).use { output -> input.copyTo(output) }
+        }
+        if (!tmpFile.renameTo(outFile)) {
+            tmpFile.delete()
+            throw java.io.IOException("atomic rename ${tmpFile.name} -> ${outFile.name} failed")
         }
         return outFile
     }
