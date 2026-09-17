@@ -190,6 +190,9 @@
     <string name="home_action_status">状态</string>
 
     <string name="up">运行中</string>
+    <string name="uptime_hours_minutes">%1$d小时%2$d分钟</string>
+    <string name="uptime_minutes_seconds">%1$d分%2$d秒</string>
+    <string name="uptime_seconds">%1$d秒</string>
 
     <!-- AVF Hint -->
     <string name="avf_available">此设备支持 AVF (KVM)</string>

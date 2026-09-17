@@ -190,6 +190,9 @@
     <string name="home_action_status">Status</string>
 
     <string name="up">Up</string>
+    <string name="uptime_hours_minutes">%1$dh %2$dm</string>
+    <string name="uptime_minutes_seconds">%1$dm %2$ds</string>
+    <string name="uptime_seconds">%1$ds</string>
 
     <!-- AVF Hint -->
     <string name="avf_available">AVF (KVM) available on this device</string>

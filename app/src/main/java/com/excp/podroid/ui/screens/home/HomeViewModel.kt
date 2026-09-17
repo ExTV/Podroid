@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.excp.podroid.BuildConfig
+import com.excp.podroid.R
 import com.excp.podroid.data.repository.ContainerStatsRepository
 import com.excp.podroid.data.repository.PortForwardRepository
 import com.excp.podroid.data.repository.SettingsRepository
@@ -13,6 +14,7 @@ import com.excp.podroid.engine.EngineHolder
 import com.excp.podroid.engine.VmState
 import com.excp.podroid.service.PodroidService
 import com.excp.podroid.util.NetworkUtils
+import com.excp.podroid.util.UptimeFormatter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.delay
@@ -190,16 +192,6 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    // Fallback timestamp stamped the first time we observe Running, used when the
-    // engine doesn't supply runningSinceMs (e.g. a future engine that omits the override).
-    private var fallbackRunningSinceMs: Long? = null
-
-    // The uptime baseline: prefer the real →Running timestamp from the engine so
-    // rotation / Activity recreation doesn't reset the displayed uptime to "Up 0s"
-    // while the VM has actually been running for minutes.
-    private val runningSinceMs: Long?
-        get() = engine.runningSinceMs ?: fallbackRunningSinceMs
-
     init {
         checkForUpdate()
         viewModelScope.launch {
@@ -220,33 +212,13 @@ class HomeViewModel @Inject constructor(
                 delay(5_000)
             }
         }
-        // Maintain fallbackRunningSinceMs for engines that don't override runningSinceMs.
-        viewModelScope.launch {
-            var lastWasRunning = false
-            engine.state.collect { state ->
-                val nowRunning = state is VmState.Running
-                if (nowRunning && !lastWasRunning) {
-                    // Only stamp the fallback when the engine doesn't provide the real time.
-                    if (engine.runningSinceMs == null) fallbackRunningSinceMs = System.currentTimeMillis()
-                }
-                if (!nowRunning) fallbackRunningSinceMs = null
-                lastWasRunning = nowRunning
-            }
-        }
     }
 
-    /** Format "Up Xm Ys" / "Up Xh Ym" from runningSinceMs. */
+    /** Format "Up Xm Ys" / "Up Xh Ym" from the engine's →Running timestamp. */
     fun uptimeLabel(@Suppress("UNUSED_PARAMETER") tickerTrigger: Long): String? {
-        val since = runningSinceMs ?: return null
+        val since = engine.runningSinceMs ?: return null
         val totalSec = ((System.currentTimeMillis() - since) / 1000).coerceAtLeast(0)
-        val hours = totalSec / 3600
-        val minutes = (totalSec % 3600) / 60
-        val seconds = totalSec % 60
-        return when {
-            hours > 0   -> "Up ${hours}h ${minutes}m"
-            minutes > 0 -> "Up ${minutes}m ${seconds}s"
-            else        -> "Up ${seconds}s"
-        }
+        return context.getString(R.string.up) + " " + UptimeFormatter.format(context, totalSec)
     }
 
     private fun checkForUpdate() {

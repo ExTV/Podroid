@@ -11,6 +11,7 @@ import com.excp.podroid.engine.VmState
 import com.excp.podroid.util.HostMetrics
 import com.excp.podroid.util.HostMetricsSnapshot
 import com.excp.podroid.util.NetworkUtils
+import com.excp.podroid.util.UptimeFormatter
 import com.excp.podroid.util.VmLoadSampler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -175,13 +176,6 @@ class StatusViewModel @Inject constructor(
         val since = engine.runningSinceMs ?: return null
         val secs = ((tick.takeIf { it > 0 } ?: System.currentTimeMillis()) - since) / 1000
         if (secs < 0) return null
-        val h = secs / 3600
-        val m = (secs % 3600) / 60
-        val s = secs % 60
-        return when {
-            h > 0 -> "${h}h ${m}m"
-            m > 0 -> "${m}m ${s}s"
-            else -> "${s}s"
-        }
+        return UptimeFormatter.format(context, secs)
     }
 }
