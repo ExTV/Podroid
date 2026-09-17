@@ -150,7 +150,6 @@ class SettingsRepository @Inject constructor(
     val hapticsEnabled       = pref(KEY_HAPTICS_ENABLED, true)
     val dynamicColorEnabled  = pref(KEY_DYNAMIC_COLOR_ENABLED, false)
     val lastBootDurationMs   = pref(KEY_LAST_BOOT_DURATION_MS, 0L)
-    val lastContainerCount   = pref(KEY_LAST_CONTAINER_COUNT, -1)
     // Routed through pref() so a corrupted store emits the "auto" default instead
     // of throwing into LanguageManager's locale collector.
     val language: Flow<String> = pref(KEY_LANGUAGE, "auto")
@@ -186,7 +185,6 @@ class SettingsRepository @Inject constructor(
     suspend fun setTerminalFontSize(value: Int)          = set(KEY_FONT_SIZE, value)
     suspend fun setStorageSizeGb(value: Int)             = set(KEY_STORAGE_GB, value)
     suspend fun setStorageAccessEnabled(value: Boolean)  = set(KEY_STORAGE_ACCESS_ENABLED, value)
-    suspend fun markSetupDone()                          = set(KEY_SETUP_DONE, true)
     suspend fun setSshEnabled(value: Boolean)            = set(KEY_SSH_ENABLED, value)
     suspend fun setTerminalColorTheme(value: String)     = set(KEY_TERMINAL_COLOR_THEME, value)
     suspend fun setTerminalFont(value: String)           = set(KEY_TERMINAL_FONT, value)
@@ -281,7 +279,6 @@ class SettingsRepository @Inject constructor(
     suspend fun getVmCpusSnapshot()               = vmCpus.first()
     suspend fun getStorageSizeGbSnapshot()        = storageSizeGb.first()
     suspend fun getStorageAccessEnabledSnapshot() = storageAccessEnabled.first()
-    suspend fun isSetupDoneSnapshot()             = isSetupDone.first()
     suspend fun getTerminalColorThemeSnapshot()   = terminalColorTheme.first()
     suspend fun getTerminalFontSnapshot()         = terminalFont.first()
     suspend fun getQemuExtraArgsSnapshot()        = qemuExtraArgs.first()
@@ -290,7 +287,6 @@ class SettingsRepository @Inject constructor(
     suspend fun getAvfVerboseLoggingSnapshot()    = avfVerboseLogging.first()
     suspend fun getAvfCpuCapSnapshot()            = avfCpuCap.first()
     suspend fun getUsbPassthroughEnabledSnapshot() = usbPassthroughEnabled.first()
-    suspend fun getLoadBalanceEnabledSnapshot()    = loadBalanceEnabled.first()
     suspend fun getBandwidthMbpsSnapshot()         = bandwidthMbps.first()
     suspend fun getAutostartOnBootSnapshot()       = autostartOnBoot.first()
 }

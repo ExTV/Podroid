@@ -113,12 +113,4 @@ class LanguageManager @Inject constructor(
         persistLanguage(context, language)
     }
 
-    suspend fun getCurrentLanguage(): String {
-        val prefLanguage = settingsRepository.getLanguageSnapshot()
-        return when (prefLanguage) {
-            LANGUAGE_AUTO -> getSystemLanguage()
-            LANGUAGE_ZH, LANGUAGE_EN -> prefLanguage
-            else -> getSystemLanguage()
-        }
-    }
 }
