@@ -19,14 +19,21 @@
  *
  *   RESIZE <rows> <cols>           stty rows/cols on /dev/ttyS0, also persist
  *                                  to /run/term_size for podroid-login restore
- *   ADD    <vport> <tcp|udp> <host> <gp> append to forwards.conf, fork new
- *                                  listener immediately (idempotent on vport)
- *   REMOVE <vport>                 kill listener child for vport, remove line
+ *   ADD    <vport> <tcp|udp> <host> <gp> fork new listener immediately
+ *                                  (idempotent on vport; replaces the
+ *                                  listener in place if the target changed)
+ *   REMOVE <vport>                 kill listener child for vport
  *   PING                           reply "PONG\n"
  *
- * Listener children are tracked by {vport, pid} in a small in-memory table so
- * REMOVE can SIGTERM the correct child. The control loop runs in the parent
- * so the table is the parent's local state — no IPC needed.
+ * forwards.conf is never rewritten by ADD/REMOVE: it is read once at startup
+ * as the initial seed, and Android replays every live forward over the ctl
+ * channel on each boot (AvfEngine bring-up), so the file needs no persisted
+ * runtime state.
+ *
+ * Listener children are tracked by {vport, pid, target} in a small in-memory
+ * table so REMOVE can SIGTERM the correct child and a re-ADD with a changed
+ * target replaces it instead of no-op'ing. The control loop runs in the
+ * parent so the table is the parent's local state; no IPC needed.
  *
  * All TCP listeners bind to AF_VSOCK with CID = VMADDR_CID_ANY (host can reach
  * us regardless of the assigned CID).
@@ -107,14 +114,17 @@ static void logmsg(const char *level, const char *fmt, ...) {
 /* ── Listener table ─────────────────────────────────────────────────────── */
 
 #define MAX_LISTENERS 64
-struct listener { int vport; pid_t pid; };
+struct listener { int vport; pid_t pid; int is_udp; int gport; char host[64]; };
 static struct listener listeners[MAX_LISTENERS];
 static int listener_count = 0;
 
-static int listener_add(int vport, pid_t pid) {
+static int listener_add(int vport, pid_t pid, int is_udp, const char *host, int gport) {
     if (listener_count >= MAX_LISTENERS) return -1;
     listeners[listener_count].vport = vport;
     listeners[listener_count].pid = pid;
+    listeners[listener_count].is_udp = is_udp;
+    listeners[listener_count].gport = gport;
+    snprintf(listeners[listener_count].host, sizeof(listeners[listener_count].host), "%s", host);
     listener_count++;
     return 0;
 }
@@ -507,13 +517,30 @@ static void udp_listener_main(int vport, const char *host, int gport, int sync_f
     _exit(0);
 }
 
-/* ── Config parsing & live edits ────────────────────────────────────────── */
+/* ── Listener spawn ─────────────────────────────────────────────────────── */
 
 static int spawn_listener(int vport, const char *host, int gport, int is_udp) {
     int idx = listener_find(vport);
     if (idx >= 0) {
-        if (pid_alive(listeners[idx].pid)) return 0;  // already running
-        listener_remove(idx);  // stale row for a dead listener — drop and respawn
+        if (pid_alive(listeners[idx].pid)) {
+            if (listeners[idx].is_udp == is_udp && listeners[idx].gport == gport &&
+                strcmp(listeners[idx].host, host) == 0) {
+                return 0;  // already running with this exact target
+            }
+            /* Target changed (host, guest port, or protocol): tear down the
+             * old listener the same way handle_remove does, then fall
+             * through to spawn the replacement below. */
+            pid_t old_pid = listeners[idx].pid;
+            if (kill(-old_pid, SIGTERM) < 0 && errno == ESRCH) kill(old_pid, SIGTERM);
+            LOG_I("spawn vsock:%d: target changed, replacing listener (pid %d)", vport, (int)old_pid);
+            /* Wait (bounded) for the old listener to actually exit before forking
+             * the replacement; otherwise the new child's bind() on the same
+             * AF_VSOCK port can race the old socket's teardown and fail with
+             * EADDRINUSE, losing the forward. reap_children() may win the reap
+             * out from under us, so poll pid_alive() rather than waitpid(). */
+            for (int waited = 0; waited < 50 && pid_alive(old_pid); waited++) usleep(10000);
+        }
+        listener_remove(idx);  // dead row, or the one just replaced above
     }
     /* Sync pipe: the child reports its bind/listen result so we record the
      * {vport,pid} row only once the listener is actually accepting. */
@@ -542,38 +569,11 @@ static int spawn_listener(int vport, const char *host, int gport, int is_udp) {
         return -1;
     }
     setpgid(pid, pid);
-    if (listener_add(vport, pid) < 0) {
+    if (listener_add(vport, pid, is_udp, host, gport) < 0) {
         if (kill(-pid, SIGTERM) < 0 && errno == ESRCH) kill(pid, SIGTERM);
         return -1;
     }
     return 1;
-}
-
-/* Append a forward rule to the config file. Best-effort. */
-static void append_config(int vport, const char *proto, const char *host, int gport) {
-    FILE *f = fopen(CONFIG_PATH, "a");
-    if (!f) { LOG_W("append %s failed: %s", CONFIG_PATH, strerror(errno)); return; }
-    fprintf(f, "%d %s %s %d\n", vport, proto, host, gport);
-    fclose(f);
-}
-
-/* Drop the line for vport from the config file. Reads-and-rewrites. */
-static void remove_config_line(int vport) {
-    FILE *in = fopen(CONFIG_PATH, "r");
-    if (!in) return;
-    char tmppath[256];
-    snprintf(tmppath, sizeof(tmppath), "%s.tmp", CONFIG_PATH);
-    FILE *out = fopen(tmppath, "w");
-    if (!out) { fclose(in); return; }
-    char line[512];
-    while (fgets(line, sizeof(line), in)) {
-        int vp = -1;
-        if (sscanf(line, "%d", &vp) == 1 && vp == vport) continue;
-        fputs(line, out);
-    }
-    fclose(in);
-    fclose(out);
-    rename(tmppath, CONFIG_PATH);
 }
 
 /* ── Control command handlers ───────────────────────────────────────────── */
@@ -603,10 +603,6 @@ static void handle_add(int vport, const char *proto, const char *host, int gport
         LOG_W("ADD vsock:%d failed", vport);
         return;
     }
-    if (r == 1) {
-        remove_config_line(vport);
-        append_config(vport, proto, host, gport);
-    }
     LOG_I("ADD vsock:%d %s → %s:%d", vport, proto, host, gport);
 }
 
@@ -617,10 +613,9 @@ static void handle_remove(int vport) {
     /* If the listener already died on its own, the kernel may have recycled its
      * pid for an unrelated process group — kill(-pid) would signal the wrong
      * processes. Probe with kill(pid,0) first and, if gone, just prune the
-     * stale row and drop the config line; never signal a recycled pid. */
+     * stale row; never signal a recycled pid. */
     if (!pid_alive(pid)) {
         listener_remove(idx);
-        remove_config_line(vport);
         LOG_I("REMOVE vsock:%d — listener (pid %d) already gone, pruned", vport, (int)pid);
         return;
     }
@@ -630,7 +625,6 @@ static void handle_remove(int vport) {
      * gone. */
     if (kill(-pid, SIGTERM) < 0 && errno == ESRCH) kill(pid, SIGTERM);
     listener_remove(idx);
-    remove_config_line(vport);
     LOG_I("REMOVE vsock:%d (pid %d)", vport, (int)pid);
 }
 
