@@ -141,6 +141,12 @@ chmod 0644 "$ROOTFS/etc/podroid/forwards.conf"
 # Migration scripts dir (seeded with its README; per-version <v>.sh added over time).
 mkdir -p "$ROOTFS/etc/podroid/migrations"
 cp /work/files/etc/podroid/migrations/README "$ROOTFS/etc/podroid/migrations/README"
+# Install every migration script so a new one needs no build-script edit.
+for f in /work/files/etc/podroid/migrations/*.sh; do
+    [ -f "$f" ] || continue
+    cp "$f" "$ROOTFS/etc/podroid/migrations/"
+    chmod 0755 "$ROOTFS/etc/podroid/migrations/$(basename "$f")"
+done
 # System-version stamp: the migration anchor. Baked from the app versionCode at
 # build time; compared against /mnt/persist/.podroid/applied-version at boot.
 printf '%s\n' "${SYSTEM_VERSION:-0}" > "$ROOTFS/etc/podroid/system-version"
