@@ -52,6 +52,7 @@ import com.excp.podroid.BuildConfig
 import com.excp.podroid.R
 import com.excp.podroid.engine.VmState
 import com.excp.podroid.engine.avf.AvfFailureGuidance
+import com.excp.podroid.service.PodroidService
 import com.excp.podroid.ui.components.AdaptiveContainer
 import com.excp.podroid.ui.components.PodroidDestructiveButton
 import com.excp.podroid.ui.components.PodroidGhostButton
@@ -486,7 +487,7 @@ private fun HomeDataSection(
         PodroidListRow(label = stringResource(R.string.phone_ip), value = phoneIp, mono = true)
         PodroidListRow(
             label = stringResource(R.string.ssh),
-            value = if (meta.sshEnabled) ":9922 · podroid" else stringResource(R.string.off),
+            value = if (meta.sshEnabled) ":${PodroidService.SSH_HOST_PORT} · podroid" else stringResource(R.string.off),
             mono = meta.sshEnabled,
         )
         PodroidListRow(
