@@ -256,7 +256,7 @@ object AvfDiagnostics {
         invokeSetter(builderCls, builder, "setKernelPath", String::class.java, kernelPath)
         invokeSetter(builderCls, builder, "setInitrdPath", String::class.java, initrdPath)
         runCatching {
-            invokeSetter(builderCls, builder, "setParams", String::class.java, "console=hvc0 panic=1")
+            AvfReflect.addParams(builder, "console=hvc0 panic=1")
         }
         val buildM = builderCls.getDeclaredMethod("build").apply { isAccessible = true }
         return buildM.invoke(builder)

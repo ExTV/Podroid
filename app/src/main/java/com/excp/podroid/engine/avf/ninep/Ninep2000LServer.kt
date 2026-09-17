@@ -9,8 +9,10 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
+import java.nio.file.DirectoryNotEmptyException
 import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
+import java.nio.file.NoSuchFileException
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.nio.file.attribute.BasicFileAttributeView
@@ -40,6 +42,7 @@ private const val S_IFLNK = 0xA000L
 private const val ENOENT = 2
 private const val EIO = 5
 private const val EEXIST = 17
+private const val ENOTEMPTY = 39
 private const val EOPNOTSUPP = 95
 
 /** P9_GETATTR_BASIC: the field set filled in by Rgetattr below. */
@@ -424,6 +427,9 @@ class Ninep2000LServer(
         } catch (e: FileAlreadyExistsException) {
             replyError(frame.tag, output, EEXIST)
             return
+        } catch (e: NoSuchFileException) {
+            replyError(frame.tag, output, ENOENT)
+            return
         } catch (e: Exception) {
             replyError(frame.tag, output, EIO)
             return
@@ -624,6 +630,9 @@ class Ninep2000LServer(
         } catch (e: FileAlreadyExistsException) {
             replyError(frame.tag, output, EEXIST)
             return
+        } catch (e: NoSuchFileException) {
+            replyError(frame.tag, output, ENOENT)
+            return
         } catch (e: IOException) {
             replyError(frame.tag, output, EIO)
             return
@@ -661,6 +670,9 @@ class Ninep2000LServer(
                 replyError(frame.tag, output, ENOENT)
                 return
             }
+        } catch (e: DirectoryNotEmptyException) {
+            replyError(frame.tag, output, ENOTEMPTY)
+            return
         } catch (e: IOException) {
             replyError(frame.tag, output, EIO)
             return
@@ -710,6 +722,12 @@ class Ninep2000LServer(
 
         try {
             Files.move(source.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        } catch (e: NoSuchFileException) {
+            replyError(frame.tag, output, ENOENT)
+            return
+        } catch (e: DirectoryNotEmptyException) {
+            replyError(frame.tag, output, ENOTEMPTY)
+            return
         } catch (e: IOException) {
             replyError(frame.tag, output, EIO)
             return
