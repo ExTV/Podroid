@@ -844,10 +844,12 @@ int main(int argc, char **argv) {
     sa_v.svm_port   = (unsigned int)ctl_vport;
     if (bind(s, (struct sockaddr *)&sa_v, sizeof(sa_v)) < 0) {
         LOG_E("ctl bind(%d) failed: %s", ctl_vport, strerror(errno));
+        close(s);
         return 1;
     }
     if (listen(s, 4) < 0) {
         LOG_E("ctl listen failed: %s", strerror(errno));
+        close(s);
         return 1;
     }
     LOG_I("ctl: listening on vsock:%d", ctl_vport);
