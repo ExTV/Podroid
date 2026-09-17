@@ -1,0 +1,19 @@
+# ZRLE regression fixtures captured from TigerVNC Xvnc in the Podroid guest.
+#
+# Each .zrle.bin file: magic "PDRF", then big-endian u16 fbW, fbH, regionX, regionY,
+# regionW, regionH, then every server byte after ServerInit (FramebufferUpdate
+# messages) for a fresh connection advertising [ZRLE, Raw] with the 32bpp depth-24
+# little-endian R16 G8 B0 pixel format.
+#
+# sha256 is over the region's ARGB pixels (alpha 0xFF), row-major, each pixel as a
+# 4-byte big-endian int, decoded from the matching Raw capture of the same static
+# scene. subenc lists the ZRLE tile subencodings present in the file.
+#
+# <file> sha256=<hex> subenc=<kinds>
+desktop_0_0_1280x720.zrle.bin sha256=ff176be288d56f0d581d0631be7e9f77708106899560da92091116fc126cee41 subenc=raw,packed5-16
+desktop_0_0_256x256.zrle.bin sha256=449dc9f63fb939c136f6b6a78e0ce2ad6f48b67bd901e05ff718785e32125b1e subenc=raw
+desktop_0_232_256x256.zrle.bin sha256=33aa77243cdb8559e7f8e1388721f850efea376fd2d2c23a2faa4fd392f995f3 subenc=paletteRle
+desktop_0_464_256x256.zrle.bin sha256=acf823b0fca19f0055d8123b91f0898ec04bcfa46d91d9c18673424fa9f1e6ab subenc=packed5-16
+image_0_0_256x256.zrle.bin sha256=3d70f10083404abd81dadcc5c2bd30b8d518647a805489989e1761861d2e8117 subenc=solid
+image_824_853_256x256.zrle.bin sha256=da79e4667db048aa95dfdefa8bc731ee2823a41f77140138b8929c7c198c7754 subenc=raw,packed5-16,paletteRle
+settings_824_853_256x256.zrle.bin sha256=d843a3c50e2b8e73123dd8ec727536b5ae1e3a3e5a4c189e05bfec5062db1277 subenc=raw,packed3-4,paletteRle
