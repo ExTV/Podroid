@@ -50,7 +50,7 @@ class ContainerBackupViewModel @Inject constructor(
         ContainerBackupUiState(
             vmRunning = vmState is VmState.Running,
             storageAccessEnabled = storageAccess,
-            guestPath = repository.guestBackupPathLabel(),
+            guestPath = repository.guestBackupPathLabel(storageAccess),
             backupFiles = files,
             containerName = container,
             imageRef = image,

@@ -34,8 +34,8 @@ class ContainerBackupRepository @Inject constructor() {
         return File(downloads, BACKUP_SUBDIR)
     }
 
-    fun guestBackupPathLabel(): String =
-        if (isDownloadsReachable()) "/mnt/downloads/Podroid/backups"
+    fun guestBackupPathLabel(downloadsSharingEnabled: Boolean = isDownloadsReachable()): String =
+        if (downloadsSharingEnabled) "/mnt/downloads/Podroid/backups"
         else "/var/backups/podroid"
 
     fun isDownloadsReachable(): Boolean {
