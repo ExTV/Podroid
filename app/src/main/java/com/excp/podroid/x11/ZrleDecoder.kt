@@ -47,10 +47,6 @@ class ZrleDecoder {
     // Decompressed output buffer; re-used across inflate calls within one decode() call.
     private var outputBuf = ByteArray(4096)
 
-    // Remaining compressed bytes in the current rect that have not yet been fed to the inflater.
-    private var remaining = 0
-    private var inputStream: DataInputStream? = null
-
     /**
      * Resets decoder state between RFB sessions.
      *
@@ -64,8 +60,6 @@ class ZrleDecoder {
      */
     fun reset() {
         inflater.reset()
-        remaining = 0
-        inputStream = null
     }
 
     /**
@@ -88,13 +82,10 @@ class ZrleDecoder {
         // it holds inputScratch by reference and is consumed lazily by inflate(),
         // so pre-loading multiple chunks into one buffer would drop all but the
         // last. Instead ZInput.fill() reads the next chunk only once the inflater
-        // has consumed the previous one, bounded by `remaining` (this rect's
-        // compLen) so it never crosses the rect boundary.
-        remaining = compLen
-        inputStream = din
-
+        // has consumed the previous one, bounded by its own `remaining` (this
+        // rect's compLen) so it never crosses the rect boundary.
         // Wrap the inflater so tile-level code just calls readByte()/readBytes().
-        val zi = ZInput(inflater)
+        val zi = ZInput(inflater, din, compLen)
 
         try {
             // Tile loop: 64x64 tiles in row-major order.
@@ -180,11 +171,7 @@ class ZrleDecoder {
                     val color = zi.readCpixel()
                     val runLen = zi.readRunLength()
                     if (filled + runLen > total) throw RfbProtocolException("ZRLE: plain RLE run overruns tile ($filled+$runLen > $total)")
-                    repeat(runLen) {
-                        val pos = filled + it
-                        val row = pos / tw; val col = pos % tw
-                        target[(ty + row) * stride + (tx + col)] = color
-                    }
+                    fillRun(target, stride, tx, ty, tw, filled, runLen, color)
                     filled += runLen
                 }
             }
@@ -210,11 +197,7 @@ class ZrleDecoder {
                         val color = palette[idx]
                         val runLen = zi.readRunLength()
                         if (filled + runLen > total) throw RfbProtocolException("ZRLE: palette RLE run overruns tile ($filled+$runLen > $total)")
-                        repeat(runLen) {
-                            val pos = filled + it
-                            val row = pos / tw; val col = pos % tw
-                            target[(ty + row) * stride + (tx + col)] = color
-                        }
+                        fillRun(target, stride, tx, ty, tw, filled, runLen, color)
                         filled += runLen
                     }
                 }
@@ -223,13 +206,23 @@ class ZrleDecoder {
         }
     }
 
+    /** Fills [runLen] pixels of [color] into [target] starting at tile-relative offset [filled]. */
+    private fun fillRun(target: IntArray, stride: Int, tx: Int, ty: Int, tw: Int, filled: Int, runLen: Int, color: Int) {
+        repeat(runLen) {
+            val pos = filled + it
+            val row = pos / tw
+            val col = pos % tw
+            target[(ty + row) * stride + (tx + col)] = color
+        }
+    }
+
     /**
      * Thin wrapper around [Inflater] that provides byte-level and CPIXEL reads.
      * Compressed input is fed to the inflater on demand via [feedChunk], bounded
-     * by the enclosing rect's compressed length ([remaining]); this class only
-     * drains inflated output.
+     * by this rect's compressed length ([remaining]); this class only drains
+     * inflated output.
      */
-    private inner class ZInput(private val inf: Inflater) {
+    private inner class ZInput(private val inf: Inflater, private val din: DataInputStream, private var remaining: Int) {
         private val buf = ByteArray(256)
         private var pos = 0
         private var avail = 0
@@ -254,7 +247,7 @@ class ZrleDecoder {
 
         private fun feedChunk() {
             val nIn = minOf(remaining, inputScratch.size)
-            inputStream!!.readFully(inputScratch, 0, nIn)
+            din.readFully(inputScratch, 0, nIn)
             inf.setInput(inputScratch, 0, nIn)
             remaining -= nIn
         }

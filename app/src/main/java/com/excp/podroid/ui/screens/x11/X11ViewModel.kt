@@ -93,32 +93,16 @@ class X11ViewModel @Inject constructor(
         synchronized(fbLock) { block(framebuffer, fbW, fbH, damageTracker.drain()) }
 
     // Debug-only (BuildConfig.DEBUG) stats for the once-per-second X11Stats log
-    // assembled in X11SurfaceRenderer: bytes read off the RFB socket, framebuffer
-    // updates applied, time spent copying damaged rows + updating the damage
-    // tracker, and time from a FramebufferUpdate message's first byte to its
-    // full decode (rx = transfer + decode). Written from the single-threaded
-    // read loop in connect(), read and reset from the render thread via
-    // debugSnapshotAndReset(); the lock only guards this snapshot, never fbLock.
-    private val debugStatsLock = Any()
-    private var debugBytes = 0L
-    private var debugUpdates = 0L
-    private var debugCopyNanos = 0L
-    private var debugRxNanos = 0L
-    // Effective encoding for the current session (set at each session start from
-    // x11-debug.conf and the Raw fallback, debug builds only); read cross-thread
-    // by the renderer.
-    @Volatile private var debugEncodingName = "raw"
+    // assembled in X11SurfaceRenderer. Written from the single-threaded read loop
+    // in connect(), read and reset from the render thread via debugSnapshotAndReset().
+    private val debugStats = X11DebugStats()
     // Effective present mode for the current session: whether the renderer
     // should try a hardware canvas, read from x11-debug.conf's present= key
     // (debug builds only; release always stays sw).
     @Volatile var debugPresentHw: Boolean = false; private set
 
     /** Debug-only: atomically snapshots and resets (bytesRead, updates, copyNanos, rxNanos). */
-    fun debugSnapshotAndReset(): RfbDebugSnapshot = synchronized(debugStatsLock) {
-        val s = RfbDebugSnapshot(debugBytes, debugUpdates, debugCopyNanos, debugRxNanos, debugEncodingName)
-        debugBytes = 0L; debugUpdates = 0L; debugCopyNanos = 0L; debugRxNanos = 0L
-        s
-    }
+    fun debugSnapshotAndReset(): RfbDebugSnapshot = debugStats.snapshotAndReset()
 
     private val audio = AudioStreamer()
     private var sessionJob: Job? = null
@@ -165,7 +149,7 @@ class X11ViewModel @Inject constructor(
                     // Debug-only (BuildConfig.DEBUG): counts bytes read off the RFB
                     // socket for the X11Stats log; never wrapped in a release build.
                     val inp: InputStream = if (BuildConfig.DEBUG) {
-                        CountingInputStream(rawInp) { n -> synchronized(debugStatsLock) { debugBytes += n } }
+                        CountingInputStream(rawInp) { n -> debugStats.addBytes(n) }
                     } else rawInp
                     val out = sock.getOutputStream()
                     rfbOut = out
@@ -188,7 +172,7 @@ class X11ViewModel @Inject constructor(
                     }
                     val encodings = EncodingPolicy.encodingsFor(wantZrle, zrleDisabled)
                     val usesZrle = encodings === VncClient.ZRLE_ENCODINGS
-                    if (BuildConfig.DEBUG) debugEncodingName = if (usesZrle) "zrle" else "raw"
+                    if (BuildConfig.DEBUG) debugStats.encodingName = if (usesZrle) "zrle" else "raw"
 
                     VncClient.handshake(inp, out)
                     VncClient.negotiatePixelFormat(out, encodings)
@@ -205,7 +189,7 @@ class X11ViewModel @Inject constructor(
                         )
                         if (BuildConfig.DEBUG) {
                             val rxElapsed = System.nanoTime() - rxT0
-                            synchronized(debugStatsLock) { debugRxNanos += rxElapsed }
+                            debugStats.recordRx(rxElapsed)
                         }
                         val ns = upd.newSize
                         if (ns != null && (ns.w != fbW || ns.h != fbH)) {
@@ -248,7 +232,7 @@ class X11ViewModel @Inject constructor(
                         }
                         if (BuildConfig.DEBUG) {
                             val elapsed = System.nanoTime() - debugT0
-                            synchronized(debugStatsLock) { debugUpdates++; debugCopyNanos += elapsed }
+                            debugStats.recordUpdate(elapsed)
                         }
                         onFrame?.invoke()
                         // Same serialized path as input writes: queued FIFO behind any
@@ -402,10 +386,23 @@ class X11ViewModel @Inject constructor(
         submitRfb { VncClient.sendKey(it, keysym, down) }
     }
 
-    fun moveTo(x: Int, y: Int) { cursor.value = android.graphics.Point(x.coerceIn(0, fbW - 1), y.coerceIn(0, fbH - 1)); sendPointer(cursor.value.x, cursor.value.y, heldButtons) }
     @Volatile private var heldButtons = 0
-    fun press(button: Int) { heldButtons = heldButtons or button; sendPointer(cursor.value.x, cursor.value.y, heldButtons) }
-    fun release(button: Int) { heldButtons = heldButtons and button.inv(); sendPointer(cursor.value.x, cursor.value.y, heldButtons) }
+
+    fun moveTo(x: Int, y: Int) {
+        cursor.value = android.graphics.Point(x.coerceIn(0, fbW - 1), y.coerceIn(0, fbH - 1))
+        sendPointer(cursor.value.x, cursor.value.y, heldButtons)
+    }
+
+    fun press(button: Int) {
+        heldButtons = heldButtons or button
+        sendPointer(cursor.value.x, cursor.value.y, heldButtons)
+    }
+
+    fun release(button: Int) {
+        heldButtons = heldButtons and button.inv()
+        sendPointer(cursor.value.x, cursor.value.y, heldButtons)
+    }
+
     fun click(button: Int) { press(button); release(button) }
     /** Physical-mouse update: absolute position + the full button mask in one event.
      *  Mouse is authoritative for the button mask (mask=0 on release must clear bits).
@@ -417,7 +414,14 @@ class X11ViewModel @Inject constructor(
         heldButtons = mask
         sendPointer(nx, ny, heldButtons)
     }
-    fun scroll(up: Boolean, ticks: Int = 1) { val b = if (up) VncClient.BTN_WHEEL_UP else VncClient.BTN_WHEEL_DOWN; repeat(ticks) { sendPointer(cursor.value.x, cursor.value.y, heldButtons or b); sendPointer(cursor.value.x, cursor.value.y, heldButtons) } }
+
+    fun scroll(up: Boolean, ticks: Int = 1) {
+        val b = if (up) VncClient.BTN_WHEEL_UP else VncClient.BTN_WHEEL_DOWN
+        repeat(ticks) {
+            sendPointer(cursor.value.x, cursor.value.y, heldButtons or b)
+            sendPointer(cursor.value.x, cursor.value.y, heldButtons)
+        }
+    }
 
     override fun onCleared() {
         disconnect()
@@ -428,6 +432,48 @@ class X11ViewModel @Inject constructor(
         // Sane desktop ceiling; also <= 0xFFFF so a custom value never wraps the
         // 16-bit width/height fields of the SetDesktopSize wire message.
         const val MAX_RESOLUTION = 7680
+    }
+}
+
+/**
+ * Debug-only (BuildConfig.DEBUG) stats for the once-per-second X11Stats log
+ * assembled in X11SurfaceRenderer: bytes read off the RFB socket, framebuffer
+ * updates applied, time spent copying damaged rows + updating the damage
+ * tracker, and time from a FramebufferUpdate message's first byte to its
+ * full decode (rx = transfer + decode). Written from the single-threaded
+ * read loop in [X11ViewModel.connect], read and reset from the render thread
+ * via [snapshotAndReset]; [lock] only guards this snapshot, never fbLock.
+ */
+private class X11DebugStats {
+    private val lock = Any()
+    private var bytes = 0L
+    private var updates = 0L
+    private var copyNanos = 0L
+    private var rxNanos = 0L
+    // Effective encoding for the current session (set at each session start from
+    // x11-debug.conf and the Raw fallback, debug builds only); read cross-thread
+    // by the renderer.
+    @Volatile var encodingName = "raw"
+
+    fun addBytes(n: Int) {
+        synchronized(lock) { bytes += n }
+    }
+
+    fun recordRx(elapsedNanos: Long) {
+        synchronized(lock) { rxNanos += elapsedNanos }
+    }
+
+    fun recordUpdate(copyElapsedNanos: Long) {
+        synchronized(lock) {
+            updates++
+            copyNanos += copyElapsedNanos
+        }
+    }
+
+    fun snapshotAndReset(): RfbDebugSnapshot = synchronized(lock) {
+        val s = RfbDebugSnapshot(bytes, updates, copyNanos, rxNanos, encodingName)
+        bytes = 0L; updates = 0L; copyNanos = 0L; rxNanos = 0L
+        s
     }
 }
 
