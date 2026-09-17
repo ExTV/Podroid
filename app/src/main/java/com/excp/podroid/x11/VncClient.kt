@@ -13,6 +13,24 @@ import java.io.OutputStream
 
 data class VncServerInfo(val width: Int, val height: Int, val name: String)
 
+/**
+ * The server sent data this client cannot parse or decode (bad handshake field,
+ * unexpected message type, out-of-bounds rect, unsupported encoding, corrupt
+ * ZRLE/zlib data). Transport failures (EOF, socket errors, timeouts) are never
+ * this type, so a normal disconnect can be told apart from a decode fault.
+ */
+class RfbProtocolException(message: String, cause: Throwable? = null) : java.io.IOException(message, cause)
+
+/** Pure encoding choice and ZRLE-to-Raw fallback decision for an RFB session. */
+object EncodingPolicy {
+    fun encodingsFor(wantZrle: Boolean, zrleDisabled: Boolean): IntArray =
+        if (wantZrle && !zrleDisabled) VncClient.ZRLE_ENCODINGS else VncClient.DEFAULT_ENCODINGS
+
+    /** True only when the session advertised ZRLE and a protocol error is in [error]'s cause chain. */
+    fun shouldFallBack(error: Throwable, sessionUsedZrle: Boolean): Boolean =
+        sessionUsedZrle && generateSequence(error) { it.cause }.any { it is RfbProtocolException }
+}
+
 object VncClient {
     private const val PROTOCOL_VERSION = "RFB 003.008\n"
     private const val SEC_TYPE_NONE: Byte = 1
@@ -23,14 +41,14 @@ object VncClient {
      * (the only ServerInit fields we need for v1 — pixel format is fixed
      * 32-bit BGRA via SetPixelFormat sent later by the caller).
      *
-     * Throws IOException on protocol mismatch.
+     * Throws RfbProtocolException on protocol mismatch.
      */
     fun handshake(inp: InputStream, out: OutputStream): VncServerInfo {
         val din = DataInputStream(inp)
 
         // 1. Read 12-byte version "RFB xxx.yyy\n"
         val serverVersion = ByteArray(12).also { din.readFully(it) }
-        require(serverVersion[0] == 'R'.code.toByte()) { "not RFB greeting" }
+        if (serverVersion[0] != 'R'.code.toByte()) throw RfbProtocolException("not RFB greeting")
 
         // 2. Send our version (always 003.008)
         out.write(PROTOCOL_VERSION.toByteArray())
@@ -38,9 +56,9 @@ object VncClient {
 
         // 3. Read security types. 0 => failure (not handled here)
         val numTypes = din.readUnsignedByte()
-        require(numTypes > 0) { "server reported zero security types" }
+        if (numTypes <= 0) throw RfbProtocolException("server reported zero security types")
         val types = ByteArray(numTypes).also { din.readFully(it) }
-        require(types.any { it == SEC_TYPE_NONE }) { "server has no None auth" }
+        if (types.none { it == SEC_TYPE_NONE }) throw RfbProtocolException("server has no None auth")
 
         // 4. Choose None
         out.write(byteArrayOf(SEC_TYPE_NONE))
@@ -48,7 +66,7 @@ object VncClient {
 
         // 5. Read SecurityResult (4 bytes; 0 = OK)
         val secResult = din.readInt()
-        require(secResult == 0) { "security result $secResult" }
+        if (secResult != 0) throw RfbProtocolException("security result $secResult")
 
         // 6. Send ClientInit (1 byte: shared = 1)
         out.write(byteArrayOf(1))
@@ -59,7 +77,7 @@ object VncClient {
         val h = din.readUnsignedShort()
         skipFully(din, 16) // pixel format we'll override
         val nameLen = din.readInt()
-        require(nameLen in 0..(1 shl 20)) { "RFB name length $nameLen" }
+        if (nameLen !in 0..(1 shl 20)) throw RfbProtocolException("RFB name length $nameLen")
         val name = ByteArray(nameLen).also { din.readFully(it) }.toString(Charsets.UTF_8)
 
         return VncServerInfo(w, h, name)
@@ -88,10 +106,10 @@ object VncClient {
      * No-op for in-range rects.
      */
     private fun requireInBounds(x: Int, y: Int, w: Int, h: Int, stride: Int, size: Int) {
-        if (stride <= 0) throw java.io.IOException("RFB: zero or negative stride $stride")
+        if (stride <= 0) throw RfbProtocolException("RFB: zero or negative stride $stride")
         val rows = size / stride
         if (x < 0 || y < 0 || w < 0 || h < 0 || x + w > stride || y + h > rows)
-            throw java.io.IOException("RFB rect out of bounds: x=$x y=$y w=$w h=$h stride=$stride size=$size")
+            throw RfbProtocolException("RFB rect out of bounds: x=$x y=$y w=$w h=$h stride=$stride size=$size")
     }
 
     private const val MSG_FRAMEBUFFER_UPDATE: Int = 0
@@ -181,8 +199,8 @@ object VncClient {
                 MSG_FRAMEBUFFER_UPDATE -> { onMessageStart?.invoke(); break }
                 1 -> { skipFully(din, 1); din.readUnsignedShort(); val n = din.readUnsignedShort(); skipFully(din, n * 6) }
                 2 -> { }
-                3 -> { skipFully(din, 3); val len = din.readInt(); if (len in 0..(1 shl 20)) skipFully(din, len) else throw java.io.IOException("ServerCutText absurd length=$len") }
-                else -> throw java.io.IOException("unexpected RFB server msg type $msgType")
+                3 -> { skipFully(din, 3); val len = din.readInt(); if (len in 0..(1 shl 20)) skipFully(din, len) else throw RfbProtocolException("ServerCutText absurd length=$len") }
+                else -> throw RfbProtocolException("unexpected RFB server msg type $msgType")
             }
         }
         skipFully(din, 1)
@@ -199,7 +217,7 @@ object VncClient {
                 ENC_EXTENDED_DESKTOP_SIZE -> {       // -308: w/h are the new fb dims
                     val screens = din.readUnsignedByte(); skipFully(din, 3)
                     skipFully(din, screens * 16)     // we use a single-screen model; dims come from w/h
-                    if (w <= 0 || h <= 0) throw java.io.IOException("RFB ExtendedDesktopSize: degenerate geometry w=$w h=$h")
+                    if (w <= 0 || h <= 0) throw RfbProtocolException("RFB ExtendedDesktopSize: degenerate geometry w=$w h=$h")
                     newSize = VncSize(w, h)
                 }
                 ENC_RAW -> {
@@ -235,7 +253,7 @@ object VncClient {
                     zrle.decode(din, x, y, w, h, targetArgb, stride)
                     damage.add(VncRect(x, y, w, h))
                 }
-                else -> throw java.io.IOException("unsupported encoding $enc")
+                else -> throw RfbProtocolException("unsupported encoding $enc")
             }
         }
         return RfbUpdate(newSize, damage)

@@ -6,6 +6,9 @@ package com.excp.podroid.x11
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -218,6 +221,81 @@ class VncClientTest {
         d.writeInt(0x7FFFFFFF)                                    // unknown encoding
         val target = IntArray(1280 * 720)
         VncClient.readFramebufferUpdate(java.io.ByteArrayInputStream(bos.toByteArray()), target, 1280, ZrleDecoder())
+    }
+
+    @Test fun `unsupported encoding is an RfbProtocolException`() {
+        val bos = java.io.ByteArrayOutputStream()
+        val d = java.io.DataOutputStream(bos)
+        d.writeByte(0); d.writeByte(0); d.writeShort(1)          // msg, pad, numRects
+        d.writeShort(0); d.writeShort(0); d.writeShort(1); d.writeShort(1)  // x=0,y=0,w=1,h=1
+        d.writeInt(0x7FFFFFFF)                                    // unknown encoding
+        assertThrows(RfbProtocolException::class.java) {
+            VncClient.readFramebufferUpdate(java.io.ByteArrayInputStream(bos.toByteArray()), IntArray(4), 2, ZrleDecoder())
+        }
+    }
+
+    @Test fun `ZRLE rect with corrupt zlib data is an RfbProtocolException wrapping DataFormatException`() {
+        // Valid zlib header (78 9C), then a deflate block header with BTYPE=11
+        // (reserved), which the Inflater rejects with DataFormatException.
+        val bos = java.io.ByteArrayOutputStream()
+        val d = java.io.DataOutputStream(bos)
+        d.writeByte(0); d.writeByte(0); d.writeShort(1)              // msg, pad, numRects
+        d.writeShort(0); d.writeShort(0); d.writeShort(2); d.writeShort(2)  // x=0,y=0,w=2,h=2
+        d.writeInt(16)                                                // encoding = ZRLE
+        d.writeInt(4)
+        d.write(byteArrayOf(0x78, 0x9C.toByte(), 0xFF.toByte(), 0xFF.toByte()))
+        val ex = assertThrows(RfbProtocolException::class.java) {
+            VncClient.readFramebufferUpdate(java.io.ByteArrayInputStream(bos.toByteArray()), IntArray(4), 2, ZrleDecoder())
+        }
+        assertTrue("cause was ${ex.cause}", ex.cause is java.util.zip.DataFormatException)
+    }
+
+    @Test fun `stream truncated mid-rect is an EOFException, not an RfbProtocolException`() {
+        // ZRLE rect announces 100 compressed bytes but the stream ends after 2.
+        val zrle = java.io.ByteArrayOutputStream()
+        java.io.DataOutputStream(zrle).apply {
+            writeByte(0); writeByte(0); writeShort(1)
+            writeShort(0); writeShort(0); writeShort(2); writeShort(2); writeInt(16)
+            writeInt(100); write(byteArrayOf(0x78, 0x9C.toByte()))
+        }
+        val zrleEx = assertThrows(java.io.IOException::class.java) {
+            VncClient.readFramebufferUpdate(java.io.ByteArrayInputStream(zrle.toByteArray()), IntArray(4), 2, ZrleDecoder())
+        }
+        assertTrue("was $zrleEx", zrleEx is java.io.EOFException)
+        assertFalse(zrleEx is RfbProtocolException)
+
+        // Raw rect 2x1 with only one of its two pixels on the wire.
+        val raw = java.io.ByteArrayOutputStream()
+        java.io.DataOutputStream(raw).apply {
+            writeByte(0); writeByte(0); writeShort(1)
+            writeShort(0); writeShort(0); writeShort(2); writeShort(1); writeInt(0)
+            write(byteArrayOf(0, 0, 0, 0))
+        }
+        val rawEx = assertThrows(java.io.IOException::class.java) {
+            VncClient.readFramebufferUpdate(java.io.ByteArrayInputStream(raw.toByteArray()), IntArray(2), 2, ZrleDecoder())
+        }
+        assertTrue("was $rawEx", rawEx is java.io.EOFException)
+        assertFalse(rawEx is RfbProtocolException)
+    }
+
+    @Test fun `EncodingPolicy advertises ZRLE only when wanted and not disabled`() {
+        assertArrayEquals(VncClient.ZRLE_ENCODINGS, EncodingPolicy.encodingsFor(wantZrle = true, zrleDisabled = false))
+        assertArrayEquals(VncClient.DEFAULT_ENCODINGS, EncodingPolicy.encodingsFor(wantZrle = true, zrleDisabled = true))
+        assertArrayEquals(VncClient.DEFAULT_ENCODINGS, EncodingPolicy.encodingsFor(wantZrle = false, zrleDisabled = false))
+        assertArrayEquals(VncClient.DEFAULT_ENCODINGS, EncodingPolicy.encodingsFor(wantZrle = false, zrleDisabled = true))
+    }
+
+    @Test fun `EncodingPolicy falls back only for a protocol error in a ZRLE session`() {
+        val protocol = RfbProtocolException("ZRLE: bad")
+        val wrapped = java.io.IOException("outer", RuntimeException("mid", protocol))
+        assertTrue(EncodingPolicy.shouldFallBack(protocol, sessionUsedZrle = true))
+        assertTrue(EncodingPolicy.shouldFallBack(wrapped, sessionUsedZrle = true))
+        assertFalse(EncodingPolicy.shouldFallBack(protocol, sessionUsedZrle = false))
+        assertFalse(EncodingPolicy.shouldFallBack(wrapped, sessionUsedZrle = false))
+        assertFalse(EncodingPolicy.shouldFallBack(java.io.IOException("reset"), sessionUsedZrle = true))
+        assertFalse(EncodingPolicy.shouldFallBack(java.io.EOFException(), sessionUsedZrle = true))
+        assertFalse(EncodingPolicy.shouldFallBack(java.net.SocketException("closed"), sessionUsedZrle = true))
+        assertFalse(EncodingPolicy.shouldFallBack(java.net.SocketTimeoutException(), sessionUsedZrle = true))
     }
 
     @Test fun `negotiatePixelFormat with default encodings is byte-identical to the old hardcoded SetEncodings`() {

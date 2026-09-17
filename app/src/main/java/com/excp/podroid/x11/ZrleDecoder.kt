@@ -28,7 +28,7 @@
 package com.excp.podroid.x11
 
 import java.io.DataInputStream
-import java.io.IOException
+import java.util.zip.DataFormatException
 import java.util.zip.Inflater
 
 class ZrleDecoder {
@@ -82,7 +82,7 @@ class ZrleDecoder {
     fun decode(din: DataInputStream, x: Int, y: Int, w: Int, h: Int, target: IntArray, stride: Int) {
         // Read and decompress the rect's zlib block.
         val compLen = din.readInt()
-        if (compLen < 0 || compLen > 64 * 1024 * 1024) throw IOException("ZRLE: absurd compressed length $compLen")
+        if (compLen < 0 || compLen > 64 * 1024 * 1024) throw RfbProtocolException("ZRLE: absurd compressed length $compLen")
 
         // Stream the compressed block on demand. setInput() does not copy/append —
         // it holds inputScratch by reference and is consumed lazily by inflate(),
@@ -96,22 +96,27 @@ class ZrleDecoder {
         // Wrap the inflater so tile-level code just calls readByte()/readBytes().
         val zi = ZInput(inflater)
 
-        // Tile loop: 64x64 tiles in row-major order.
-        var ty = 0
-        while (ty < h) {
-            val th = minOf(64, h - ty)
-            var tx = 0
-            while (tx < w) {
-                val tw = minOf(64, w - tx)
-                decodeTile(zi, x + tx, y + ty, tw, th, target, stride)
-                tx += 64
+        try {
+            // Tile loop: 64x64 tiles in row-major order.
+            var ty = 0
+            while (ty < h) {
+                val th = minOf(64, h - ty)
+                var tx = 0
+                while (tx < w) {
+                    val tw = minOf(64, w - tx)
+                    decodeTile(zi, x + tx, y + ty, tw, th, target, stride)
+                    tx += 64
+                }
+                ty += 64
             }
-            ty += 64
+            // The tiles can finish before this rect's compressed bytes are all read: a
+            // SYNC_FLUSH block ends with bytes that inflate to nothing (00 00 FF FF).
+            // Consume them so the socket stays aligned on the next rect header.
+            zi.consumeRest()
+        } catch (e: DataFormatException) {
+            // Corrupt compressed data is a decode fault, not a transport failure.
+            throw RfbProtocolException("ZRLE: corrupt zlib data: ${e.message}", e)
         }
-        // The tiles can finish before this rect's compressed bytes are all read: a
-        // SYNC_FLUSH block ends with bytes that inflate to nothing (00 00 FF FF).
-        // Consume them so the socket stays aligned on the next rect header.
-        zi.consumeRest()
     }
 
     private fun decodeTile(zi: ZInput, tx: Int, ty: Int, tw: Int, th: Int, target: IntArray, stride: Int) {
@@ -159,7 +164,7 @@ class ZrleDecoder {
                         bitsInAccum -= bitsPerIndex
                         // bitsPerIndex rounds up, so the index space can exceed n
                         // when n is not a power of two.
-                        if (idx >= n) throw IOException("ZRLE: packed palette index $idx >= $n")
+                        if (idx >= n) throw RfbProtocolException("ZRLE: packed palette index $idx >= $n")
                         target[base + col] = palette[idx]
                         col++
                     }
@@ -174,7 +179,7 @@ class ZrleDecoder {
                 while (filled < total) {
                     val color = zi.readCpixel()
                     val runLen = zi.readRunLength()
-                    if (filled + runLen > total) throw IOException("ZRLE: plain RLE run overruns tile ($filled+$runLen > $total)")
+                    if (filled + runLen > total) throw RfbProtocolException("ZRLE: plain RLE run overruns tile ($filled+$runLen > $total)")
                     repeat(runLen) {
                         val pos = filled + it
                         val row = pos / tw; val col = pos % tw
@@ -193,7 +198,7 @@ class ZrleDecoder {
                     val indexByte = zi.readByte()
                     if (indexByte and 0x80 == 0) {
                         // Single pixel.
-                        if (indexByte >= n) throw IOException("ZRLE: palette RLE index $indexByte >= $n")
+                        if (indexByte >= n) throw RfbProtocolException("ZRLE: palette RLE index $indexByte >= $n")
                         val pos = filled
                         val row = pos / tw; val col = pos % tw
                         target[(ty + row) * stride + (tx + col)] = palette[indexByte]
@@ -201,10 +206,10 @@ class ZrleDecoder {
                     } else {
                         // Run of palette[index & 0x7F].
                         val idx = indexByte and 0x7F
-                        if (idx >= n) throw IOException("ZRLE: palette RLE index $idx >= $n")
+                        if (idx >= n) throw RfbProtocolException("ZRLE: palette RLE index $idx >= $n")
                         val color = palette[idx]
                         val runLen = zi.readRunLength()
-                        if (filled + runLen > total) throw IOException("ZRLE: palette RLE run overruns tile ($filled+$runLen > $total)")
+                        if (filled + runLen > total) throw RfbProtocolException("ZRLE: palette RLE run overruns tile ($filled+$runLen > $total)")
                         repeat(runLen) {
                             val pos = filled + it
                             val row = pos / tw; val col = pos % tw
@@ -214,7 +219,7 @@ class ZrleDecoder {
                     }
                 }
             }
-            else -> throw IOException("ZRLE: unsupported subencoding $subenc")
+            else -> throw RfbProtocolException("ZRLE: unsupported subencoding $subenc")
         }
     }
 
@@ -229,7 +234,7 @@ class ZrleDecoder {
 
         private fun fill() {
             while (avail == 0) {
-                if (inf.finished()) throw IOException("ZRLE: inflater finished early")
+                if (inf.finished()) throw RfbProtocolException("ZRLE: inflater finished early")
                 // Feed the next compressed chunk on demand, bounded by this rect's
                 // remaining budget. Each chunk is fully consumed before its buffer
                 // is reused, and we never read past compLen.
@@ -238,10 +243,10 @@ class ZrleDecoder {
                 if (n > 0) { pos = 0; avail = n }
                 // n == 0 with needsInput means all input was consumed; if finished() is false
                 // but no output and needsInput, the caller overfed or the stream is malformed.
-                else if (inf.needsInput()) throw IOException("ZRLE: inflater needs more input but none queued")
+                else if (inf.needsInput()) throw RfbProtocolException("ZRLE: inflater needs more input but none queued")
                 // n == 0, not finished, not needsInput → needsDictionary or a stuck
                 // stream: bail rather than spin forever.
-                else throw IOException("ZRLE: inflater made no progress")
+                else throw RfbProtocolException("ZRLE: inflater made no progress")
             }
         }
 
@@ -256,8 +261,8 @@ class ZrleDecoder {
         fun consumeRest() {
             while (remaining > 0) {
                 if (inf.needsInput()) feedChunk()
-                if (inf.inflate(buf) > 0) throw IOException("ZRLE: rect data longer than its tiles")
-                if (!inf.needsInput()) throw IOException("ZRLE: inflater made no progress")
+                if (inf.inflate(buf) > 0) throw RfbProtocolException("ZRLE: rect data longer than its tiles")
+                if (!inf.needsInput()) throw RfbProtocolException("ZRLE: inflater made no progress")
             }
         }
 
@@ -290,7 +295,7 @@ class ZrleDecoder {
             while (true) {
                 val b = readByte()
                 total += b
-                if (total > MAX_TILE_PIXELS) throw IOException("ZRLE: run length $total exceeds max tile size")
+                if (total > MAX_TILE_PIXELS) throw RfbProtocolException("ZRLE: run length $total exceeds max tile size")
                 if (b != 0xFF) break
             }
             return total + 1

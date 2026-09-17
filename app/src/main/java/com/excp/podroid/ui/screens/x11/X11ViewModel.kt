@@ -14,6 +14,7 @@ import com.excp.podroid.engine.VmEngine
 import com.excp.podroid.engine.VmState
 import com.excp.podroid.x11.AudioStreamer
 import com.excp.podroid.x11.DamageTracker
+import com.excp.podroid.x11.EncodingPolicy
 import com.excp.podroid.x11.ResolutionMode
 import com.excp.podroid.x11.ResolutionPolicy
 import com.excp.podroid.x11.ResolutionPreset
@@ -113,8 +114,9 @@ class X11ViewModel @Inject constructor(
     private var debugUpdates = 0L
     private var debugCopyNanos = 0L
     private var debugRxNanos = 0L
-    // Effective encoding for the current session (set once at connect() from
-    // x11-debug.conf, debug builds only); read cross-thread by the renderer.
+    // Effective encoding for the current session (set at each session start from
+    // x11-debug.conf and the Raw fallback, debug builds only); read cross-thread
+    // by the renderer.
     @Volatile private var debugEncodingName = "raw"
     // Effective present mode for the current session (used by Task F3);
     // parsed here so the control file's format is settled before that lands.
@@ -131,6 +133,9 @@ class X11ViewModel @Inject constructor(
     private var sessionJob: Job? = null
     @Volatile private var rfbOut: OutputStream? = null
     @Volatile private var rfbSocket: Socket? = null
+    // Set once a ZRLE session fails with a protocol/decode error; every later
+    // session in this ViewModel's lifetime advertises Raw only.
+    @Volatile private var zrleDisabled = false
 
     // All post-handshake RFB output (pointer, key, SetDesktopSize, and the
     // recurring FramebufferUpdateRequest from the read loop) flows through this
@@ -154,122 +159,144 @@ class X11ViewModel @Inject constructor(
         if (sessionJob?.isActive == true) return
         _connection.value = X11ConnectionState.Connecting
         sessionJob = viewModelScope.launch(Dispatchers.IO) {
-            val sock = Socket()
-            try {
-                rfbSocket = sock
-                sock.connect(InetSocketAddress("127.0.0.1", X11Constants.VNC_PORT), 2000)
-                val rawInp = sock.getInputStream()
-                // Debug-only (BuildConfig.DEBUG): counts bytes read off the RFB
-                // socket for the X11Stats log; never wrapped in a release build.
-                val inp: InputStream = if (BuildConfig.DEBUG) {
-                    CountingInputStream(rawInp) { n -> synchronized(debugStatsLock) { debugBytes += n } }
-                } else rawInp
-                val out = sock.getOutputStream()
-                rfbOut = out
-                // Each RFB session is a fresh zlib stream; reset the ZRLE inflater
-                // before the read loop so a reconnect doesn't feed a finished/leftover
-                // inflater (which yields corrupt output or DataFormatException).
-                zrle.reset()
+            // Runs at most twice: a ZRLE session that fails with a protocol error
+            // is torn down as usual and immediately retried once with Raw on a new
+            // socket, without reporting Failed.
+            var retryWithRaw: Boolean
+            do {
+                retryWithRaw = false
+                var sessionUsedZrle = false
+                val sock = Socket()
+                try {
+                    rfbSocket = sock
+                    sock.connect(InetSocketAddress("127.0.0.1", X11Constants.VNC_PORT), 2000)
+                    val rawInp = sock.getInputStream()
+                    // Debug-only (BuildConfig.DEBUG): counts bytes read off the RFB
+                    // socket for the X11Stats log; never wrapped in a release build.
+                    val inp: InputStream = if (BuildConfig.DEBUG) {
+                        CountingInputStream(rawInp) { n -> synchronized(debugStatsLock) { debugBytes += n } }
+                    } else rawInp
+                    val out = sock.getOutputStream()
+                    rfbOut = out
+                    // Each RFB session is a fresh zlib stream; reset the ZRLE inflater
+                    // before the read loop so a reconnect doesn't feed a finished/leftover
+                    // inflater (which yields corrupt output or DataFormatException).
+                    zrle.reset()
 
-                // Debug-only (BuildConfig.DEBUG): x11-debug.conf lets a developer
-                // flip the advertised encoding list (and, for Task F3, the present
-                // mode) without a rebuild. Release builds never read this file and
-                // always advertise VncClient.DEFAULT_ENCODINGS.
-                val encodings = if (BuildConfig.DEBUG) {
-                    val cfg = X11DebugConfig.read(context)
-                    debugEncodingName = cfg.encodingName
-                    debugPresentHw = cfg.presentHw
-                    Log.d("X11Stats", "debug-config encoding=${cfg.encodingName} present=${if (cfg.presentHw) "hw" else "sw"}")
-                    cfg.encodings
-                } else {
-                    VncClient.DEFAULT_ENCODINGS
-                }
+                    // Debug-only (BuildConfig.DEBUG): x11-debug.conf lets a developer
+                    // request ZRLE (and, for Task F3, the present mode) without a
+                    // rebuild. Release builds never read this file and never want ZRLE,
+                    // so they always advertise VncClient.DEFAULT_ENCODINGS.
+                    val wantZrle = if (BuildConfig.DEBUG) {
+                        val cfg = X11DebugConfig.read(context)
+                        debugPresentHw = cfg.presentHw
+                        Log.d("X11Stats", "debug-config encoding=${cfg.encodingName} present=${if (cfg.presentHw) "hw" else "sw"}")
+                        cfg.wantZrle
+                    } else {
+                        false
+                    }
+                    val encodings = EncodingPolicy.encodingsFor(wantZrle, zrleDisabled)
+                    val usesZrle = encodings === VncClient.ZRLE_ENCODINGS
+                    if (BuildConfig.DEBUG) debugEncodingName = if (usesZrle) "zrle" else "raw"
 
-                VncClient.handshake(inp, out)
-                VncClient.negotiatePixelFormat(out, encodings)
-                if (desiredW > 0) VncClient.requestDesktopSize(out, screenId, desiredW, desiredH)
-                VncClient.requestFramebufferUpdate(out, w = fbW, h = fbH, incremental = false)
-                _connection.value = X11ConnectionState.Connected
-                audio.start(viewModelScope)
-                var rxT0 = 0L
-                while (isActive) {
-                    val upd = VncClient.readFramebufferUpdate(
-                        inp, scratch, fbW, zrle,
-                        onMessageStart = if (BuildConfig.DEBUG) { { rxT0 = System.nanoTime() } } else null,
-                    )
-                    if (BuildConfig.DEBUG) {
-                        val rxElapsed = System.nanoTime() - rxT0
-                        synchronized(debugStatsLock) { debugRxNanos += rxElapsed }
-                    }
-                    val ns = upd.newSize
-                    if (ns != null && (ns.w != fbW || ns.h != fbH)) {
-                        fbW = ns.w; fbH = ns.h
-                        val fresh = IntArray(fbW * fbH)
-                        // Swap the framebuffer and mark the whole new frame dirty in
-                        // the same critical section, so a recomposition between resize
-                        // and the next full frame can't blit stale damage rects (or a
-                        // stale bounding box) against the new size.
-                        synchronized(fbLock) { framebuffer = fresh; damageTracker.invalidateAll(fbW, fbH) }
-                        scratch = IntArray(fbW * fbH)
-                        _fbSize.value = ns
-                        cursor.value = android.graphics.Point(fbW / 2, fbH / 2)
-                        // Route through the serialized writer so this full-update
-                        // request can't byte-interleave with a concurrent input
-                        // write. Capture the just-resized dimensions explicitly.
-                        val rw = fbW; val rh = fbH
-                        submitRfb { VncClient.requestFramebufferUpdate(it, w = rw, h = rh, incremental = false) }
-                        // Skip the rest of this iteration: the old code used
-                        // return@let here, which only exited the let lambda and
-                        // then fell through to overwrite lastDamage with rects
-                        // measured against the OLD geometry (the exact race the
-                        // synchronized block above prevents) and fire a spurious
-                        // incremental request.
-                        continue
-                    }
-                    val debugT0 = if (BuildConfig.DEBUG) System.nanoTime() else 0L
-                    synchronized(fbLock) {
-                        // scratch stays the authoritative full image (CopyRect reads
-                        // from it), so only the damaged row-ranges need copying into
-                        // the framebuffer the renderer reads.
-                        for (r in upd.damage) {
-                            for (row in 0 until r.h) {
-                                val base = (r.y + row) * fbW + r.x
-                                System.arraycopy(scratch, base, framebuffer, base, r.w)
-                            }
+                    VncClient.handshake(inp, out)
+                    VncClient.negotiatePixelFormat(out, encodings)
+                    sessionUsedZrle = usesZrle
+                    if (desiredW > 0) VncClient.requestDesktopSize(out, screenId, desiredW, desiredH)
+                    VncClient.requestFramebufferUpdate(out, w = fbW, h = fbH, incremental = false)
+                    _connection.value = X11ConnectionState.Connected
+                    audio.start(viewModelScope)
+                    var rxT0 = 0L
+                    while (isActive) {
+                        val upd = VncClient.readFramebufferUpdate(
+                            inp, scratch, fbW, zrle,
+                            onMessageStart = if (BuildConfig.DEBUG) { { rxT0 = System.nanoTime() } } else null,
+                        )
+                        if (BuildConfig.DEBUG) {
+                            val rxElapsed = System.nanoTime() - rxT0
+                            synchronized(debugStatsLock) { debugRxNanos += rxElapsed }
                         }
-                        damageTracker.add(upd.damage)
+                        val ns = upd.newSize
+                        if (ns != null && (ns.w != fbW || ns.h != fbH)) {
+                            fbW = ns.w; fbH = ns.h
+                            val fresh = IntArray(fbW * fbH)
+                            // Swap the framebuffer and mark the whole new frame dirty in
+                            // the same critical section, so a recomposition between resize
+                            // and the next full frame can't blit stale damage rects (or a
+                            // stale bounding box) against the new size.
+                            synchronized(fbLock) { framebuffer = fresh; damageTracker.invalidateAll(fbW, fbH) }
+                            scratch = IntArray(fbW * fbH)
+                            _fbSize.value = ns
+                            cursor.value = android.graphics.Point(fbW / 2, fbH / 2)
+                            // Route through the serialized writer so this full-update
+                            // request can't byte-interleave with a concurrent input
+                            // write. Capture the just-resized dimensions explicitly.
+                            val rw = fbW; val rh = fbH
+                            submitRfb { VncClient.requestFramebufferUpdate(it, w = rw, h = rh, incremental = false) }
+                            // Skip the rest of this iteration: the old code used
+                            // return@let here, which only exited the let lambda and
+                            // then fell through to overwrite lastDamage with rects
+                            // measured against the OLD geometry (the exact race the
+                            // synchronized block above prevents) and fire a spurious
+                            // incremental request.
+                            continue
+                        }
+                        val debugT0 = if (BuildConfig.DEBUG) System.nanoTime() else 0L
+                        synchronized(fbLock) {
+                            // scratch stays the authoritative full image (CopyRect reads
+                            // from it), so only the damaged row-ranges need copying into
+                            // the framebuffer the renderer reads.
+                            for (r in upd.damage) {
+                                for (row in 0 until r.h) {
+                                    val base = (r.y + row) * fbW + r.x
+                                    System.arraycopy(scratch, base, framebuffer, base, r.w)
+                                }
+                            }
+                            damageTracker.add(upd.damage)
+                        }
+                        if (BuildConfig.DEBUG) {
+                            val elapsed = System.nanoTime() - debugT0
+                            synchronized(debugStatsLock) { debugUpdates++; debugCopyNanos += elapsed }
+                        }
+                        onFrame?.invoke()
+                        // Same serialized path as input writes: queued FIFO behind any
+                        // in-flight pointer/key message rather than colliding with it on
+                        // the socket. Cadence is unchanged (one request per frame); the
+                        // next read() blocks until this flushes and the server responds.
+                        submitRfb { VncClient.requestFramebufferUpdate(it, w = fbW, h = fbH, incremental = true) }
                     }
-                    if (BuildConfig.DEBUG) {
-                        val elapsed = System.nanoTime() - debugT0
-                        synchronized(debugStatsLock) { debugUpdates++; debugCopyNanos += elapsed }
+                } catch (e: Exception) {
+                    // A user-initiated disconnect() cancels this job and closes the
+                    // socket, which surfaces here as a SocketException; that is not a
+                    // failure, so only report Failed when the job is still active (a
+                    // genuine read/connect error). Cancellation flips isActive false
+                    // before the close lands, so the finally falls through to
+                    // Disconnected instead.
+                    if (isActive && EncodingPolicy.shouldFallBack(e, sessionUsedZrle)) {
+                        zrleDisabled = true
+                        retryWithRaw = true
+                        Log.w("X11ViewModel", "ZRLE session failed with a protocol error, reconnecting with Raw: ${e.message}")
+                    } else if (isActive) {
+                        _connection.value = X11ConnectionState.Failed(e.message ?: "unknown")
                     }
-                    onFrame?.invoke()
-                    // Same serialized path as input writes: queued FIFO behind any
-                    // in-flight pointer/key message rather than colliding with it on
-                    // the socket. Cadence is unchanged (one request per frame); the
-                    // next read() blocks until this flushes and the server responds.
-                    submitRfb { VncClient.requestFramebufferUpdate(it, w = fbW, h = fbH, incremental = true) }
+                } finally {
+                    rfbOut = null
+                    rfbSocket = null
+                    // Close the socket on the serialized writer, queued AFTER any pending
+                    // RFB writes (e.g. the button-up from disconnect()), so a teardown
+                    // can't tear the socket down before a final message has flushed.
+                    viewModelScope.launch(rfbDispatcher) { runCatching { sock.close() } }
+                    audio.stop()
+                    if (retryWithRaw) {
+                        _connection.value = X11ConnectionState.Connecting
+                    } else if (_connection.value !is X11ConnectionState.Failed) {
+                        _connection.value = X11ConnectionState.Disconnected
+                    }
                 }
-            } catch (e: Exception) {
-                // A user-initiated disconnect() cancels this job and closes the
-                // socket, which surfaces here as a SocketException; that is not a
-                // failure, so only report Failed when the job is still active (a
-                // genuine read/connect error). Cancellation flips isActive false
-                // before the close lands, so the finally falls through to
-                // Disconnected instead.
-                if (isActive) _connection.value = X11ConnectionState.Failed(e.message ?: "unknown")
-            } finally {
-                rfbOut = null
-                rfbSocket = null
-                // Close the socket on the serialized writer, queued AFTER any pending
-                // RFB writes (e.g. the button-up from disconnect()), so a teardown
-                // can't tear the socket down before a final message has flushed.
-                viewModelScope.launch(rfbDispatcher) { runCatching { sock.close() } }
-                audio.stop()
-                if (_connection.value !is X11ConnectionState.Failed) {
-                    _connection.value = X11ConnectionState.Disconnected
-                }
-            }
+            } while (retryWithRaw && isActive)
+            // A disconnect() that lands between the fallback decision and the retry
+            // cancels the job before the new session starts; settle on Disconnected.
+            if (retryWithRaw) _connection.value = X11ConnectionState.Disconnected
         }
     }
 
@@ -421,7 +448,7 @@ class X11ViewModel @Inject constructor(
  * default for that key.
  */
 private object X11DebugConfig {
-    class Config(val encodings: IntArray, val encodingName: String, val presentHw: Boolean)
+    class Config(val wantZrle: Boolean, val encodingName: String, val presentHw: Boolean)
 
     fun read(context: Context): Config {
         var encodingName = "raw"
@@ -442,7 +469,7 @@ private object X11DebugConfig {
         }
         val zrle = encodingName == "zrle"
         return Config(
-            encodings = if (zrle) VncClient.ZRLE_ENCODINGS else VncClient.DEFAULT_ENCODINGS,
+            wantZrle = zrle,
             encodingName = if (zrle) "zrle" else "raw",
             presentHw = presentName == "hw",
         )
