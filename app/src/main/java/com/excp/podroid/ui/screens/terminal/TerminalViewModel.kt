@@ -68,7 +68,6 @@ class TerminalViewModel @Inject constructor(
 ) : ViewModel() {
 
     val vmState: StateFlow<VmState> = engine.state
-    val bootStage: StateFlow<String> = engine.bootStage
     val terminalFontSize: StateFlow<Int> = settingsRepository.terminalFontSize
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 20)
 
@@ -84,8 +83,7 @@ class TerminalViewModel @Inject constructor(
     val hapticsEnabledFlow: StateFlow<Boolean> = settingsRepository.hapticsEnabled
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
-    /** Mirrors of the persisted flows for callers that want a synchronous read. */
-    val showExtraKeys: Boolean get() = showExtraKeysFlow.value
+    /** Mirror of the persisted flow for callers that want a synchronous read. */
     val hapticsEnabled: Boolean get() = hapticsEnabledFlow.value
 
     // Trigger for opening the Quick Settings drawer (composable-side reacts via StateFlow)
@@ -229,14 +227,6 @@ class TerminalViewModel @Inject constructor(
             }
             props
         } catch (_: Exception) { null }
-    }
-
-    /** Lists asset files in `dir` whose name ends with `suffix`, with the suffix stripped. */
-    fun listAssetNames(dir: String, suffix: String): List<String> {
-        val items = try {
-            context.assets.list(dir)?.toList() ?: emptyList()
-        } catch (_: Exception) { emptyList() }
-        return listOf("default") + items.filter { it.endsWith(suffix) }.map { it.removeSuffix(suffix) }.sorted()
     }
 
     /**
@@ -712,8 +702,9 @@ class TerminalViewModel @Inject constructor(
 
         val sess = runCatching { engine.createTerminalSession(sessionClient) }
             .onFailure { e ->
-                // AvfEngine throws UnsupportedOperationException until Task 11
-                // wires the AVF bridge. Don't crash the UI — leave session null.
+                // Guard: both engines implement createTerminalSession, but a
+                // backend can still fail to spawn a session. Don't crash the
+                // UI, leave session null.
                 android.util.Log.w(TAG, "createTerminalSession failed on ${engine.backendId}: ${e.message}")
             }
             .getOrNull() ?: return
@@ -739,12 +730,10 @@ class TerminalViewModel @Inject constructor(
 
     /**
      * Emit xterm focus-in/out (CSI I / CSI O) when the app gains/loses focus.
-     * nvim's `FocusGained` / `FocusLost` autocommands rely on these. DECSET 1004
-     * (`DECSET_BIT_SEND_FOCUS_EVENTS`) and `isDecsetInternalBitSet` are private
-     * in the Termux AAR, so we read the `mCurrentDecSetFlags` field reflectively
-     * and mask with the known bit. If the reflection ever breaks we silently
-     * skip — sending focus bytes to a shell that didn't enable reporting would
-     * leak literal "^[[I" noise into the prompt.
+     * nvim's `FocusGained` / `FocusLost` autocommands rely on these. Guarded by
+     * the public `TerminalEmulator.isFocusEventsEnabled` (DECSET 1004), no
+     * reflection: sending focus bytes to a shell that didn't enable reporting
+     * would leak literal "^[[I" noise into the prompt.
      */
     fun sendFocusEvent(focused: Boolean) {
         val sess = session ?: return

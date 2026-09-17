@@ -225,7 +225,7 @@ class QemuEngine @Inject constructor(
                 proxySessionClient,
             )
             // Cell pixel dims default to 0 — TerminalView.updateSize() pushes real values once measured.
-        sess.updateSize(80, 24, 0, 0)
+            sess.updateSize(80, 24, 0, 0)
             _terminalSession = sess
             Log.d(TAG, "Bridge auto-started on terminal.sock")
         }

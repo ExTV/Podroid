@@ -37,10 +37,6 @@ int main(int argc, char *argv[]) {
         return 2;
     }
 
-    /* Silence stderr for safety: this process inherits the app's stderr,
-     * which on Android typically goes to /dev/null. But just in case any
-     * deployment routes it elsewhere, keep noise out of the user's view. */
-
     /* Tell the kernel to send us SIGKILL when our parent process exits.
      * Failure here is non-fatal — we still launch QEMU, just without the
      * orphan-cleanup guarantee (i.e. revert to today's behavior). */
