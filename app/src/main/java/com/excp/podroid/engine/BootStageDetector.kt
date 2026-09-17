@@ -52,27 +52,30 @@ class BootStageDetector(
         val from = (scannedLen - overlap).coerceAtLeast(0)
         val tail = buf.substring(from)
         scannedLen = buf.length
-        when {
-            tail.contains("Ready!")                 -> { ready = true; bootStage.value = "Ready"; state.value = VmState.Running; onReady() }
-            tail.contains("Almost ready")           -> bootStage.value = "Almost ready..."
-            tail.contains("Starting SSH")           -> bootStage.value = "Starting SSH..."
-            tail.contains("Configuring containers") -> bootStage.value = "Configuring containers..."
-            tail.contains("Network found")          -> bootStage.value = "Network found"
-            tail.contains("Loading kernel modules") -> bootStage.value = "Loading kernel modules..."
-            tail.contains("Mounting storage")       -> bootStage.value = "Mounting storage..."
-            tail.contains("Booting kernel")         -> bootStage.value = "Booting kernel..."
+        // First matching marker wins, in MARKERS order (same priority as the
+        // old `when` chain). "Ready!" keeps its one-shot + state + onReady
+        // side effects; every other marker only updates bootStage.
+        val marker = MARKERS.firstOrNull { tail.contains(it.first) } ?: return
+        if (marker.first == READY_MARKER) {
+            ready = true
+            bootStage.value = marker.second
+            state.value = VmState.Running
+            onReady()
+        } else {
+            bootStage.value = marker.second
         }
     }
 
     private companion object {
+        private const val READY_MARKER = "Ready!"
+
         /**
-         * The exact substrings the `when` above scans for. Used ONLY to size
-         * the cross-feed [overlap]; the `when` remains the authoritative
-         * matcher. Keep this list in sync with the `when` search strings —
-         * the longest one drives how much prior text is re-scanned.
+         * The exact substrings [feed] scans for, in priority order (first
+         * match wins) and used to size the cross-feed [overlap] (the longest
+         * marker drives how much prior text is re-scanned).
          */
         val MARKERS = listOf(
-            "Ready!" to "Ready",
+            READY_MARKER to "Ready",
             "Almost ready" to "Almost ready...",
             "Starting SSH" to "Starting SSH...",
             "Configuring containers" to "Configuring containers...",

@@ -29,7 +29,6 @@ import android.content.Context
 import android.util.Log
 import com.excp.podroid.data.repository.PortForwardRule
 import com.excp.podroid.util.HostMetrics
-import com.excp.podroid.util.LogProxy
 import com.termux.terminal.TerminalSession
 import com.termux.terminal.TerminalSessionClient
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -169,30 +168,11 @@ class QemuEngine @Inject constructor(
      * Lets us create the bridge session at boot-complete time (before the
      * terminal UI exists) and plug in the real ViewModel client later.
      */
-    @Volatile
-    override var sessionClientDelegate: TerminalSessionClient? = null
+    private val proxySessionClient = ProxySessionClient(TAG)
 
-    private val proxySessionClient = object : TerminalSessionClient {
-        override fun onTextChanged(s: TerminalSession) { sessionClientDelegate?.onTextChanged(s) }
-        override fun onTitleChanged(s: TerminalSession) { sessionClientDelegate?.onTitleChanged(s) }
-        override fun onSessionFinished(s: TerminalSession) { sessionClientDelegate?.onSessionFinished(s) }
-        override fun onCopyTextToClipboard(s: TerminalSession, text: String?) { sessionClientDelegate?.onCopyTextToClipboard(s, text) }
-        override fun onPasteTextFromClipboard(s: TerminalSession?) { sessionClientDelegate?.onPasteTextFromClipboard(s) }
-        override fun onBell(s: TerminalSession) { sessionClientDelegate?.onBell(s) }
-        override fun onColorsChanged(s: TerminalSession) { sessionClientDelegate?.onColorsChanged(s) }
-        override fun onTerminalCursorStateChange(state: Boolean) { sessionClientDelegate?.onTerminalCursorStateChange(state) }
-        override fun setTerminalShellPid(s: TerminalSession, pid: Int) { sessionClientDelegate?.setTerminalShellPid(s, pid) }
-        override fun getTerminalCursorStyle(): Int = sessionClientDelegate?.terminalCursorStyle ?: 0
-        override fun getTerminalVersionString(): String? = sessionClientDelegate?.terminalVersionString
-        override fun logError(tag: String?, msg: String?) = LogProxy.error(tag, TAG, msg)
-        override fun logWarn(tag: String?, msg: String?) = LogProxy.warn(tag, TAG, msg)
-        override fun logInfo(tag: String?, msg: String?) = LogProxy.info(tag, TAG, msg)
-        override fun logDebug(tag: String?, msg: String?) = LogProxy.debug(tag, TAG, msg)
-        override fun logVerbose(tag: String?, msg: String?) = LogProxy.verbose(tag, TAG, msg)
-        override fun logStackTraceWithMessage(tag: String?, msg: String?, e: Exception?) =
-            LogProxy.stackTraceWithMessage(tag, TAG, msg, e)
-        override fun logStackTrace(tag: String?, e: Exception?) = LogProxy.stackTrace(tag, TAG, e)
-    }
+    override var sessionClientDelegate: TerminalSessionClient?
+        get() = proxySessionClient.delegate
+        set(value) { proxySessionClient.delegate = value }
 
     private fun persistBootDuration() {
         if (bootStartTime == 0L) return
@@ -213,19 +193,12 @@ class QemuEngine @Inject constructor(
 
             // Bridge connects to terminal.sock (virtio-console, separate from serial).
             // No handoff with the boot monitor needed — they use different sockets.
-            val bridgeExe = File(context.applicationInfo.nativeLibraryDir, "libpodroid-bridge.so")
+            val bridgeExe = TerminalBridge.executable(context)
             if (!bridgeExe.exists()) return@post
 
-            val sess = TerminalSession(
-                bridgeExe.absolutePath,
-                context.filesDir.absolutePath,
-                arrayOf(bridgeExe.absolutePath, terminalSockPath, ctrlSockPath),
-                null,
-                2000,
-                proxySessionClient,
+            val sess = TerminalBridge.newSession(
+                context, terminalSockPath, ctrlSockPath, proxySessionClient, onResize = null,
             )
-            // Cell pixel dims default to 0 — TerminalView.updateSize() pushes real values once measured.
-            sess.updateSize(80, 24, 0, 0)
             _terminalSession = sess
             Log.d(TAG, "Bridge auto-started on terminal.sock")
         }
@@ -250,26 +223,31 @@ class QemuEngine @Inject constructor(
         }
 
         // Fallback: create session now
-        val bridgeExe = File(context.applicationInfo.nativeLibraryDir, "libpodroid-bridge.so")
+        val bridgeExe = TerminalBridge.executable(context)
         if (!bridgeExe.exists()) {
             throw IllegalStateException("podroid-bridge not found at ${bridgeExe.absolutePath}")
         }
 
-        val sess = TerminalSession(
-            bridgeExe.absolutePath,
-            context.filesDir.absolutePath,
-            arrayOf(bridgeExe.absolutePath, terminalSockPath, ctrlSockPath),
-            null,
-            2000,
-            proxySessionClient,
+        val sess = TerminalBridge.newSession(
+            context, terminalSockPath, ctrlSockPath, proxySessionClient, onResize = null,
         )
-
-        // Cell pixel dims default to 0 — TerminalView.updateSize() pushes real values once measured.
-        sess.updateSize(80, 24, 0, 0)
 
         _terminalSession = sess
         Log.d(TAG, "Terminal session created in Qemu singleton")
         return sess
+    }
+
+    /**
+     * Common early-error path in start(), before a process or scope exists:
+     * restores the "cleanedUp=false ⟺ a VM lifetime is in progress" invariant
+     * that the startMutex block already broke by setting cleanedUp=false and
+     * bootStartTime, matching the other error paths (which run cleanup()).
+     * Callers still `return` right after calling this.
+     */
+    private fun failEarlyStart(message: String) {
+        cleanedUp.set(true)
+        bootStartTime = 0L
+        _state.value = VmState.Error(message)
     }
 
     override suspend fun start(portForwards: List<PortForwardRule>, config: VmConfig) {
@@ -288,24 +266,14 @@ class QemuEngine @Inject constructor(
         }
 
         val qemuExe = qemuExecutable() ?: run {
-            // The startMutex block already set cleanedUp=false and bootStartTime;
-            // restore the "cleanedUp=false ⟺ a VM lifetime is in progress"
-            // invariant on this early-error return, matching the other error
-            // paths (which run cleanup()). No process/scope exists yet.
-            cleanedUp.set(true)
-            bootStartTime = 0L
-            _state.value = VmState.Error("QEMU binary not found.")
+            failEarlyStart("QEMU binary not found.")
             return
         }
 
         try {
             ensureStorageImage(config.storageSizeGb)
         } catch (e: java.io.IOException) {
-            // Restore the "cleanedUp=false ⟺ VM lifetime in progress" invariant
-            // (same as the qemuExecutable() path); no process/scope exists yet.
-            cleanedUp.set(true)
-            bootStartTime = 0L
-            _state.value = VmState.Error(e.message ?: "Could not prepare the VM disk image.")
+            failEarlyStart(e.message ?: "Could not prepare the VM disk image.")
             return
         }
 

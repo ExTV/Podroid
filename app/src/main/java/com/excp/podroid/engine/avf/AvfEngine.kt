@@ -22,11 +22,12 @@ import androidx.annotation.RequiresApi
 import com.excp.podroid.data.repository.PortForwardRule
 import com.excp.podroid.data.repository.SettingsRepository
 import com.excp.podroid.engine.BootStageDetector
+import com.excp.podroid.engine.ProxySessionClient
 import com.excp.podroid.engine.QmpClient
+import com.excp.podroid.engine.TerminalBridge
 import com.excp.podroid.engine.VmConfig
 import com.excp.podroid.engine.VmEngine
 import com.excp.podroid.engine.VmState
-import com.excp.podroid.util.LogProxy
 import com.termux.terminal.TerminalSession
 import com.termux.terminal.TerminalSessionClient
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -112,29 +113,11 @@ class AvfEngine @Inject constructor(
     /** AVF has no QMP socket; port forwarding is deferred to a future milestone. */
     override val qmpClient: QmpClient? = null
 
-    override var sessionClientDelegate: TerminalSessionClient? = null
+    private val proxySessionClient = ProxySessionClient(TAG)
 
-    private val proxySessionClient = object : TerminalSessionClient {
-        override fun onTextChanged(s: TerminalSession) { sessionClientDelegate?.onTextChanged(s) }
-        override fun onTitleChanged(s: TerminalSession) { sessionClientDelegate?.onTitleChanged(s) }
-        override fun onSessionFinished(s: TerminalSession) { sessionClientDelegate?.onSessionFinished(s) }
-        override fun onCopyTextToClipboard(s: TerminalSession, text: String?) { sessionClientDelegate?.onCopyTextToClipboard(s, text) }
-        override fun onPasteTextFromClipboard(s: TerminalSession?) { sessionClientDelegate?.onPasteTextFromClipboard(s) }
-        override fun onBell(s: TerminalSession) { sessionClientDelegate?.onBell(s) }
-        override fun onColorsChanged(s: TerminalSession) { sessionClientDelegate?.onColorsChanged(s) }
-        override fun onTerminalCursorStateChange(state: Boolean) { sessionClientDelegate?.onTerminalCursorStateChange(state) }
-        override fun setTerminalShellPid(s: TerminalSession, pid: Int) { sessionClientDelegate?.setTerminalShellPid(s, pid) }
-        override fun getTerminalCursorStyle(): Int = sessionClientDelegate?.terminalCursorStyle ?: 0
-        override fun getTerminalVersionString(): String? = sessionClientDelegate?.terminalVersionString
-        override fun logError(tag: String?, msg: String?) = LogProxy.error(tag, TAG, msg)
-        override fun logWarn(tag: String?, msg: String?) = LogProxy.warn(tag, TAG, msg)
-        override fun logInfo(tag: String?, msg: String?) = LogProxy.info(tag, TAG, msg)
-        override fun logDebug(tag: String?, msg: String?) = LogProxy.debug(tag, TAG, msg)
-        override fun logVerbose(tag: String?, msg: String?) = LogProxy.verbose(tag, TAG, msg)
-        override fun logStackTraceWithMessage(tag: String?, msg: String?, e: Exception?) =
-            LogProxy.stackTraceWithMessage(tag, TAG, msg, e)
-        override fun logStackTrace(tag: String?, e: Exception?) = LogProxy.stackTrace(tag, TAG, e)
-    }
+    override var sessionClientDelegate: TerminalSessionClient?
+        get() = proxySessionClient.delegate
+        set(value) { proxySessionClient.delegate = value }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     // Serializes the check-and-claim in start(). Two near-simultaneous
@@ -591,21 +574,15 @@ class AvfEngine @Inject constructor(
     private fun spawnBridge() {
         android.os.Handler(android.os.Looper.getMainLooper()).post {
             if (terminalSession != null) return@post
-            val bridgeExe = File(context.applicationInfo.nativeLibraryDir, "libpodroid-bridge.so")
+            val bridgeExe = TerminalBridge.executable(context)
             if (!bridgeExe.exists()) {
                 Log.e(TAG, "bridge missing at ${bridgeExe.absolutePath}")
                 return@post
             }
-            val sess = com.excp.podroid.engine.ResizeNotifyingSession(
-                shellPath = bridgeExe.absolutePath,
-                cwd = context.filesDir.absolutePath,
-                args = arrayOf(bridgeExe.absolutePath, terminalSockPath, ctrlSockPath),
-                env = null,
-                transcriptRows = 2000,
-                client = proxySessionClient,
+            val sess = TerminalBridge.newSession(
+                context, terminalSockPath, ctrlSockPath, proxySessionClient,
                 onResize = { rows, cols -> sendResizeDebounced(rows, cols) },
             )
-            sess.updateSize(80, 24, 0, 0)
             terminalSession = sess
             Log.d(TAG, "AVF bridge auto-spawned (resize-notifying)")
         }
@@ -782,20 +759,14 @@ class AvfEngine @Inject constructor(
             Log.w(TAG, "createTerminalSession called before bridge auto-spawn; spawning now")
         }
 
-        val bridgeExe = File(context.applicationInfo.nativeLibraryDir, "libpodroid-bridge.so")
+        val bridgeExe = TerminalBridge.executable(context)
         if (!bridgeExe.exists()) {
             throw IllegalStateException("podroid-bridge not found at ${bridgeExe.absolutePath}")
         }
-        val sess = com.excp.podroid.engine.ResizeNotifyingSession(
-            shellPath = bridgeExe.absolutePath,
-            cwd = context.filesDir.absolutePath,
-            args = arrayOf(bridgeExe.absolutePath, terminalSockPath, ctrlSockPath),
-            env = null,
-            transcriptRows = 2000,
-            client = proxySessionClient,
+        val sess = TerminalBridge.newSession(
+            context, terminalSockPath, ctrlSockPath, proxySessionClient,
             onResize = { rows, cols -> sendResizeDebounced(rows, cols) },
         )
-        sess.updateSize(80, 24, 0, 0)
         terminalSession = sess
         return sess
     }
