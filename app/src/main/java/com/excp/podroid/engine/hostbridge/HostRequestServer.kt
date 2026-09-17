@@ -10,13 +10,13 @@
 package com.excp.podroid.engine.hostbridge
 
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class HostRequestServer(
     private val openTransport: () -> HostTransport?,
@@ -50,10 +50,12 @@ class HostRequestServer(
             Log.d(TAG, "host bridge connected")
             try {
                 while (scope.isActive) {
-                    val req = withContext(Dispatchers.IO) { transport.readRequest() } ?: break
+                    val req = transport.readRequest() ?: break
                     val resp = dispatcher.handle(req)
-                    withContext(Dispatchers.IO) { transport.writeResponse(resp) }
+                    transport.writeResponse(resp)
                 }
+            } catch (c: CancellationException) {
+                throw c // don't log a stop/swap's cancellation as a loop error
             } catch (e: Exception) {
                 Log.w(TAG, "host bridge loop error: ${e.message}")
             } finally {

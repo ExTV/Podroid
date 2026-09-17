@@ -87,8 +87,6 @@ class PodroidService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
 
     private var notificationBuilder: NotificationCompat.Builder? = null
-    private var stopPendingIntent: PendingIntent? = null
-    private var openPendingIntent: PendingIntent? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -394,6 +392,8 @@ class PodroidService : Service() {
                         serviceScope.launch { observeStateForUsb() }
                     }
                     engine.start(rules, config)
+                } catch (c: CancellationException) {
+                    throw c // a stop/teardown cancelled this launch; not a start failure
                 } catch (e: Exception) {
                     Log.e(TAG, "QEMU failed to start", e)
                     // A Service-side throw here (failed asset extraction, a
@@ -445,9 +445,6 @@ class PodroidService : Service() {
             Intent(this, PodroidService::class.java).apply { action = ACTION_STOP },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        openPendingIntent = openIntent
-        stopPendingIntent = stopIntent
-
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Podroid")
             .setSmallIcon(R.drawable.ic_vm_notification)
@@ -484,17 +481,23 @@ class PodroidService : Service() {
         }
     }
 
+    // HostRequestDispatcher.handleHeadless already rejects any action other
+    // than on/off/status before calling this, so the else branch here can
+    // never run.
     private fun handleHeadlessRequest(action: String): String = when (action) {
         "on" -> { headlessModeManager.setActive(true); com.excp.podroid.engine.hostbridge.HostProtocol.ok() }
         "off" -> { headlessModeManager.setActive(false); com.excp.podroid.engine.hostbridge.HostProtocol.ok() }
         "status" -> com.excp.podroid.engine.hostbridge.HostProtocol.ok(if (headlessModeManager.active.value) "on" else "off")
-        else -> com.excp.podroid.engine.hostbridge.HostProtocol.err("usage: on|off|status")
+        else -> error("unreachable: action=$action")
     }
 
     // Reply returned now; the stop/restart is posted to the main looper so the
     // bridge flushes the response before the VM (and this service) tear down. The
     // Handler callbacks capture the app-scoped engine + applicationContext (NOT
     // `this`), so they survive this service's death.
+    // HostRequestDispatcher.handlePower already rejects any action other than
+    // stop/restart/status before calling this, so the else branch here can
+    // never run.
     private fun handlePowerRequest(action: String): String {
         val proto = com.excp.podroid.engine.hostbridge.HostProtocol
         return when (action) {
@@ -514,7 +517,7 @@ class PodroidService : Service() {
                 proto.ok()
             }
             "restart" -> { scheduleRestart(); proto.ok() }
-            else -> proto.err("usage: stop|restart|status")
+            else -> error("unreachable: action=$action")
         }
     }
 
