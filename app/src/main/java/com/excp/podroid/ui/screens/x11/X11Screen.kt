@@ -14,9 +14,6 @@ import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -75,10 +72,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.onClick
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -94,7 +87,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.excp.podroid.R
 import com.excp.podroid.ui.components.PodroidTopBar
-import kotlinx.coroutines.delay
+import com.excp.podroid.ui.components.rememberExtraKeyTapModifier
 import com.excp.podroid.x11.RenderGeometry
 import com.excp.podroid.x11.X11Keysym
 import com.excp.podroid.x11.X11SurfaceRenderer
@@ -572,43 +565,7 @@ private fun X11KeyButton(
     isActive: Boolean = false,
     repeatable: Boolean = false,
 ) {
-    var pressed by remember { mutableStateOf(false) }
-    // Keyed on pressed/sendKey/repeatable only. (Including onKey here restarted the
-    // repeat coroutine on every recomposition, breaking key-repeat; applying a sticky
-    // modifier across a repeat burst is a deferred minor item.)
-    LaunchedEffect(pressed, sendKey, repeatable) {
-        if (!repeatable || !pressed) return@LaunchedEffect
-        delay(400L)
-        var interval = 70L
-        while (pressed) {
-            onKey(sendKey)
-            delay(interval)
-            if (interval > 30L) interval -= 3L
-        }
-    }
-    val tapModifier = if (repeatable) {
-        // Button semantics so TalkBack can announce/activate the repeatable keys
-        // (the raw pointerInput path is otherwise invisible to accessibility).
-        Modifier
-            .semantics {
-                role = Role.Button
-                onClick(label = sendKey) { onKey(sendKey); true }
-            }
-            .pointerInput(sendKey) {
-                awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false)
-                    onKey(sendKey)
-                    pressed = true
-                    try {
-                        waitForUpOrCancellation()
-                    } finally {
-                        pressed = false
-                    }
-                }
-            }
-    } else {
-        Modifier.clickable(role = Role.Button) { onKey(sendKey) }
-    }
+    val tapModifier = rememberExtraKeyTapModifier(sendKey, repeatable, onKey)
     Text(
         text = label,
         color = if (isActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
