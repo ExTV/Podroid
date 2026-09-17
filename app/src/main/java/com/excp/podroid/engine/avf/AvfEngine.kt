@@ -763,12 +763,25 @@ class AvfEngine @Inject constructor(
 
     override fun createTerminalSession(client: TerminalSessionClient): TerminalSession {
         sessionClientDelegate = client
-        terminalSession?.let {
+
+        // Reuse the boot-time session ONLY if it's still alive. A finished
+        // session (bridge died while the VM kept running) must not be handed
+        // back, re-entering the terminal screen would otherwise show the dead
+        // "[Process completed]" buffer forever. Drop it and fall through to
+        // spawn a fresh bridge against the still-running VM.
+        val cached = terminalSession
+        if (cached != null && cached.isRunning) {
             Log.d(TAG, "Returning auto-spawned AVF terminal session")
-            return it
+            return cached
         }
-        // start() hasn't reached spawnBridge yet — spawn synchronously as fallback.
-        Log.w(TAG, "createTerminalSession called before bridge auto-spawn; spawning now")
+        if (cached != null) {
+            Log.d(TAG, "Cached terminal session is dead, recreating against the running VM")
+            terminalSession = null
+        } else {
+            // start() hasn't reached spawnBridge yet, spawn synchronously as fallback.
+            Log.w(TAG, "createTerminalSession called before bridge auto-spawn; spawning now")
+        }
+
         val bridgeExe = File(context.applicationInfo.nativeLibraryDir, "libpodroid-bridge.so")
         if (!bridgeExe.exists()) {
             throw IllegalStateException("podroid-bridge not found at ${bridgeExe.absolutePath}")
