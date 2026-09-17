@@ -23,9 +23,8 @@ import androidx.annotation.RequiresApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.PrintWriter
 
 @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
@@ -180,6 +179,12 @@ class VsockControlChannel(
      * up to timeoutMs for the "SYNCED" ack. Best-effort - returns true only on a
      * SYNCED ack within the timeout; false if the channel is down, the write
      * fails, or no ack arrives in time. The caller then just proceeds to stop.
+     *
+     * The read runs in a separate `async` so withTimeoutOrNull can actually give
+     * up on time: a blocking readLine() on this thread ignores cooperative
+     * cancellation and would keep withTimeoutOrNull blocked past timeoutMs. On
+     * timeout we close() the channel (idempotent, owns the pfd) so the still-
+     * blocked read unblocks instead of leaking a parked IO thread.
      */
     suspend fun syncAndWait(timeoutMs: Long): Boolean {
         val pfdLocal: ParcelFileDescriptor
@@ -191,19 +196,23 @@ class VsockControlChannel(
             pfdLocal = p
         }
         // Read the ack OUTSIDE the monitor so a slow guest can't hold the lock.
-        return withContext(Dispatchers.IO) {
-            kotlinx.coroutines.withTimeoutOrNull(timeoutMs) {
+        val ack = scope.async(Dispatchers.IO) {
+            runCatching {
                 val reader = java.io.BufferedReader(java.io.InputStreamReader(
                     java.io.FileInputStream(pfdLocal.fileDescriptor)))
                 // Do NOT close `reader`: it wraps the same fd the writer/pfd own;
-                // close() owns the pfd. A read still blocked at timeout unblocks
-                // when close()/cleanup shuts the fd moments later, which is fine on
-                // the stop path.
+                // close() owns the pfd.
                 var line = reader.readLine()
                 while (line != null && line != "SYNCED") line = reader.readLine()
                 line == "SYNCED"
-            } ?: false
+            }.getOrDefault(false)
         }
+        val result = kotlinx.coroutines.withTimeoutOrNull(timeoutMs) { ack.await() }
+        if (result == null) {
+            close()
+            return false
+        }
+        return result
     }
 
     @Synchronized fun close() {

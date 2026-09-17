@@ -174,8 +174,18 @@ class AvfEngine @Inject constructor(
     private val initialRules = mutableListOf<com.excp.podroid.data.repository.PortForwardRule>()
     /** vsock port → forwarder. Written via addPortForward/removePortForward only. */
     private val forwarders = java.util.concurrent.ConcurrentHashMap<Int, Forwarder>()
+    /**
+     * Forwards whose host listener is bound but whose guest ADD was skipped
+     * because `control` was still null (the Running-edge race between the
+     * detector's onReady and bringUpControlChannel assigning `control`).
+     * Flushed by bringUpControlChannel once the channel comes up; the
+     * forwarders dedup in addPortForward would otherwise block any later retry.
+     */
+    private val pendingGuestAdds = java.util.concurrent.ConcurrentHashMap<Int, com.excp.podroid.data.repository.PortForwardRule>()
     @Volatile private var lastSentRows = -1
     @Volatile private var lastSentCols = -1
+    /** Latest resize requested while `control` was still null; flushed once bringUpControlChannel() connects. */
+    @Volatile private var pendingResize: Pair<Int, Int>? = null
 
     // Adaptive multi-vCPU fallback (issue #29). The launch args are remembered so
     // an early-boot reset can re-launch with fewer cores WITHOUT going through a
@@ -245,6 +255,19 @@ class AvfEngine @Inject constructor(
         // bound; addPortForward logs a one-time warning for that narrow window.
         control = ctl
         ctl.open()
+        // A resize requested while the channel was still down (e.g. during boot)
+        // was remembered instead of dropped; send it now that `ctl` is up. This
+        // whole function runs @Synchronized on `this`, the same monitor
+        // sendResizeDebounced's check-and-store uses, so a resize landing exactly
+        // at the Running edge either lands here (write-before-read) or takes the
+        // direct-send path once `control` is visibly non-null (read-before-write).
+        val resize = pendingResize
+        if (resize != null) {
+            pendingResize = null
+            ctl.sendResize(resize.first, resize.second)
+            lastSentRows = resize.first
+            lastSentCols = resize.second
+        }
         if (lastConfig?.storageAccessEnabled == true) {
             // Assign `downloadsShare` BEFORE calling start() (mirrors `control =
             // ctl; ctl.open()` above): start() only launches a non-blocking
@@ -268,6 +291,25 @@ class AvfEngine @Inject constructor(
                     throw c
                 } catch (e: Throwable) {
                     Log.w(TAG, "initial forward replay failed for $rule (continuing)", e)
+                }
+            }
+            // A forward can already be bound host-side here without ever
+            // reaching the guest: EngineHolder's parallel diff dispatch (or the
+            // replay above via the forwarders dedup) may have run addPortForward
+            // while `control` was still null, which skips the guest ADD and
+            // records it in pendingGuestAdds. Flush those now that `ctl` is up.
+            // Snapshot-and-drain under the same monitor addPortForward holds
+            // while deciding that same control-null path, so a call still in
+            // flight there can't land in pendingGuestAdds after this snapshot
+            // is taken and be missed (see the comment in addPortForward).
+            synchronized(this) {
+                if (pendingGuestAdds.isNotEmpty()) {
+                    val toFlush = pendingGuestAdds.entries.toList()
+                    for ((vport, rule) in toFlush) {
+                        pendingGuestAdds.remove(vport)
+                        if (!forwarders.containsKey(vport)) continue
+                        ctl.addForward(vport, rule.protocol, "127.0.0.1", rule.guestPort)
+                    }
                 }
             }
         }
@@ -674,27 +716,32 @@ class AvfEngine @Inject constructor(
                 runCatching { fw.close() }
                 return
             }
-            // Re-check Running and start() as one atomic step under the same
-            // monitor onVmTerminal holds (@Synchronized -> this). The two
-            // statements alone aren't atomic across threads: a concurrent
-            // cleanup() (only reachable while Running via onVmTerminal) could
-            // otherwise land in the gap between the check and start(), tearing
-            // down AvfForwarderDispatcher just before start() recreates it -
-            // orphaning a freshly-bound ServerSocket/accept thread that no
-            // later cleanup() would know to close.
+            // Re-check Running, start(), and decide the control-channel path as
+            // one atomic step under the same monitor onVmTerminal holds
+            // (@Synchronized -> this). Besides the cleanup() race described
+            // below, this also closes the Running-edge race with
+            // bringUpControlChannel's pendingGuestAdds flush: that flush takes
+            // its snapshot under the same monitor, so this block either runs
+            // before the flush (its pendingGuestAdds write is then included in
+            // the snapshot) or after it (by which point `control` is already
+            // assigned, so it takes the direct-send path instead of buffering).
+            // Without this, a call still inside fw.start() when the flush's
+            // snapshot is taken could buffer into pendingGuestAdds after the
+            // flush already ran, stranding it until the engine restarts.
             synchronized(this) {
                 if (_state.value !is VmState.Running) {
                     forwarders.remove(vport)
                     return
                 }
                 fw.start()
-            }
-            val ctl = control
-            if (ctl != null) {
-                ctl.addForward(vport, rule.protocol, "127.0.0.1", rule.guestPort)
-            } else {
-                Log.w(TAG, "addPortForward(${rule.hostPort}/${rule.protocol}): control channel not up yet; " +
-                    "guest ADD skipped (host listener is bound)")
+                val ctl = control
+                if (ctl != null) {
+                    ctl.addForward(vport, rule.protocol, "127.0.0.1", rule.guestPort)
+                } else {
+                    Log.w(TAG, "addPortForward(${rule.hostPort}/${rule.protocol}): control channel not up yet; " +
+                        "guest ADD skipped (host listener is bound)")
+                    pendingGuestAdds[vport] = rule
+                }
             }
             Log.i(TAG, "live forward up: ${rule.hostPort}/${rule.protocol} → vsock:$vport → 127.0.0.1:${rule.guestPort}")
         } catch (c: CancellationException) {
@@ -714,6 +761,7 @@ class AvfEngine @Inject constructor(
     override suspend fun removePortForward(rule: com.excp.podroid.data.repository.PortForwardRule) {
         val vport = AvfVport.forRule(rule)
         val fw = forwarders.remove(vport) ?: return
+        pendingGuestAdds.remove(vport)
         runCatching { fw.close() }
         runCatching { control?.removeForward(vport) }
         Log.i(TAG, "live forward down: 0.0.0.0:${rule.hostPort}/${rule.protocol}")
@@ -725,11 +773,32 @@ class AvfEngine @Inject constructor(
      * so the AVF behavior tracks the QEMU bridge's user-visible cadence.
      */
     private fun sendResizeDebounced(rows: Int, cols: Int) {
-        if (rows == lastSentRows && cols == lastSentCols) return
+        // Cancel any pending debounce BEFORE the duplicate check: a request for
+        // A while a different B is still pending must always replace it, even
+        // if A happens to equal the last value actually SENT (lastSentRows/Cols
+        // only update once a debounce fires); otherwise the stale B job goes on
+        // to fire and A is lost.
         resizeDebounceJob?.cancel()
+        if (rows == lastSentRows && cols == lastSentCols) return
         resizeDebounceJob = scope.launch {
             kotlinx.coroutines.delay(80)
-            val ctl = control ?: return@launch
+            // The null-check-and-store must be atomic with bringUpControlChannel's
+            // read/flush of pendingResize (it runs @Synchronized on the engine
+            // instance, which is the monitor taken here); otherwise a resize
+            // landing exactly at the Running edge could write pendingResize just
+            // after bringUpControlChannel already flushed it, stranding it until
+            // the next restart. Only the check-and-store happens under the lock;
+            // the actual send happens outside it.
+            val ctl = synchronized(this@AvfEngine) {
+                val current = control
+                if (current == null) {
+                    // Control channel not up yet (e.g. resize during boot): remember
+                    // the latest geometry so bringUpControlChannel() flushes it once
+                    // the channel connects, instead of silently dropping it.
+                    pendingResize = rows to cols
+                }
+                current
+            } ?: return@launch
             // sendResize queues if the connect retry hasn't completed yet —
             // no need to gate on isOpen.
             ctl.sendResize(rows, cols)
@@ -806,9 +875,11 @@ class AvfEngine @Inject constructor(
         // VM doesn't see late vsock connect attempts after onStopped.
         forwarders.values.forEach { runCatching { it.close() } }
         forwarders.clear()
+        pendingGuestAdds.clear()
         AvfForwarderDispatcher.shutdown()
         lastSentRows = -1
         lastSentCols = -1
+        pendingResize = null
         resizeDebounceJob?.cancel()
         resizeDebounceJob = null
         runCatching { control?.close() }
