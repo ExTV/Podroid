@@ -12,8 +12,8 @@
 package com.excp.podroid.engine.avf
 
 object AvfCapabilities {
-    const val CAPABILITY_PROTECTED_VM = 1
-    const val CAPABILITY_NON_PROTECTED_VM = 2
+    private const val CAPABILITY_PROTECTED_VM = 1
+    private const val CAPABILITY_NON_PROTECTED_VM = 2
 
     sealed interface ProtectedVmChoice {
         /** Apply setProtectedVm(false) and proceed - the common path. */

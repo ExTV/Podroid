@@ -9,7 +9,6 @@ import android.graphics.Bitmap
 import android.graphics.Rect
 import android.view.SurfaceHolder
 import android.view.SurfaceView
-import android.view.View
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
@@ -88,7 +87,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.ui.text.font.FontFamily

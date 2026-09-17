@@ -112,8 +112,8 @@ object AvfReflect {
     }
 
     /** CPU topology values matching VirtualMachineConfig.CPU_TOPOLOGY_*. */
-    const val CPU_TOPOLOGY_ONE_CPU: Int = 0
-    const val CPU_TOPOLOGY_MATCH_HOST: Int = 1
+    private const val CPU_TOPOLOGY_ONE_CPU: Int = 0
+    private const val CPU_TOPOLOGY_MATCH_HOST: Int = 1
 
     fun setNumCpus(b: Any, n: Int) {
         // AVF's setCpuTopology takes a CPU_TOPOLOGY_* constant — only 0 (one

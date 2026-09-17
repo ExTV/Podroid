@@ -77,7 +77,7 @@ object DeviceResourcePolicy {
         return nearestAtMost(STORAGE_OPTIONS_GB, target)
     }
 
-    fun balancedBandwidthMbps(): Int = 100
+    private fun balancedBandwidthMbps(): Int = 100
 
     fun balancedProfile(context: Context): BalancedProfile = BalancedProfile(
         ramMb = balancedRamMb(deviceTotalRamMb(context)),

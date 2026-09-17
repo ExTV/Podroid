@@ -22,12 +22,11 @@ private const val TEST_EOPNOTSUPP = 95L
  */
 private class FakeStatSource : StatSource {
     private val inodes = mutableMapOf<String, Long>()
-    private var nextIno = 1L
 
     override fun lstat(path: String): StatInfo {
         val f = File(path)
         if (!f.exists()) throw FileNotFoundException(path)
-        val ino = inodes.getOrPut(path) { nextIno++ }
+        val ino = inodes.getOrPut(path) { }
         val mode = if (f.isDirectory) TEST_S_IFDIR or 0x1FFL else TEST_S_IFREG or 0x1B4L
         return StatInfo(
             ino = ino,

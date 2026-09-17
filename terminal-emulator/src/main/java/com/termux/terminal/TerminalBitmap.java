@@ -126,7 +126,7 @@ public class TerminalBitmap {
 
     protected final TerminalSessionClient mClient;
 
-    protected int mBitmapNum;
+    private int mBitmapNum;
     protected Bitmap mBitmap;
     
     protected int mCellWidth;
@@ -338,7 +338,7 @@ public class TerminalBitmap {
     }
 
     /** Build a {@link TerminalBitmap} from a {@link Bitmap}. */
-    public static TerminalBitmap buildOrThrow(TerminalBuffer terminalBuffer, int bitmapNum, Bitmap bitmap,
+    private static TerminalBitmap buildOrThrow(TerminalBuffer terminalBuffer, int bitmapNum, Bitmap bitmap,
                                               int x, int y, int cellWidth, int cellHeight) throws Throwable {
         if (bitmap == null) {
             throw new IllegalArgumentException("Cannot create terminal bitmap from an unset bitmap");
@@ -377,34 +377,18 @@ public class TerminalBitmap {
     }
 
 
-    public int getBitmapNum() {
-        return mBitmapNum;
-    }
-
     public Bitmap getBitmap() {
         return mBitmap;
     }
 
 
-    public int getCellWidth() {
-        return mCellWidth;
-    }
 
-    public int getCellHeight() {
-        return mCellHeight;
-    }
-
-
-    public int getScrollLines() {
+    private int getScrollLines() {
         return mScrollLines;
     }
 
 
-    public int[] getCursorDelta() {
-        return mCursorDelta;
-    }
-
-    public void setCursorDelta(int[] cursorDelta) {
+    private void setCursorDelta(int[] cursorDelta) {
         mCursorDelta = cursorDelta;
     }
 
@@ -442,7 +426,7 @@ public class TerminalBitmap {
         }
     }
 
-    public static Bitmap resizeBitmapConstrained(String logTag, String label, TerminalSessionClient client, Bitmap bitmap,
+    private static Bitmap resizeBitmapConstrained(String logTag, String label, TerminalSessionClient client, Bitmap bitmap,
                                                  int bitmapWidth, int bitmapHeight,
                                                  int cellWidth, int cellHeight, int columns) {
         // Width and height must be multiples of the cell width and height.

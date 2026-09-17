@@ -47,22 +47,22 @@ public class ITermImage {
 
     protected final TerminalSessionClient mClient;
 
-    protected final boolean mIsMultipart;
+    private final boolean mIsMultipart;
 
     protected int mWidth = -1;
     protected int mHeight = -1;
 
-    protected boolean mInline = false;
+    private boolean mInline = false;
 
-    protected boolean mPreserveAspectRatio = true;
+    private boolean mPreserveAspectRatio = true;
 
-    protected final StringBuilder mEncodedImage = new StringBuilder(/* Initial capacity. */ 4096);
-    protected byte[] mDecodedImage;
+    private final StringBuilder mEncodedImage = new StringBuilder(/* Initial capacity. */ 4096);
+    private byte[] mDecodedImage;
 
     /** The current state of the {@link ImageState}. */
-    protected ImageState mCurrentState = ImageState.INIT;
+    private ImageState mCurrentState = ImageState.INIT;
     /** The previous state of the {@link ImageState}. */
-    protected ImageState mPreviousState = ImageState.INIT;
+    private ImageState mPreviousState = ImageState.INIT;
 
 
 
@@ -78,10 +78,6 @@ public class ITermImage {
         return mClient;
     }
 
-
-    public boolean isMultipart() {
-        return mIsMultipart;
-    }
 
 
     public int getWidth() {
@@ -103,22 +99,10 @@ public class ITermImage {
     }
 
 
-    public String getEncodedImage() {
-        return mEncodedImage.toString();
-    }
-
     public byte[] getDecodedImage() {
         return mDecodedImage;
     }
 
-
-    public synchronized ImageState getCurrentState() {
-        return mCurrentState;
-    }
-
-    public synchronized ImageState getPreviousState() {
-        return mPreviousState;
-    }
 
 
     protected synchronized boolean setState(ImageState newState) {
@@ -140,7 +124,7 @@ public class ITermImage {
     }
 
 
-    protected synchronized boolean setStateFailed(String error) {
+    private synchronized boolean setStateFailed(String error) {
         if (error != null) {
             Logger.logError(mClient, LOG_TAG, error);
         }
@@ -148,11 +132,11 @@ public class ITermImage {
     }
 
 
-    protected synchronized boolean ensureState(ImageState expectedState) {
+    private synchronized boolean ensureState(ImageState expectedState) {
         return ensureState(expectedState, null);
     }
 
-    protected synchronized boolean ensureState(ImageState expectedState, String functionName) {
+    private synchronized boolean ensureState(ImageState expectedState, String functionName) {
         if (mCurrentState != expectedState) {
             Logger.logError(mClient, LOG_TAG,
                 "The current image state is \"" + mCurrentState.getName() + "\" but expected \"" + expectedState.getName() + "\"" +
@@ -163,18 +147,6 @@ public class ITermImage {
         return true;
     }
 
-
-    public synchronized boolean isArgumentsRead() {
-        return mCurrentState == ImageState.ARGUMENTS_READ;
-    }
-
-    public synchronized boolean isImageReading() {
-        return mCurrentState == ImageState.IMAGE_READING;
-    }
-
-    public synchronized boolean isImageRead() {
-        return mCurrentState == ImageState.IMAGE_READ;
-    }
 
     public synchronized boolean isImageDecoded() {
         return mCurrentState == ImageState.IMAGE_DECODED;

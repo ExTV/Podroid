@@ -53,7 +53,7 @@ object HostMetrics {
         )
     }
 
-    fun readLoadAvg(): Triple<Float, Float, Float>? = try {
+    private fun readLoadAvg(): Triple<Float, Float, Float>? = try {
         val parts = File("/proc/loadavg").readText().trim().split(Regex("\\s+"))
         if (parts.size < 3) null
         else Triple(parts[0].toFloat(), parts[1].toFloat(), parts[2].toFloat())
@@ -68,7 +68,7 @@ object HostMetrics {
      * bar); the allocated block count reflects how much the VM disk actually
      * occupies on the phone. Falls back to the apparent length if stat fails.
      */
-    fun diskFootprintBytes(file: File): Long = try {
+    private fun diskFootprintBytes(file: File): Long = try {
         Os.stat(file.absolutePath).st_blocks * 512L
     } catch (_: Exception) {
         file.length()

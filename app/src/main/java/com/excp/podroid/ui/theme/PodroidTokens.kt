@@ -26,8 +26,6 @@ object PodroidTokens {
         val LG  = 16.dp
         val XL  = 20.dp
         val XL2 = 24.dp
-        val XL3 = 32.dp
-        val XL4 = 40.dp
     }
 
     object Radius {
@@ -35,7 +33,6 @@ object PodroidTokens {
         val Button = 8.dp
         val Card   = 12.dp
         val Sheet  = 20.dp
-        val Large  = 24.dp
     }
 
     object TypeSize {
@@ -47,13 +44,12 @@ object PodroidTokens {
     }
 
     val Accent     = PodroidAccent
-    val AccentInk  = PodroidAccentInk
     val Amber      = PodroidAmber
     val Red        = PodroidRed
 
     @Volatile private var interFamily: FontFamily? = null
 
-    fun interFamily(context: Context): FontFamily {
+    private fun interFamily(context: Context): FontFamily {
         interFamily?.let { return it }
         synchronized(this) {
             interFamily?.let { return it }
@@ -70,7 +66,7 @@ object PodroidTokens {
 
     @Volatile private var monoFamily: FontFamily? = null
 
-    fun monoFamily(context: Context): FontFamily {
+    private fun monoFamily(context: Context): FontFamily {
         monoFamily?.let { return it }
         synchronized(this) {
             monoFamily?.let { return it }

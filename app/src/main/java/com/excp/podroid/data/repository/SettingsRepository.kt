@@ -185,7 +185,6 @@ class SettingsRepository @Inject constructor(
     suspend fun setTerminalFontSize(value: Int)          = set(KEY_FONT_SIZE, value)
     suspend fun setStorageSizeGb(value: Int)             = set(KEY_STORAGE_GB, value)
     suspend fun setStorageAccessEnabled(value: Boolean)  = set(KEY_STORAGE_ACCESS_ENABLED, value)
-    suspend fun markSetupDone()                          = set(KEY_SETUP_DONE, true)
     suspend fun setSshEnabled(value: Boolean)            = set(KEY_SSH_ENABLED, value)
     suspend fun setTerminalColorTheme(value: String)     = set(KEY_TERMINAL_COLOR_THEME, value)
     suspend fun setTerminalFont(value: String)           = set(KEY_TERMINAL_FONT, value)
@@ -270,7 +269,6 @@ class SettingsRepository @Inject constructor(
     suspend fun setX11ShowExtraKeys(v: Boolean) = set(KEY_X11_SHOW_EXTRA_KEYS, v)
     suspend fun setX11Dpi(v: Int) = set(KEY_X11_DPI, v)
     suspend fun getX11DpiSnapshot() = (x11Settings.first()).dpi
-    suspend fun getLanguageSnapshot()                    = language.first()
 
     // Snapshots used by non-Compose call sites (PodroidService, exporters).
     suspend fun getSshEnabledSnapshot()           = sshEnabled.first()
@@ -278,7 +276,6 @@ class SettingsRepository @Inject constructor(
     suspend fun getVmCpusSnapshot()               = vmCpus.first()
     suspend fun getStorageSizeGbSnapshot()        = storageSizeGb.first()
     suspend fun getStorageAccessEnabledSnapshot() = storageAccessEnabled.first()
-    suspend fun isSetupDoneSnapshot()             = isSetupDone.first()
     suspend fun getTerminalColorThemeSnapshot()   = terminalColorTheme.first()
     suspend fun getTerminalFontSnapshot()         = terminalFont.first()
     suspend fun getQemuExtraArgsSnapshot()        = qemuExtraArgs.first()
@@ -287,7 +284,6 @@ class SettingsRepository @Inject constructor(
     suspend fun getAvfVerboseLoggingSnapshot()    = avfVerboseLogging.first()
     suspend fun getAvfCpuCapSnapshot()            = avfCpuCap.first()
     suspend fun getUsbPassthroughEnabledSnapshot() = usbPassthroughEnabled.first()
-    suspend fun getLoadBalanceEnabledSnapshot()    = loadBalanceEnabled.first()
     suspend fun getBandwidthMbpsSnapshot()         = bandwidthMbps.first()
     suspend fun getAutostartOnBootSnapshot()       = autostartOnBoot.first()
 }

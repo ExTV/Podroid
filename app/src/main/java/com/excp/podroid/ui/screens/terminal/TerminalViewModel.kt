@@ -648,7 +648,7 @@ class TerminalViewModel @Inject constructor(
             // xterm CSI modifier: 1=none, 2=shift, 3=alt, 4=shift+alt, 5=ctrl,
             // 6=ctrl+shift, 7=ctrl+alt, 8=all. Used for "ESC [1;<m><final>".
             val mod = 1 + (if (shift) 1 else 0) + (if (alt) 2 else 0) + (if (ctrl) 4 else 0)
-            val appCursor = cursorKeysApplicationMode(session?.emulator)
+            cursorKeysApplicationMode(session?.emulator)
             fun arrow(final: Char): ByteArray =
                 if (mod == 1) {
                     if (cursorKeysApplicationMode(session?.emulator)) "\u001bO$final".toByteArray()

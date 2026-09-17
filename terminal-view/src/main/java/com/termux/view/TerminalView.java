@@ -58,7 +58,6 @@ public final class TerminalView extends View {
     private TextSelectionCursorController mTextSelectionCursorController;
 
     private int mTerminalCursorBlinkerRate;
-    private boolean mCursorInvisibleIgnoreOnce;
     public static final int TERMINAL_CURSOR_BLINK_RATE_MIN = 100;
     public static final int TERMINAL_CURSOR_BLINK_RATE_MAX = 2000;
 

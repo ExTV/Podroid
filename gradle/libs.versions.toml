@@ -70,8 +70,6 @@ kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 
 # Termux terminal
-termux-terminal-emulator = { group = "com.github.termux.termux-app", name = "terminal-emulator", version.ref = "termux" }
-termux-terminal-view = { group = "com.github.termux.termux-app", name = "terminal-view", version.ref = "termux" }
 
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }

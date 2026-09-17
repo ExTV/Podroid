@@ -23,7 +23,6 @@ import androidx.annotation.RequiresApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.PrintWriter
@@ -34,7 +33,7 @@ class VsockControlChannel(
     private val scope: CoroutineScope,
 ) {
     companion object {
-        const val CTL_PORT: Long = 9100L
+        private const val CTL_PORT: Long = 9100L
         private const val TAG = "VsockControlChannel"
         private const val MAX_ATTEMPTS = 30
         // Cap the pre-connect queue. Without a cap, every RESIZE (a keyboard

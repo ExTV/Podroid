@@ -83,7 +83,7 @@ class EngineHolder @Inject constructor(
 
     private val _currentFlow: MutableStateFlow<VmEngine> =
         MutableStateFlow(qemuProvider.get())
-    val currentFlow: StateFlow<VmEngine> = _currentFlow.asStateFlow()
+    private val currentFlow: StateFlow<VmEngine> = _currentFlow.asStateFlow()
     private val current: VmEngine get() = _currentFlow.value
 
     /** Cosmetic mirror of [currentFlow]'s backendId, for UI surfaces that only

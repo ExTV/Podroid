@@ -15,7 +15,7 @@ internal object AvfVport {
      * in [65537, 131071]. The guest binds whatever vport it's told, so the offset
      * lives only here.
      */
-    const val UDP_OFFSET = 0x10000  // 65536
+    private const val UDP_OFFSET = 0x10000  // 65536
 
     fun forRule(rule: PortForwardRule): Int =
         if (rule.protocol == "udp") rule.hostPort + UDP_OFFSET else rule.hostPort

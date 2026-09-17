@@ -450,7 +450,7 @@ class PodroidService : Service() {
             val intent = Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             applicationContext.startActivity(intent)
             com.excp.podroid.engine.hostbridge.HostProtocol.ok()
-        } catch (e: Throwable) {
+        } catch (_: Throwable) {
             com.excp.podroid.engine.hostbridge.HostProtocol.err("no app available to open this URL")
         }
     }

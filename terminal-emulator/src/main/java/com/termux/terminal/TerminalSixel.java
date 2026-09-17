@@ -17,7 +17,7 @@ public class TerminalSixel {
 
 
 
-    public static final int[] SIXEL__INITIAL_COLOR_MAP = {
+    private static final int[] SIXEL__INITIAL_COLOR_MAP = {
         0xFF000000, 0xFF3333CC, 0xFFCC2323, 0xFF33CC33, 0xFFCC33CC, 0xFF33CCCC, 0xFFCCCC33, 0xFF777777,
         0xFF444444, 0xFF565699, 0xFF994444, 0xFF569956, 0xFF995699, 0xFF569999, 0xFF999956, 0xFFCCCCCC
     };
@@ -25,12 +25,12 @@ public class TerminalSixel {
     /**
      * A sixel is a group of six pixels in a vertical column.
      */
-    public static final int SIXEL__LINE_LEN = 6;
+    private static final int SIXEL__LINE_LEN = 6;
 
     /**
      * The amount of extra dimension added when resizing a sixel when receiving more image data.
      */
-    public static final int SIXEL__BITMAP_RESIZE_EXTRA_DIMENSION = 100;
+    private static final int SIXEL__BITMAP_RESIZE_EXTRA_DIMENSION = 100;
 
     /**
      * The max value for the sixel Graphics Repeat Introducer.
@@ -52,11 +52,11 @@ public class TerminalSixel {
     protected int mWidth;
     protected int mHeight;
 
-    protected int mCurX;
-    protected int mCurY;
+    private int mCurX;
+    private int mCurY;
 
-    protected final int[] mColorMap;
-    protected int mColor;
+    private final int[] mColorMap;
+    private int mColor;
 
 
 
@@ -114,18 +114,6 @@ public class TerminalSixel {
     }
 
 
-    public int getCurX() {
-        return mCurX;
-    }
-
-    public int getCurY() {
-        return mCurY;
-    }
-
-
-    public int[] getColorMap() {
-        return mColorMap;
-    }
 
     public int getColor() {
         return mColor;

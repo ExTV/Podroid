@@ -18,7 +18,7 @@ import javax.inject.Singleton
 class ContainerStatsRepository @Inject constructor(
     private val settingsRepository: SettingsRepository,
 ) {
-    fun statsFile(): File {
+    private fun statsFile(): File {
         val downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
         return File(File(downloads, ContainerBackupRepository.BACKUP_SUBDIR), "container-count")
     }
