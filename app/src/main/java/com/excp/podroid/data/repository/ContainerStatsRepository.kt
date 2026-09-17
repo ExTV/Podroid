@@ -20,7 +20,7 @@ class ContainerStatsRepository @Inject constructor(
 ) {
     fun statsFile(): File {
         val downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-        return File(File(downloads, ContainerBackupRepository.BACKUP_SUBDIR), "container-count")
+        return File(File(downloads, "Podroid"), "container-count")
     }
 
     suspend fun readContainerCount(): Int? {
@@ -28,7 +28,7 @@ class ContainerStatsRepository @Inject constructor(
         val text = withContext(Dispatchers.IO) {
             if (file.isFile) file.readText() else null
         } ?: return settingsRepository.getLastContainerCount()
-        val parsed = text.trim().toIntOrNull() ?: return null
+        val parsed = text.trim().toIntOrNull() ?: return settingsRepository.getLastContainerCount()
         settingsRepository.setLastContainerCount(parsed)
         return parsed
     }
