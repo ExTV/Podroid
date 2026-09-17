@@ -71,13 +71,6 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.pointer.PointerId
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.PointerType
-import androidx.compose.ui.input.pointer.changedToDown
-import androidx.compose.ui.input.pointer.isPrimaryPressed
-import androidx.compose.ui.input.pointer.isSecondaryPressed
-import androidx.compose.ui.input.pointer.isTertiaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
@@ -102,59 +95,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.excp.podroid.R
 import com.excp.podroid.ui.components.PodroidTopBar
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withTimeoutOrNull
-import kotlin.math.abs
 import com.excp.podroid.x11.RenderGeometry
-import com.excp.podroid.x11.TouchMode
-import com.excp.podroid.x11.VncClient
+import com.excp.podroid.x11.X11Keysym
 import com.excp.podroid.x11.X11SurfaceRenderer
-
-// X11 keysyms used outside the label table.
-private const val XK_BackSpace = 0xFF08
-private const val XK_Tab       = 0xFF09
-private const val XK_Return    = 0xFF0D
-private const val XK_Escape    = 0xFF1B
-private const val XK_Left      = 0xFF51
-private const val XK_Up        = 0xFF52
-private const val XK_Right     = 0xFF53
-private const val XK_Down      = 0xFF54
-private const val XK_Shift_L   = 0xFFE1
-private const val XK_Control_L = 0xFFE3
-private const val XK_Alt_L     = 0xFFE9
-
-/**
- * Maps the human-readable label used by [X11ExtraKeysRow] (matching the
- * terminal's ExtraKeysRow vocabulary) to an X11 keysym. Returns null for
- * pure modifier labels (CTRL/ALT) — those are handled as toggles.
- */
-private fun labelToKeysym(label: String): Int? = when (label) {
-    "ESC"     -> XK_Escape
-    "TAB"     -> XK_Tab
-    "LEFT"    -> XK_Left
-    "RIGHT"   -> XK_Right
-    "UP"      -> XK_Up
-    "DOWN"    -> XK_Down
-    "HOME"    -> 0xFF50
-    "END"     -> 0xFF57
-    "PGUP"    -> 0xFF55
-    "PGDN"    -> 0xFF56
-    "F1"      -> 0xFFBE
-    "F2"      -> 0xFFBF
-    "F3"      -> 0xFFC0
-    "F4"      -> 0xFFC1
-    "F5"      -> 0xFFC2
-    "F6"      -> 0xFFC3
-    "F7"      -> 0xFFC4
-    "F8"      -> 0xFFC5
-    "F9"      -> 0xFFC6
-    "F10"     -> 0xFFC7
-    "F11"     -> 0xFFC8
-    "F12"     -> 0xFFC9
-    "-"       -> 0x2D
-    "/"       -> 0x2F
-    "|"       -> 0x7C
-    else      -> null   // CTRL / ALT handled by toggles
-}
+import com.excp.podroid.x11.imeDiffStrokes
+import com.excp.podroid.x11.keysymForCodePoint
+import com.excp.podroid.x11.keysymForHardwareChar
+import com.excp.podroid.x11.labelToKeysym
+import com.excp.podroid.x11.specialKeysymForKeyCode
+import com.excp.podroid.x11.wrapWithModifiers
 
 @OptIn(
     ExperimentalMaterial3Api::class,
@@ -267,7 +216,10 @@ fun X11Screen(
     // (one-shot semantics, matches Termux convention).
     // Drag-lock: a long-press engages a held left button that persists across
     // gestures until the next tap drops it (move heavy GUI windows one-handed).
-    var dragLocked by remember { mutableStateOf(false) }
+    // Held in a small state holder (not a Compose mutableStateOf) because it
+    // must survive x11PointerLoop's pointerInput coroutine restarts, same as
+    // the remembered state it replaces.
+    val pointerLockState = remember { X11PointerLockState() }
     var ctrlActive by remember { mutableStateOf(false) }
     var altActive  by remember { mutableStateOf(false) }
 
@@ -281,12 +233,9 @@ fun X11Screen(
         val alt  = altActive
         ctrlActive = false
         altActive  = false
-        if (ctrl) viewModel.sendKey(XK_Control_L, down = true)
-        if (alt)  viewModel.sendKey(XK_Alt_L,     down = true)
-        viewModel.sendKey(keysym, down = true)
-        viewModel.sendKey(keysym, down = false)
-        if (alt)  viewModel.sendKey(XK_Alt_L,     down = false)
-        if (ctrl) viewModel.sendKey(XK_Control_L, down = false)
+        wrapWithModifiers(keysym, shift = false, ctrl = ctrl, alt = alt).forEach {
+            viewModel.sendKey(it.keysym, it.down)
+        }
     }
 
     fun onExtraKey(label: String) {
@@ -323,22 +272,7 @@ fun X11Screen(
                     return@onPreviewKeyEvent true
                 }
                 if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                val special = when (ev.key) {
-                    Key.Backspace      -> XK_BackSpace
-                    Key.Enter, Key.NumPadEnter -> XK_Return
-                    Key.Tab            -> XK_Tab
-                    Key.Escape         -> XK_Escape
-                    Key.DirectionLeft  -> XK_Left
-                    Key.DirectionRight -> XK_Right
-                    Key.DirectionUp    -> XK_Up
-                    Key.DirectionDown  -> XK_Down
-                    Key.MoveHome       -> 0xFF50
-                    Key.MoveEnd        -> 0xFF57
-                    Key.PageUp         -> 0xFF55
-                    Key.PageDown       -> 0xFF56
-                    Key.Delete         -> 0xFFFF
-                    else               -> null
-                }
+                val special = specialKeysymForKeyCode(native.keyCode)
                 val ctrl = native.isCtrlPressed || ctrlActive
                 val alt  = native.isAltPressed  || altActive
                 val keysym: Int
@@ -352,19 +286,12 @@ fun X11Screen(
                             (android.view.KeyEvent.META_SHIFT_ON or android.view.KeyEvent.META_CAPS_LOCK_ON)
                     )
                     if (cased == 0) return@onPreviewKeyEvent false
-                    // X keysyms 0x20-0x7E match ASCII verbatim; non-ASCII Unicode
-                    // maps to 0x01000000 | codepoint (X11 protocol extension).
-                    keysym = if (cased > 0x7E) 0x01000000 or cased else cased
+                    keysym = keysymForHardwareChar(cased)
                     shiftWrap = false
                 }
-                if (shiftWrap) viewModel.sendKey(XK_Shift_L, down = true)
-                if (ctrl) viewModel.sendKey(XK_Control_L, down = true)
-                if (alt)  viewModel.sendKey(XK_Alt_L, down = true)
-                viewModel.sendKey(keysym, down = true)
-                viewModel.sendKey(keysym, down = false)
-                if (alt)  viewModel.sendKey(XK_Alt_L, down = false)
-                if (ctrl) viewModel.sendKey(XK_Control_L, down = false)
-                if (shiftWrap) viewModel.sendKey(XK_Shift_L, down = false)
+                wrapWithModifiers(keysym, shiftWrap, ctrl, alt).forEach {
+                    viewModel.sendKey(it.keysym, it.down)
+                }
                 ctrlActive = false
                 altActive  = false
                 true
@@ -467,159 +394,21 @@ fun X11Screen(
                             s.touchMode,
                             s.trackpadSensitivity, s.trackpadAccel,
                         ) {
-                            fun fbX(px: Float) = ((px - currentDstX) / currentDstW.coerceAtLeast(1) * currentFbW).toInt().coerceIn(0, currentFbW - 1)
-                            fun fbY(py: Float) = ((py - currentDstY) / currentDstH.coerceAtLeast(1) * currentFbH).toInt().coerceIn(0, currentFbH - 1)
-                            // True only inside the letterbox/pillarbox content rect. Used to
-                            // reject DIRECT-touch taps that land in the black bars instead of
-                            // clamping them to an edge pixel (which produced a phantom edge click).
-                            fun inContent(px: Float, py: Float) =
-                                px >= currentDstX && px < currentDstX + currentDstW &&
-                                    py >= currentDstY && py < currentDstY + currentDstH
-                            awaitPointerEventScope {
-                                while (true) {
-                                    val event = awaitPointerEvent()
-                                    val change = event.changes.firstOrNull() ?: continue
-
-                                        // Physical-mouse scroll wheel → X wheel (buttons 4/5).
-                                        if (event.type == PointerEventType.Scroll) {
-                                            val dy = change.scrollDelta.y
-                                            if (dy != 0f) {
-                                                viewModel.moveTo(fbX(change.position.x), fbY(change.position.y))
-                                                viewModel.scroll(up = dy < 0f, ticks = abs(dy).toInt().coerceAtLeast(1))
-                                            }
-                                            event.changes.forEach { it.consume() }
-                                            continue
-                                        }
-
-                                        // Physical mouse → absolute move + native buttons.
-                                        // Consuming keeps right-click from falling through to
-                                        // Android Back (which exited fullscreen) and sends it
-                                        // to X as button 3 instead.
-                                        if (change.type == PointerType.Mouse) {
-                                            var mask = 0
-                                            if (event.buttons.isPrimaryPressed)   mask = mask or VncClient.BTN_LEFT
-                                            if (event.buttons.isSecondaryPressed) mask = mask or VncClient.BTN_RIGHT
-                                            if (event.buttons.isTertiaryPressed)  mask = mask or VncClient.BTN_MIDDLE
-                                            viewModel.mouseUpdate(fbX(change.position.x), fbY(change.position.y), mask)
-                                            event.changes.forEach { it.consume() }
-                                            continue
-                                        }
-
-                                    // Touch → finger-gesture state machine (one gesture).
-                                    if (change.type != PointerType.Touch || !change.changedToDown()) continue
-                                    viewerFocus.requestFocus()
-                                    change.consume()
-                                    // Pin the primary pointer by ID so finger-order changes
-                                    // don't jump the cursor to a different finger.
-                                    val primaryId: PointerId = change.id
-                                    val sx = change.position.x; val sy = change.position.y
-                                    var lastX = sx; var lastY = sy
-                                    var moved = 0f
-                                    var maxPointers = 1
-                                    var scrollAcc = 0f
-                                    var leftHeld = false
-
-                                    // A new touch while drag-locked drops the lock.
-                                    if (dragLocked) {
-                                        viewModel.release(VncClient.BTN_LEFT)
-                                        dragLocked = false
-                                        while (true) {
-                                            val e = awaitPointerEvent(); e.changes.forEach { it.consume() }
-                                            if (e.changes.none { it.pressed }) break
-                                        }
-                                        continue
-                                    }
-
-                                    // DIRECT touch maps absolute screen coords to the framebuffer,
-                                    // so a tap in the letterbox bars has no valid target: drain it
-                                    // as a no-op rather than clamping to an edge click. (TRACKPAD is
-                                    // relative: any start point is valid, so it's exempt.)
-                                    if (s.touchMode == TouchMode.DIRECT && !inContent(sx, sy)) {
-                                        while (true) {
-                                            val e = awaitPointerEvent(); e.changes.forEach { it.consume() }
-                                            if (e.changes.none { it.pressed }) break
-                                        }
-                                        continue
-                                    }
-
-                                        if (s.touchMode == TouchMode.DIRECT) viewModel.moveTo(fbX(sx), fbY(sy))
-
-                                    // Long-press (single finger, no move, ~500ms) => drag-lock.
-                                    var outcome = "move"
-                                    val completed = withTimeoutOrNull(500L) {
-                                        while (true) {
-                                            val e = awaitPointerEvent()
-                                            val pressed = e.changes.filter { it.pressed }
-                                            if (pressed.isEmpty()) { outcome = "tap"; return@withTimeoutOrNull Unit }
-                                            if (pressed.size >= 2) { maxPointers = 2; outcome = "multi"; return@withTimeoutOrNull Unit }
-                                            val p = (pressed.firstOrNull { it.id == primaryId } ?: pressed.first()).position
-                                            if (abs(p.x - sx) + abs(p.y - sy) > 16f) {
-                                                lastX = p.x; lastY = p.y; outcome = "move"
-                                                e.changes.forEach { it.consume() }
-                                                return@withTimeoutOrNull Unit
-                                            }
-                                            e.changes.forEach { it.consume() }
-                                        }
-                                        @Suppress("UNREACHABLE_CODE") Unit
-                                    }
-                                    if (completed == null) {
-                                        dragLocked = true; viewModel.press(VncClient.BTN_LEFT); leftHeld = true
-                                    } else if (outcome == "tap") {
-                                        viewModel.click(VncClient.BTN_LEFT)
-                                        continue
-                                    }
-
-                                    try {
-                                        while (true) {
-                                            val e = awaitPointerEvent()
-                                            val pressed = e.changes.filter { it.pressed }
-                                            maxPointers = maxOf(maxPointers, pressed.size)
-                                            if (pressed.isEmpty()) break
-                                            // Track the pinned primary pointer, falling back to
-                                            // first if it lifted (e.g. swapped fingers).
-                                            val p = (pressed.firstOrNull { it.id == primaryId } ?: pressed.first()).position
-                                            val dx = p.x - lastX; val dy = p.y - lastY
-                                            moved += abs(dx) + abs(dy)
-                                            if (pressed.size >= 2) {
-                                                // Transitioning 1→2 fingers: release left if held
-                                                // so we don't send a left+scroll chord.
-                                                if (leftHeld) { viewModel.release(VncClient.BTN_LEFT); leftHeld = false }
-                                                scrollAcc += dy
-                                                while (abs(scrollAcc) >= 60f) {
-                                                    viewModel.scroll(scrollAcc < 0, 1)
-                                                    scrollAcc += if (scrollAcc < 0) 60f else -60f
-                                                }
-                                            } else when (s.touchMode) {
-                                                TouchMode.DIRECT -> {
-                                                    viewModel.moveTo(fbX(p.x), fbY(p.y))
-                                                    if (!leftHeld) { viewModel.press(VncClient.BTN_LEFT); leftHeld = true }
-                                                }
-                                                TouchMode.TRACKPAD -> {
-                                                    val accel = if (s.trackpadAccel) (1f + (abs(dx) + abs(dy)) * 0.01f) else 1f
-                                                    val c = viewModel.cursor.value
-                                                    viewModel.moveTo(
-                                                        (c.x + dx * s.trackpadSensitivity * accel).toInt(),
-                                                        (c.y + dy * s.trackpadSensitivity * accel).toInt(),
-                                                    )
-                                                }
-                                            }
-                                            lastX = p.x; lastY = p.y
-                                            e.changes.forEach { it.consume() }
-                                        }
-                                    } finally {
-                                        // Release left button on cancellation (e.g. settings-change
-                                        // restarts the pointerInput coroutine mid-drag).
-                                        if (leftHeld && !dragLocked) { viewModel.release(VncClient.BTN_LEFT); leftHeld = false }
-                                    }
-
-                                    if (maxPointers >= 2) {
-                                        if (moved < 28f) viewModel.click(VncClient.BTN_RIGHT)
-                                    } else if (s.touchMode == TouchMode.TRACKPAD && !dragLocked && moved < 16f) {
-                                        viewModel.click(VncClient.BTN_LEFT)
-                                    }
-                                    if (!dragLocked && leftHeld) { viewModel.release(VncClient.BTN_LEFT); leftHeld = false }
-                                }
-                            }
+                            x11PointerLoop(
+                                s = s,
+                                lockState = pointerLockState,
+                                viewModel = viewModel,
+                                requestFocus = { viewerFocus.requestFocus() },
+                                fbX = { px -> ((px - currentDstX) / currentDstW.coerceAtLeast(1) * currentFbW).toInt().coerceIn(0, currentFbW - 1) },
+                                fbY = { py -> ((py - currentDstY) / currentDstH.coerceAtLeast(1) * currentFbH).toInt().coerceIn(0, currentFbH - 1) },
+                                // True only inside the letterbox/pillarbox content rect. Used to
+                                // reject DIRECT-touch taps that land in the black bars instead of
+                                // clamping them to an edge pixel (which produced a phantom edge click).
+                                inContent = { px, py ->
+                                    px >= currentDstX && px < currentDstX + currentDstW &&
+                                        py >= currentDstY && py < currentDstY + currentDstH
+                                },
+                            )
                         },
                     factory = { ctx ->
                         SurfaceView(ctx).apply {
@@ -696,11 +485,11 @@ fun X11Screen(
                             // (e.g. tap CTRL then type L → Ctrl+L to clear the
                             // terminal). sendWithModifiers clears the one-shot after.
                             val cp = addedText[0].code
-                            sendWithModifiers(if (cp in 0x20..0x7E) cp else 0x01000000 or cp)
+                            sendWithModifiers(keysymForCodePoint(cp))
                             // Reset buffer after ctrl/alt combo to keep it short.
                             imeBuf = TextFieldValue("")
                         } else {
-                            forwardImeDiff(old.text, new.text, viewModel)
+                            imeDiffStrokes(old.text, new.text).forEach { viewModel.sendKey(it.keysym, it.down) }
                             // Keep the rolling buffer so future deletions are
                             // observable, but cap it to avoid accumulating without bound.
                             imeBuf = if (new.text.length > 128) TextFieldValue(new.text.takeLast(64)) else new
@@ -709,8 +498,8 @@ fun X11Screen(
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(
                         onSend = {
-                            viewModel.sendKey(XK_Return, down = true)
-                            viewModel.sendKey(XK_Return, down = false)
+                            viewModel.sendKey(X11Keysym.Return, down = true)
+                            viewModel.sendKey(X11Keysym.Return, down = false)
                         },
                     ),
                     modifier = Modifier
@@ -833,44 +622,4 @@ private fun X11KeyButton(
             .then(tapModifier)
             .padding(horizontal = 10.dp, vertical = 8.dp),
     )
-}
-
-/**
- * Diffs old vs new IME buffer content and fires synthetic X11 key events for
- * the change. ASCII 0x20-0x7E maps to the same keysym value; non-ASCII Unicode
- * codepoints map to 0x01000000 | codepoint (X11 protocol extension).
- *
- * Works off the longest common prefix (by codepoint), not a raw length
- * difference: a CJK IME REPLACES composing text on commit (pinyin "nihao" ->
- * "你好"), so the new buffer shares no prefix with the old. Emitting only
- * (oldCp - newCp) backspaces — the old behaviour — left the composing text in
- * the guest and never sent the commit. Backspacing the whole divergent suffix
- * and re-typing the new one keeps the guest buffer in sync with the IME.
- */
-private fun forwardImeDiff(old: String, new: String, vm: X11ViewModel) {
-    // Length (in chars) and codepoint count of the shared leading run.
-    var common = 0
-    var commonCp = 0
-    while (common < old.length && common < new.length) {
-        val cp = old.codePointAt(common)
-        if (cp != new.codePointAt(common)) break
-        common += Character.charCount(cp)
-        commonCp++
-    }
-    // Delete everything in old past the shared prefix.
-    val oldCp = old.codePointCount(0, old.length)
-    repeat(oldCp - commonCp) {
-        vm.sendKey(XK_BackSpace, down = true)
-        vm.sendKey(XK_BackSpace, down = false)
-    }
-    // Type everything in new past the shared prefix (codepoint-wise so a
-    // surrogate pair is sent as a single keysym).
-    var i = common
-    while (i < new.length) {
-        val cp = new.codePointAt(i)
-        val keysym = if (cp in 0x20..0x7E) cp else 0x01000000 or cp
-        vm.sendKey(keysym, down = true)
-        vm.sendKey(keysym, down = false)
-        i += Character.charCount(cp)
-    }
 }
