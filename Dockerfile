@@ -131,6 +131,7 @@ RUN printf '%s\n' \
     'CONFIG_ANDROID_BINDER_IPC=y' \
     'CONFIG_ANDROID_BINDERFS=y' \
     'CONFIG_ANDROID_BINDER_DEVICES="binder,hwbinder,vndbinder"' \
+    'CONFIG_PSI=y' \
     > /tmp/forced_builtin.config
 RUN cd linux-${KERNEL_VERSION} \
     && make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- defconfig \
@@ -158,7 +159,7 @@ RUN cd linux-${KERNEL_VERSION} \
                   SCSI BLK_DEV_SD VFAT_FS EXFAT_FS \
                   NFSD NFSD_V4 NFS_FS NFS_V4 SUNRPC CONFIGFS_FS \
                   TARGET_CORE TCM_IBLOCK TCM_FILEIO ISCSI_TARGET ISCSI_TCP \
-                  ANDROID_BINDER_IPC ANDROID_BINDERFS; do \
+                  ANDROID_BINDER_IPC ANDROID_BINDERFS PSI; do \
            grep -q "^CONFIG_${opt}=y\$" .config \
                || { echo "FATAL: CONFIG_${opt} is not =y after merge" >&2; \
                     grep "CONFIG_${opt}" .config >&2; exit 1; }; \
@@ -222,7 +223,7 @@ RUN cd /rootfs && find . | cpio -o -H newc 2>/dev/null | gzip -9 > /output/initr
 # ==============================================================================
 
 FROM debian:bookworm AS qemu-builder
-ARG QEMU_VERSION=11.0.2
+ARG QEMU_VERSION=11.0.4
 ENV QEMU_DIR=qemu-${QEMU_VERSION}
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
