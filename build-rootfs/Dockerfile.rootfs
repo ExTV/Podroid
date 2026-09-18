@@ -15,7 +15,7 @@ RUN cd /work/overlay-normalize && make CC=gcc
 # ── Stage 2: build the Alpine rootfs squashfs ───────────────────────────────
 FROM alpine:3.24 AS builder
 
-ARG ALPINE_RELEASE=3.24.1
+ARG ALPINE_RELEASE=3.24.2
 ARG ALPINE_ARCH=aarch64
 
 RUN apk add --no-cache curl squashfs-tools tar openssl libcap-utils
