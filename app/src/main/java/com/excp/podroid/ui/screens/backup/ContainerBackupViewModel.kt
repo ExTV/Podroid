@@ -12,11 +12,14 @@ import com.excp.podroid.engine.VmEngine
 import com.excp.podroid.engine.VmState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 data class ContainerBackupUiState(
@@ -24,6 +27,7 @@ data class ContainerBackupUiState(
     val storageAccessEnabled: Boolean = false,
     val guestPath: String = "/var/backups/podroid",
     val backupFiles: List<ContainerBackupFile> = emptyList(),
+    val backupListError: Boolean = false,
     val containerName: String = "",
     val imageRef: String = "",
 )
@@ -39,22 +43,28 @@ class ContainerBackupViewModel @Inject constructor(
     private val _containerName = MutableStateFlow("")
     private val _imageRef = MutableStateFlow("")
     private val _backupFiles = MutableStateFlow<List<ContainerBackupFile>>(emptyList())
+    private val _backupListError = MutableStateFlow(false)
 
     val uiState: StateFlow<ContainerBackupUiState> = combine(
-        engine.state,
-        settingsRepository.storageAccessEnabled,
-        _containerName,
-        _imageRef,
-        _backupFiles,
-    ) { vmState, storageAccess, container, image, files ->
-        ContainerBackupUiState(
-            vmRunning = vmState is VmState.Running,
-            storageAccessEnabled = storageAccess,
-            guestPath = repository.guestBackupPathLabel(storageAccess),
-            backupFiles = files,
-            containerName = container,
-            imageRef = image,
-        )
+        combine(
+            engine.state,
+            settingsRepository.storageAccessEnabled,
+            _containerName,
+            _imageRef,
+            _backupFiles,
+        ) { vmState, storageAccess, container, image, files ->
+            ContainerBackupUiState(
+                vmRunning = vmState is VmState.Running,
+                storageAccessEnabled = storageAccess,
+                guestPath = repository.guestBackupPathLabel(storageAccess),
+                backupFiles = files,
+                containerName = container,
+                imageRef = image,
+            )
+        },
+        _backupListError,
+    ) { state, listError ->
+        state.copy(backupListError = listError)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ContainerBackupUiState())
 
     init {
@@ -62,7 +72,17 @@ class ContainerBackupViewModel @Inject constructor(
     }
 
     fun refresh() {
-        _backupFiles.value = repository.listBackupFiles()
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { repository.listBackupFiles() }
+            }
+            result.onSuccess { files ->
+                _backupFiles.value = files
+                _backupListError.value = false
+            }.onFailure {
+                _backupListError.value = true
+            }
+        }
     }
 
     fun setContainerName(value: String) {

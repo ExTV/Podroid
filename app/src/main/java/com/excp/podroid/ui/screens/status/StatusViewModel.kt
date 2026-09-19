@@ -15,6 +15,7 @@ import com.excp.podroid.util.UptimeFormatter
 import com.excp.podroid.util.VmLoadSampler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
 
@@ -102,13 +104,18 @@ class StatusViewModel @Inject constructor(
     ) { a, b, c, backendId ->
         val vmState = a[0] as VmState
         val tick = b[4] as Long
+        // NetworkUtils enumerates NetworkInterface, which is blocking I/O; keep
+        // it off the main thread that this combine transform otherwise runs on.
+        val (phoneIp, phoneAddresses) = withContext(Dispatchers.IO) {
+            NetworkUtils.localIpv4(context) to NetworkUtils.allLocalIpv4(context)
+        }
         StatusUiState(
             vmState = vmState,
             backendId = backendId,
             engineSelection = b[1] as EngineSelection,
             uptimeLabel = uptimeLabel(vmState, tick),
-            phoneIp = NetworkUtils.localIpv4(context),
-            phoneAddresses = NetworkUtils.allLocalIpv4(context),
+            phoneIp = phoneIp,
+            phoneAddresses = phoneAddresses,
             vmRamMb = a[1] as Int,
             vmCpus = a[2] as Int,
             storageSizeGb = a[3] as Int,
@@ -127,8 +134,10 @@ class StatusViewModel @Inject constructor(
         viewModelScope.launch {
             while (isActive) {
                 delay(2_000)
-                refreshMetrics()
-                sampleVmLoad()
+                withContext(Dispatchers.IO) {
+                    refreshMetrics()
+                    sampleVmLoad()
+                }
                 if (engine.state.value is VmState.Running) {
                     _uptimeTick.value = System.currentTimeMillis()
                 }
