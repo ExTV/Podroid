@@ -40,6 +40,7 @@
     <string name="back">返回</string>
     <string name="continue_label">继续</string>
     <string name="get_started">开始使用</string>
+    <string name="not_now">暂不</string>
 
     <!-- Storage -->
     <string name="persistent_storage">持久化存储</string>
@@ -95,6 +96,8 @@
     <string name="extra_kernel_cmdline">额外的内核命令行</string>
     <string name="kernel_cmdline_helper">在 console=ttyAMA0 之后追加 - 控制调度器、缓解措施、日志级别等。</string>
     <string name="qemu_args_helper">-cpu, -accel, -object, -device, -overcommit 等。空格分隔。</string>
+    <string name="reset_field_confirm_title">重置%1$s？</string>
+    <string name="reset_field_confirm_body">这将清除您的自定义设置并恢复默认值。</string>
     <string name="about">关于</string>
     <string name="architecture">架构</string>
     <string name="linux_distro">Linux 发行版</string>
@@ -181,6 +184,7 @@
     <string name="container_backup_on_phone">手机上的备份</string>
     <string name="container_backup_refresh">刷新列表</string>
     <string name="container_backup_none">Downloads/Podroid/backups 中尚未找到备份归档。</string>
+    <string name="container_backup_list_error">无法读取备份文件夹，请点击刷新重试。</string>
     <string name="container_backup_copied">命令已复制</string>
 
     <!-- Home -->
@@ -209,11 +213,23 @@
     <string name="backend_fallback_reason_service">系统服务不可达</string>
     <string name="backend_fallback_reason_protected_only">此设备仅支持受保护虚拟机</string>
 
+    <!-- Permissions -->
+    <string name="permissions">权限</string>
+    <string name="permissions_description">Podroid 需要以下权限才能稳定运行虚拟机。</string>
+    <string name="permissions_needed">需要授权</string>
+    <string name="perm_notifications_title">通知</string>
+    <string name="perm_notifications_why">显示虚拟机状态，并可从通知栏停止虚拟机。</string>
+    <string name="perm_battery_title">后台不受限制</string>
+    <string name="perm_battery_why">让虚拟机在应用退到后台时继续运行。</string>
+    <string name="perm_grant">授权</string>
+    <string name="perm_granted">已授权</string>
+
     <!-- Setup Steps -->
-    <string name="step_1_of_4">第 1 步，共 4 步</string>
-    <string name="step_2_of_4">第 2 步，共 4 步</string>
-    <string name="step_3_of_4">第 3 步，共 4 步</string>
-    <string name="step_4_of_4">第 4 步，共 4 步</string>
+    <string name="step_1_of_5">第 1 步，共 5 步</string>
+    <string name="step_2_of_5">第 2 步，共 5 步</string>
+    <string name="step_3_of_5">第 3 步，共 5 步</string>
+    <string name="step_4_of_5">第 4 步，共 5 步</string>
+    <string name="step_5_of_5">第 5 步，共 5 步</string>
 
     <!-- Dialogs -->
     <string name="update_available">有新版本可用</string>

@@ -34,6 +34,10 @@
     <!-- Required on Android 13+ to show the foreground service notification -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Lets the setup wizard and Home permissions card show the direct battery
+         exemption dialog instead of the general system list -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <!-- Full storage access to share the Downloads folder with the VM -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />

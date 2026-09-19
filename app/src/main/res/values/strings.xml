@@ -40,6 +40,7 @@
     <string name="back">Back</string>
     <string name="continue_label">Continue</string>
     <string name="get_started">Get Started</string>
+    <string name="not_now">Not now</string>
 
     <!-- Storage -->
     <string name="persistent_storage">Persistent Storage</string>
@@ -95,6 +96,8 @@
     <string name="extra_kernel_cmdline">Extra kernel cmdline</string>
     <string name="kernel_cmdline_helper">Appended after console=ttyAMA0 — controls scheduler, mitigations, log level, etc.</string>
     <string name="qemu_args_helper">-cpu, -accel, -object, -device, -overcommit, etc. Whitespace-separated.</string>
+    <string name="reset_field_confirm_title">Reset %1$s?</string>
+    <string name="reset_field_confirm_body">This clears your customization and restores the default value.</string>
     <string name="about">About</string>
     <string name="architecture">Architecture</string>
     <string name="linux_distro">Linux distro</string>
@@ -181,6 +184,7 @@
     <string name="container_backup_on_phone">Backups on phone</string>
     <string name="container_backup_refresh">Refresh list</string>
     <string name="container_backup_none">No backup archives found in Downloads/Podroid/backups yet.</string>
+    <string name="container_backup_list_error">Couldn\'t read the backup folder. Try Refresh.</string>
     <string name="container_backup_copied">Command copied</string>
 
     <!-- Home -->
@@ -209,11 +213,23 @@
     <string name="backend_fallback_reason_service">the system service is unreachable</string>
     <string name="backend_fallback_reason_protected_only">this device only supports protected virtual machines</string>
 
+    <!-- Permissions -->
+    <string name="permissions">Permissions</string>
+    <string name="permissions_description">Podroid needs these to run the VM reliably.</string>
+    <string name="permissions_needed">Permissions needed</string>
+    <string name="perm_notifications_title">Notifications</string>
+    <string name="perm_notifications_why">Shows the VM\'s state and lets you stop it from the notification shade.</string>
+    <string name="perm_battery_title">Unrestricted background</string>
+    <string name="perm_battery_why">Keeps the VM running when the app is in the background.</string>
+    <string name="perm_grant">Grant</string>
+    <string name="perm_granted">Granted</string>
+
     <!-- Setup Steps -->
-    <string name="step_1_of_4">Step 1 of 4</string>
-    <string name="step_2_of_4">Step 2 of 4</string>
-    <string name="step_3_of_4">Step 3 of 4</string>
-    <string name="step_4_of_4">Step 4 of 4</string>
+    <string name="step_1_of_5">Step 1 of 5</string>
+    <string name="step_2_of_5">Step 2 of 5</string>
+    <string name="step_3_of_5">Step 3 of 5</string>
+    <string name="step_4_of_5">Step 4 of 5</string>
+    <string name="step_5_of_5">Step 5 of 5</string>
 
     <!-- Dialogs -->
     <string name="update_available">Update available</string>

@@ -1,6 +1,7 @@
 package com.excp.podroid.ui.screens.setup
 
 import android.Manifest
+import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -51,11 +52,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.core.app.ActivityCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.excp.podroid.R
 import com.excp.podroid.ui.components.AdaptiveContainer
+import com.excp.podroid.ui.components.PermissionRows
 import com.excp.podroid.ui.components.PodroidGhostButton
 import com.excp.podroid.ui.components.PodroidListRow
 import com.excp.podroid.ui.components.PodroidPrimaryButton
@@ -66,7 +72,12 @@ import com.excp.podroid.ui.components.VmCpuChips
 import com.excp.podroid.ui.components.VmRamChips
 import com.excp.podroid.ui.components.VmStorageChips
 import com.excp.podroid.ui.theme.PodroidTokens
+import com.excp.podroid.util.AppPermission
+import com.excp.podroid.util.AppPermissions
 import com.excp.podroid.util.DeviceResourcePolicy
+import com.excp.podroid.util.isGranted
+import com.excp.podroid.util.openAppDetailsSettings
+import com.excp.podroid.util.requestBatteryOptimizationExemption
 import kotlinx.coroutines.launch
 
 private const val DEFAULT_STORAGE_GB = 8
@@ -101,7 +112,7 @@ fun SetupScreen(
     var usbPassthroughEnabled by rememberSaveable { mutableStateOf(false) }
     val usbPassthroughAvailable = remember { viewModel.usbPassthroughAvailable() }
     val setupComplete by viewModel.setupComplete.collectAsStateWithLifecycle()
-    val pagerState = rememberPagerState(pageCount = { 4 })
+    val pagerState = rememberPagerState(pageCount = { 5 })
     val scope = rememberCoroutineScope()
 
     fun applyLoadBalance() {
@@ -116,24 +127,8 @@ fun SetupScreen(
         if (loadBalanceEnabled) applyLoadBalance()
     }
 
-    // Request the notification permission BEFORE navigating away; using
-    // rememberLauncherForActivityResult registers it while the composable is still
-    // alive, so the result actually arrives. ActivityCompat.requestPermissions
-    // after onSetupComplete() fires against a transitioning Activity and is dropped
-    // on some OEMs.
-    val notifPermLauncher = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        rememberLauncherForActivityResult(RequestPermission()) { /* grant result: no-op */ }
-    } else null
-
     LaunchedEffect(setupComplete) {
         if (setupComplete) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
-                    != PackageManager.PERMISSION_GRANTED
-                ) {
-                    notifPermLauncher?.launch(Manifest.permission.POST_NOTIFICATIONS)
-                }
-            }
             onSetupComplete()
         }
     }
@@ -162,6 +157,16 @@ fun SetupScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    // Announced to TalkBack on both the progress bar and the page dots below,
+    // since neither conveys the step number on its own.
+    val stepLabel = when (pagerState.currentPage) {
+        0 -> stringResource(R.string.step_1_of_5)
+        1 -> stringResource(R.string.step_2_of_5)
+        2 -> stringResource(R.string.step_3_of_5)
+        3 -> stringResource(R.string.step_4_of_5)
+        else -> stringResource(R.string.step_5_of_5)
+    }
+
     Scaffold { innerPadding ->
         Column(
             modifier = Modifier
@@ -170,8 +175,10 @@ fun SetupScreen(
         ) {
             // Step progress bar
             LinearProgressIndicator(
-                progress = { (pagerState.currentPage + 1) / 4f },
-                modifier = Modifier.fillMaxWidth(),
+                progress = { (pagerState.currentPage + 1) / 5f },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { contentDescription = stepLabel },
                 trackColor = MaterialTheme.colorScheme.surfaceVariant,
             )
 
@@ -246,6 +253,11 @@ fun SetupScreen(
                         available = usbPassthroughAvailable,
                         onUsbPassthroughToggle = { usbPassthroughEnabled = it },
                         onBack = { scope.launch { pagerState.animateScrollToPage(2) } },
+                        onNext = { scope.launch { pagerState.animateScrollToPage(4) } },
+                    )
+                    4 -> PermissionsPage(
+                        windowSizeClass = windowSizeClass,
+                        onBack = { scope.launch { pagerState.animateScrollToPage(3) } },
                         onGetStarted = {
                             viewModel.completeSetup(
                                 storageSizeGb = selectedGb,
@@ -266,11 +278,12 @@ fun SetupScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 16.dp),
+                    .padding(vertical = 16.dp)
+                    .clearAndSetSemantics { contentDescription = stepLabel },
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                repeat(4) { index ->
+                repeat(5) { index ->
                     val isSelected = pagerState.currentPage == index
                     val dotWidth by animateDpAsState(
                         targetValue = if (isSelected) 24.dp else 8.dp,
@@ -392,7 +405,7 @@ private fun StoragePage(
 ) {
     SetupPageLayout(
         windowSizeClass = windowSizeClass,
-        stepLabel  = stringResource(R.string.step_1_of_4),
+        stepLabel  = stringResource(R.string.step_1_of_5),
         title      = stringResource(R.string.persistent_storage),
         description = stringResource(R.string.storage_description),
         bottomBar  = { SetupNextBar(onNext = onNext) },
@@ -435,7 +448,7 @@ private fun VmConfigPage(
 ) {
     SetupPageLayout(
         windowSizeClass = windowSizeClass,
-        stepLabel  = stringResource(R.string.step_2_of_4),
+        stepLabel  = stringResource(R.string.step_2_of_5),
         title      = stringResource(R.string.configure_vm),
         description = stringResource(R.string.vm_config_description),
         bottomBar  = { SetupNavBar(onBack = onBack, onNext = onNext, nextLabel = stringResource(R.string.continue_label)) },
@@ -514,7 +527,7 @@ private fun StorageAccessPage(
 
     SetupPageLayout(
         windowSizeClass = windowSizeClass,
-        stepLabel  = stringResource(R.string.step_3_of_4),
+        stepLabel  = stringResource(R.string.step_3_of_5),
         title      = stringResource(R.string.downloads_sharing),
         description = stringResource(R.string.storage_access_description),
         bottomBar  = { SetupNavBar(onBack = onBack, onNext = onNext, nextLabel = stringResource(R.string.continue_label)) },
@@ -561,14 +574,14 @@ private fun UsbPassthroughPage(
     available: Boolean,
     onUsbPassthroughToggle: (Boolean) -> Unit,
     onBack: () -> Unit,
-    onGetStarted: () -> Unit,
+    onNext: () -> Unit,
 ) {
     SetupPageLayout(
         windowSizeClass = windowSizeClass,
-        stepLabel  = stringResource(R.string.step_4_of_4),
+        stepLabel  = stringResource(R.string.step_4_of_5),
         title      = stringResource(R.string.usb_passthrough),
         description = stringResource(R.string.usb_passthrough_description),
-        bottomBar  = { SetupNavBar(onBack = onBack, onNext = onGetStarted, nextLabel = stringResource(R.string.get_started)) },
+        bottomBar  = { SetupNavBar(onBack = onBack, onNext = onNext, nextLabel = stringResource(R.string.continue_label)) },
     ) {
         PodroidSectionLabel(stringResource(R.string.usb_devices_section))
         PodroidListRow(
@@ -590,6 +603,61 @@ private fun UsbPassthroughPage(
             },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+// ── Page 5: Permissions ───────────────────────────────────────────────────────
+
+@Composable
+private fun PermissionsPage(
+    windowSizeClass: WindowSizeClass,
+    onBack: () -> Unit,
+    onGetStarted: () -> Unit,
+) {
+    val context = LocalContext.current
+    val permissions = remember { AppPermissions.applicable(Build.VERSION.SDK_INT) }
+    // Bumped after a grant attempt and on ON_RESUME so a row flips from Grant to
+    // Granted without waiting for anything else to recompose this page.
+    var grantVersion by remember { mutableIntStateOf(0) }
+
+    val notifPermLauncher = rememberLauncherForActivityResult(RequestPermission()) { granted ->
+        if (!granted) {
+            val activity = context as? Activity
+            if (activity != null &&
+                !ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.POST_NOTIFICATIONS)
+            ) {
+                AppPermissions.openAppDetailsSettings(context)
+            }
+        }
+        grantVersion++
+    }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) grantVersion++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    SetupPageLayout(
+        windowSizeClass = windowSizeClass,
+        stepLabel  = stringResource(R.string.step_5_of_5),
+        title      = stringResource(R.string.permissions),
+        description = stringResource(R.string.permissions_description),
+        bottomBar  = { SetupNavBar(onBack = onBack, onNext = onGetStarted, nextLabel = stringResource(R.string.get_started)) },
+    ) {
+        PermissionRows(
+            permissions = permissions,
+            isGranted = { grantVersion; it.isGranted(context) },
+            onGrant = { permission ->
+                when (permission) {
+                    AppPermission.NOTIFICATIONS -> notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    AppPermission.BATTERY_OPTIMIZATION -> AppPermissions.requestBatteryOptimizationExemption(context)
+                }
+            },
         )
     }
 }
