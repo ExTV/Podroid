@@ -6,9 +6,12 @@ package com.excp.podroid.engine
 
 import com.excp.podroid.engine.QmpClient.Companion.QmpVerdict
 import com.excp.podroid.engine.QmpClient.Companion.classifyQmpFields
+import com.excp.podroid.engine.QmpClient.Companion.readQmpResponse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.BufferedReader
+import java.io.StringReader
 
 /**
  * Pins QMP response classification. Port-forward commands run via
@@ -16,11 +19,51 @@ import org.junit.Test
  * envelope (no QMP-level error, no exception), so a naive
  * Result.success(JSONObject(line)) reports a failed forward as applied.
  *
- * Tests target the pure [classifyQmpFields] (no org.json) so they run as plain
- * JVM unit tests; the thin classifyQmpResponse(JSONObject) adapter just maps its
- * verdict onto Result/null.
+ * The reader tests use plain string classifiers so they run as JVM unit tests;
+ * the pure [classifyQmpFields] tests cover the protocol classification rules.
  */
 class QmpClientTest {
+
+    /** Keep reader tests on the plain JVM; field classification is covered below. */
+    private fun classifyTestResponse(line: String): Result<String>? = when {
+        line.contains("\"event\"") -> null
+        line.contains("\"error\"") -> Result.failure(RuntimeException("QMP error"))
+        else -> Result.success(line)
+    }
+
+    @Test
+    fun `reader skips events for capability and command replies`() {
+        val reader = BufferedReader(StringReader(
+            """
+            {"event":"RESET"}
+            {"return":{}}
+            {"event":"RESUME"}
+            {"return":{"ok":true}}
+            """.trimIndent()
+        ))
+
+        val capabilities = readQmpResponse(reader, "qmp_capabilities", ::classifyTestResponse)
+        val command = readQmpResponse(reader, "test-command", ::classifyTestResponse)
+
+        assertEquals("{\"return\":{}}", capabilities.getOrThrow())
+        assertEquals("{\"return\":{\"ok\":true}}", command.getOrThrow())
+    }
+
+    @Test
+    fun `capability ack is consumed separately from following command error`() {
+        val reader = BufferedReader(StringReader(
+            """
+            {"return":{}}
+            {"error":{"class":"GenericError","desc":"bad command"}}
+            """.trimIndent()
+        ))
+
+        assertTrue(readQmpResponse(reader, "qmp_capabilities", ::classifyTestResponse).isSuccess)
+        val command = readQmpResponse(reader, "test-command", ::classifyTestResponse)
+
+        assertTrue(command.isFailure)
+        assertEquals("QMP error", command.exceptionOrNull()?.message)
+    }
 
     @Test
     fun `top-level error envelope is a failure`() {
@@ -82,6 +125,28 @@ class QmpClientTest {
         // A successful hostfwd_add returns an empty string.
         val verdict = classifyQmpFields(hasError = false, hasEvent = false, returnValue = "")
         assertEquals(QmpVerdict.Success, verdict)
+    }
+
+    @Test
+    fun `reader returns capability error without consuming next line`() {
+        val reader = BufferedReader(StringReader(
+            "{" +
+                "\"error\":{\"class\":\"GenericError\",\"desc\":\"capabilities rejected\"}}\n" +
+                "{\"return\":{}}\n"
+        ))
+
+        assertTrue(readQmpResponse(reader, "qmp_capabilities", ::classifyTestResponse).isFailure)
+        assertTrue(readQmpResponse(reader, "test-command", ::classifyTestResponse).isSuccess)
+    }
+
+    @Test
+    fun `reader returns failure on EOF after events`() {
+        val reader = BufferedReader(StringReader("{\"event\":\"RESET\"}\n"))
+
+        val result = readQmpResponse(reader, "test-command", ::classifyTestResponse)
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()?.message?.contains("connection closed") == true)
     }
 
     @Test

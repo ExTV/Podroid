@@ -74,6 +74,29 @@ class QmpClient(private val socketPath: String) {
             }
 
         /**
+         * Read through asynchronous events until the next terminal QMP reply.
+         * A failure (including EOF) is returned to the caller so it can stop
+         * before sending any subsequent command.
+         */
+        internal fun readQmpResponse(reader: BufferedReader, operation: String): Result<JSONObject> =
+            readQmpResponse(reader, operation) { line -> classifyQmpResponse(JSONObject(line)) }
+
+        internal fun <T> readQmpResponse(
+            reader: BufferedReader,
+            operation: String,
+            classifyResponse: (String) -> Result<T>?,
+        ): Result<T> {
+            while (true) {
+                val line = reader.readLine()
+                    ?: return Result.failure(
+                        RuntimeException("QMP connection closed before a reply to $operation")
+                    )
+                val result = classifyResponse(line)
+                if (result != null) return result
+            }
+        }
+
+        /**
          * human-monitor-command (hostfwd_add/remove) reports failures as plain
          * text in the `"return"` field. Match the QEMU SLIRP/hostfwd error
          * prefixes ("could not set up host forwarding rule", "Could not ...").
@@ -114,7 +137,9 @@ class QmpClient(private val socketPath: String) {
                 Log.v(TAG, "QMP greeting: ${reader.readLine()}")
                 out.write("{\"execute\":\"qmp_capabilities\"}\n".toByteArray())
                 out.flush()
-                Log.v(TAG, "Capabilities response: ${reader.readLine()}")
+                val capabilities = readQmpResponse(reader, "qmp_capabilities")
+                if (capabilities.isFailure) return@withContext capabilities
+                Log.v(TAG, "Capabilities response: ${capabilities.getOrThrow()}")
 
                 val cmd = JSONObject().apply {
                     put("execute", command)
@@ -127,18 +152,10 @@ class QmpClient(private val socketPath: String) {
                 out.write((cmd.toString() + "\n").toByteArray())
                 out.flush()
 
-                // Read until a terminal reply (return/error). QMP can emit
-                // async {"event":...} lines at any time — classifyQmpResponse
-                // returns null for those so we skip them. A null line = EOF.
-                var result: Result<JSONObject>? = null
-                while (result == null) {
-                    val response = reader.readLine()
-                        ?: return@withContext Result.failure(
-                            RuntimeException("QMP connection closed before a reply to $command")
-                        )
-                    Log.d(TAG, "Command response ($command): $response")
-                    result = classifyQmpResponse(JSONObject(response))
-                }
+                // Read until a terminal reply (return/error), skipping any
+                // async {"event":...} lines that interleave with it.
+                val result = readQmpResponse(reader, command)
+                Log.d(TAG, "Command response ($command): $result")
                 result
             }
         } catch (e: CancellationException) {
