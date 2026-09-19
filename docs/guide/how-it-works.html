@@ -78,7 +78,7 @@
       <p>OpenRC is PID 1 inside the guest. Several app-specific services on the squashfs handle bring-up; the three that drive the boot log are:</p>
       <ul>
         <li><strong>podroid-bootstrap:</strong> kernel modules, cgroup v2, ZRAM swap, devpts/shm/mqueue mounts, sysctl, hostname.</li>
-        <li><strong>podroid-network:</strong> brings up eth0, assigns 10.0.2.15/24, sets the default route and /etc/resolv.conf (SLIRP provides NAT). DNS goes to the device's own resolver first (passed in via <code>podroid.dns=</code> on the kernel command line), then 8.8.8.8 and 1.1.1.1 - SLIRP's own 10.0.2.3 forwarder is dead on Android, which has no host /etc/resolv.conf for it to read.</li>
+        <li><strong>podroid-network:</strong> brings up eth0, assigns 10.0.2.15/24, sets the default route and /etc/resolv.conf (SLIRP provides NAT). DNS uses up to two distinct device resolvers in order (passed via <code>podroid.dns=</code>), then deduplicated 8.8.8.8 / 1.1.1.1 fallbacks - SLIRP's own 10.0.2.3 forwarder is dead on Android, which has no host /etc/resolv.conf for it to read.</li>
         <li><strong>podroid-ready:</strong> emits the "Starting SSH...", "Almost ready...", and "Ready!" markers that the app tracks to update the notification and unlock the terminal.</li>
       </ul>
 

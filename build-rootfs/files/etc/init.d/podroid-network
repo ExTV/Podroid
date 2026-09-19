@@ -1,5 +1,82 @@
 #!/sbin/openrc-run
+# shellcheck shell=sh
+# shellcheck disable=SC2034
 description="Podroid VM networking (10.0.2.15 via SLIRP)"
+
+# Validate only plain dotted-quad IPv4 literals before they reach resolv.conf.
+# Keep this separate from qemu_resolv_conf so the resolver ordering can be
+# regression-tested without starting OpenRC or touching the host's /etc.
+is_valid_ipv4() {
+    case "$1" in
+        ''|*[!0-9.]*|.*|*.|*..*) return 1 ;;
+    esac
+    _old_ifs=$IFS
+    IFS=.
+    # Intentional splitting on dots after the character allowlist above.
+    # shellcheck disable=SC2086
+    set -- $1
+    IFS=$_old_ifs
+    [ "$#" -eq 4 ] || return 1
+    for _octet in "$@"; do
+        case "$_octet" in ''|*[!0-9]*|0[0-9]*) return 1 ;; esac
+        [ "$_octet" -le 255 ] 2>/dev/null || return 1
+    done
+}
+
+# Print the QEMU resolver file. Device resolvers occupy up to two slots in
+# their original order; the remaining slots use the existing public fallbacks,
+# without duplicates. With no valid device resolver, retain the original
+# 10.0.2.3 / public fallback behavior.
+qemu_resolv_conf() {
+    _dns_raw=$1
+    DEVICE_DNS_1=""
+    DEVICE_DNS_2=""
+
+    # Reject the whole cmdline value if it contains anything outside the
+    # comma-separated dotted-quad grammar. This also prevents field splitting
+    # or pathname expansion from interpreting attacker-controlled characters.
+    case "$_dns_raw" in *[!0-9.,]*) _dns_raw="" ;; esac
+    if [ -n "$_dns_raw" ]; then
+        _old_ifs=$IFS
+        IFS=,
+        # The character allowlist makes this expansion safe and glob-free.
+        # shellcheck disable=SC2086
+        set -- $_dns_raw
+        IFS=$_old_ifs
+        for _cand in "$@"; do
+            is_valid_ipv4 "$_cand" || continue
+            case "$_cand" in 127.*|0.0.0.0) continue ;; esac
+            [ "$_cand" = "$DEVICE_DNS_1" ] && continue
+            [ "$_cand" = "$DEVICE_DNS_2" ] && continue
+            if [ -z "$DEVICE_DNS_1" ]; then
+                DEVICE_DNS_1=$_cand
+            elif [ -z "$DEVICE_DNS_2" ]; then
+                DEVICE_DNS_2=$_cand
+            fi
+        done
+    fi
+
+    if [ -z "$DEVICE_DNS_1" ]; then
+        printf 'nameserver 10.0.2.3\nnameserver 8.8.8.8\nnameserver 1.1.1.1\n'
+        return
+    fi
+
+    printf 'nameserver %s\n' "$DEVICE_DNS_1"
+    _resolver_count=1
+    if [ -n "$DEVICE_DNS_2" ]; then
+        printf 'nameserver %s\n' "$DEVICE_DNS_2"
+        _resolver_count=2
+    fi
+    if [ "$_resolver_count" -lt 3 ] &&
+        [ "$DEVICE_DNS_1" != "8.8.8.8" ] && [ "$DEVICE_DNS_2" != "8.8.8.8" ]; then
+        printf 'nameserver 8.8.8.8\n'
+        _resolver_count=$((_resolver_count + 1))
+    fi
+    if [ "$_resolver_count" -lt 3 ] &&
+        [ "$DEVICE_DNS_1" != "1.1.1.1" ] && [ "$DEVICE_DNS_2" != "1.1.1.1" ]; then
+        printf 'nameserver 1.1.1.1\n'
+    fi
+}
 
 depend() {
     need podroid-bootstrap
@@ -54,44 +131,13 @@ start() {
         # SLIRP's 10.0.2.3 DNS forwarder is dead on Android (it reads the
         # host's /etc/resolv.conf, which doesn't exist here). QemuEngine
         # passes the device's own resolvers via podroid.dns= when it has any;
-        # re-validate rather than trust the cmdline, and use only the first
-        # one that parses as a dotted quad. It replaces just the 10.0.2.3
-        # slot - 8.8.8.8 and 1.1.1.1 stay in place either way.
+        # re-validate them and put up to two distinct entries first, followed
+        # by deduplicated public fallbacks. No valid device resolver retains
+        # the original 10.0.2.3 / public fallback list.
         DNS_RAW=$(sed -n 's/.*podroid\.dns=\([0-9.,]*\).*/\1/p' /proc/cmdline 2>/dev/null)
-        DEVICE_DNS=""
-        if [ -n "$DNS_RAW" ]; then
-            _ifs=$IFS
-            IFS=,
-            set -- $DNS_RAW
-            IFS=$_ifs
-            for _cand in "$@"; do
-                _dots=$IFS
-                IFS=.
-                set -- $_cand
-                IFS=$_dots
-                if [ $# -eq 4 ]; then
-                    _ok=1
-                    for _o in "$1" "$2" "$3" "$4"; do
-                        case "$_o" in ''|*[!0-9]*) _ok=0 ;; esac
-                        if [ "$_ok" = 1 ] && [ "$_o" -gt 255 ] 2>/dev/null; then
-                            _ok=0
-                        fi
-                    done
-                    if [ "$_ok" = 1 ]; then
-                        DEVICE_DNS="$_cand"
-                        break
-                    fi
-                fi
-            done
-        fi
-        if [ -n "$DEVICE_DNS" ]; then
-            printf 'nameserver %s\nnameserver 8.8.8.8\nnameserver 1.1.1.1\n' "$DEVICE_DNS" \
-                > /etc/resolv.conf
-        else
-            printf 'nameserver 10.0.2.3\nnameserver 8.8.8.8\nnameserver 1.1.1.1\n' \
-                > /etc/resolv.conf
-        fi
-        echo "DNS: ${DEVICE_DNS:-10.0.2.3} 8.8.8.8" > /dev/console
+        qemu_resolv_conf "$DNS_RAW" > /etc/resolv.conf
+        DNS_SERVERS=$(awk '$1 == "nameserver" { if (dns != "") dns = dns " "; dns = dns $2 } END { print dns }' /etc/resolv.conf)
+        echo "DNS: $DNS_SERVERS" > /dev/console
         # Mirror the AVF post-check: if the static assignment didn't stick
         # (wrong NIC, link not up), don't report success. Dependents that
         # `need` us would assume the link is up and then SSH/apk fail with no

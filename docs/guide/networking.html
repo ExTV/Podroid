@@ -66,7 +66,7 @@
         </tbody>
       </table>
 
-      <p>IPv6 is disabled on the QEMU netdev (<code>ipv6=off</code>). Outbound TCP and UDP both work. The <code>podroid-network</code> OpenRC service brings up eth0 with these addresses at boot. Because SLIRP's own forwarder is dead, the guest's <code>/etc/resolv.conf</code> lists the device's own resolver first (passed to the guest via <code>podroid.dns=</code> on the kernel command line), then <code>8.8.8.8</code> and <code>1.1.1.1</code>. In airplane mode there is no device resolver, so the list falls back to <code>10.0.2.3</code>, <code>8.8.8.8</code>, <code>1.1.1.1</code>.</p>
+      <p>IPv6 is disabled on the QEMU netdev (<code>ipv6=off</code>). Outbound TCP and UDP both work. The <code>podroid-network</code> OpenRC service brings up eth0 with these addresses at boot. Because SLIRP's own forwarder is dead, the guest's <code>/etc/resolv.conf</code> lists up to two distinct device resolvers in their original order (passed via <code>podroid.dns=</code>), then deduplicated <code>8.8.8.8</code> / <code>1.1.1.1</code> fallbacks. In airplane mode, or when no valid device resolver is available, the list preserves the fallback <code>10.0.2.3</code>, <code>8.8.8.8</code>, <code>1.1.1.1</code>.</p>
 
       <div class="callout note">
         <span class="label">AVF backend</span>

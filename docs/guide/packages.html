@@ -154,7 +154,7 @@
           </tr>
           <tr>
             <td><code>podroid-network</code></td>
-            <td>Brings up eth0 (10.0.2.15/24 on QEMU, DHCP on AVF), adds the default route, and writes <code>/etc/resolv.conf</code> with the device's own resolver first, then <code>8.8.8.8</code> / <code>1.1.1.1</code>.</td>
+            <td>Brings up eth0 (10.0.2.15/24 on QEMU, DHCP on AVF), adds the default route, and writes <code>/etc/resolv.conf</code> with up to two distinct device resolvers first, then deduplicated <code>8.8.8.8</code> / <code>1.1.1.1</code> fallbacks.</td>
           </tr>
           <tr>
             <td><code>podroid-resize</code></td>
