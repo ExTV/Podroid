@@ -15,6 +15,10 @@ import androidx.compose.ui.unit.sp
 @Composable @ReadOnlyComposable
 fun buildPodroidTypography(): Typography {
     val ui = PodroidTokens.ui()
+    // Default M3 slots, carried forward only to pick up their fontFamily so
+    // the app cannot drift to Roboto the first time a screen reaches for a
+    // slot we haven't hand-tuned yet.
+    val defaults = Typography()
     return Typography(
         displayLarge = TextStyle(
             fontFamily    = ui,
@@ -23,29 +27,39 @@ fun buildPodroidTypography(): Typography {
             letterSpacing = (-0.02).sp,
             lineHeight    = 34.sp,
         ),
+        displayMedium = defaults.displayMedium.copy(fontFamily = ui),
+        displaySmall  = defaults.displaySmall.copy(fontFamily = ui),
+        headlineLarge  = defaults.headlineLarge.copy(fontFamily = ui),
+        headlineMedium = defaults.headlineMedium.copy(fontFamily = ui),
         headlineSmall = TextStyle(
             fontFamily = ui,
             fontWeight = FontWeight.SemiBold,
             fontSize   = PodroidTokens.TypeSize.Headline,
             lineHeight = 26.sp,
         ),
+        titleLarge  = defaults.titleLarge.copy(fontFamily = ui),
         titleMedium = TextStyle(
             fontFamily    = ui,
             fontWeight    = FontWeight.Normal,
             fontSize      = PodroidTokens.TypeSize.Title,
             letterSpacing = (-0.005).sp,
         ),
+        titleSmall = defaults.titleSmall.copy(fontFamily = ui),
+        bodyLarge  = defaults.bodyLarge.copy(fontFamily = ui),
         bodyMedium = TextStyle(
             fontFamily = ui,
             fontWeight = FontWeight.Normal,
             fontSize   = PodroidTokens.TypeSize.Body,
             lineHeight = 18.sp,
         ),
+        bodySmall = defaults.bodySmall.copy(fontFamily = ui),
+        labelLarge = defaults.labelLarge.copy(fontFamily = ui),
         labelMedium = TextStyle(
             fontFamily    = ui,
             fontWeight    = FontWeight.Normal,
             fontSize      = PodroidTokens.TypeSize.Label,
             letterSpacing = 1.4.sp,
         ),
+        labelSmall = defaults.labelSmall.copy(fontFamily = ui),
     )
 }

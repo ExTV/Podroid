@@ -68,6 +68,32 @@ data class SettingsUiState(
     val bandwidthMbps: Int = 0,
 )
 
+// Typed intermediates for the three sub-combines below, so a reordered flow
+// is a compile error instead of a silently cross-wired setting (the previous
+// arrayOf<Any> packing cast back by index).
+private data class VmRowsGroup(
+    val vmRamMb: Int,
+    val vmCpus: Int,
+    val storageSizeGb: Int,
+    val sshEnabled: Boolean,
+    val loadBalanceEnabled: Boolean,
+)
+
+private data class MiscRowsGroup(
+    val storageAccessEnabled: Boolean,
+    val qemuExtraArgs: String,
+    val kernelExtraCmdline: String,
+    val darkTheme: Boolean,
+    val dynamicColorEnabled: Boolean,
+)
+
+private data class LocaleRowsGroup(
+    val bandwidthMbps: Int,
+    val engineSelection: EngineSelection,
+    val language: String,
+    val systemDefaultLanguage: String,
+)
+
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -90,7 +116,7 @@ class SettingsViewModel @Inject constructor(
             settingsRepository.sshEnabled,
             settingsRepository.loadBalanceEnabled,
         ) { ram, cpus, storage, ssh, loadBal ->
-            arrayOf(ram, cpus, storage, ssh, loadBal)
+            VmRowsGroup(ram, cpus, storage, ssh, loadBal)
         },
         combine(
             settingsRepository.storageAccessEnabled,
@@ -99,7 +125,7 @@ class SettingsViewModel @Inject constructor(
             settingsRepository.darkTheme,
             settingsRepository.dynamicColorEnabled,
         ) { storageAccess, qemu, kernel, dark, dyn ->
-            arrayOf(storageAccess, qemu, kernel, dark, dyn)
+            MiscRowsGroup(storageAccess, qemu, kernel, dark, dyn)
         },
         combine(
             settingsRepository.bandwidthMbps,
@@ -107,24 +133,24 @@ class SettingsViewModel @Inject constructor(
             settingsRepository.language,
             languageManager.language,
         ) { bandwidth, engineSel, lang, sysLang ->
-            arrayOf(bandwidth, engineSel, lang, sysLang)
+            LocaleRowsGroup(bandwidth, engineSel, lang, sysLang)
         },
-    ) { a, b, c ->
+    ) { vm, misc, locale ->
         SettingsUiState(
-            vmRamMb = a[0] as Int,
-            vmCpus = a[1] as Int,
-            storageSizeGb = a[2] as Int,
-            sshEnabled = a[3] as Boolean,
-            storageAccessEnabled = b[0] as Boolean,
-            qemuExtraArgs = b[1] as String,
-            kernelExtraCmdline = b[2] as String,
-            darkTheme = b[3] as Boolean,
-            dynamicColorEnabled = b[4] as Boolean,
-            engineSelection = c[1] as EngineSelection,
-            language = c[2] as String,
-            systemDefaultLanguage = c[3] as String,
-            loadBalanceEnabled = a[4] as Boolean,
-            bandwidthMbps = c[0] as Int,
+            vmRamMb = vm.vmRamMb,
+            vmCpus = vm.vmCpus,
+            storageSizeGb = vm.storageSizeGb,
+            sshEnabled = vm.sshEnabled,
+            storageAccessEnabled = misc.storageAccessEnabled,
+            qemuExtraArgs = misc.qemuExtraArgs,
+            kernelExtraCmdline = misc.kernelExtraCmdline,
+            darkTheme = misc.darkTheme,
+            dynamicColorEnabled = misc.dynamicColorEnabled,
+            engineSelection = locale.engineSelection,
+            language = locale.language,
+            systemDefaultLanguage = locale.systemDefaultLanguage,
+            loadBalanceEnabled = vm.loadBalanceEnabled,
+            bandwidthMbps = locale.bandwidthMbps,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsUiState())
 

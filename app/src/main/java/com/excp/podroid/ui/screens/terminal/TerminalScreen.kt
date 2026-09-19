@@ -60,6 +60,7 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -96,11 +97,8 @@ fun TerminalScreen(
     DisposableEffect(Unit) {
         val activity = context as? Activity
         activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        activity?.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         onDispose {
             activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            @Suppress("DEPRECATION")
-            activity?.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_UNSPECIFIED)
         }
     }
 
@@ -122,6 +120,7 @@ fun TerminalScreen(
 
     val colorTheme by viewModel.terminalColorTheme.collectAsStateWithLifecycle()
     val terminalFont by viewModel.terminalFont.collectAsStateWithLifecycle()
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     if (showQuickSettings) {
         // Pass the screen's viewModel explicitly so QuickSettingsDialog uses
@@ -154,11 +153,7 @@ fun TerminalScreen(
             title = stringResource(R.string.terminal_title),
             navigationIcon = {
                 IconButton(onClick = {
-                    val imm = context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
-                        as android.view.inputmethod.InputMethodManager
-                    (context as? Activity)?.currentFocus?.let {
-                        imm.hideSoftInputFromWindow(it.windowToken, 0)
-                    }
+                    keyboardController?.hide()
                     onNavigateBack()
                 }) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))

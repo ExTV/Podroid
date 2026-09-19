@@ -1,6 +1,5 @@
 package com.excp.podroid.ui.screens.terminal
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -11,17 +10,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -34,6 +33,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -42,6 +42,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -61,10 +62,12 @@ import com.excp.podroid.ui.components.PodroidListRow
 import com.excp.podroid.ui.components.PodroidSectionLabel
 import com.excp.podroid.ui.components.PodroidSwitch
 import com.excp.podroid.ui.theme.PodroidTokens
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
- * Quick Settings: minimal top-anchored sheet. Shows a few items per section
+ * Quick Settings: minimal bottom sheet. Shows a few items per section
  * with ghost buttons that open full pickers (with search) on demand.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -84,8 +87,15 @@ internal fun QuickSettingsDialog(
     viewModel: TerminalViewModel,
 ) {
     var bump by remember { mutableIntStateOf(0) }
-    val themes = remember(bump) { viewModel.listAvailableThemes() }
-    val fonts  = remember(bump) { viewModel.listAvailableFonts() }
+    // listAvailableThemes/Fonts read the appearance store's directories; keep
+    // that file I/O off the composition/main thread, with an empty list shown
+    // until the real result arrives.
+    val themes by produceState(initialValue = emptyList<String>(), bump) {
+        value = withContext(Dispatchers.IO) { viewModel.listAvailableThemes() }
+    }
+    val fonts by produceState(initialValue = emptyList<String>(), bump) {
+        value = withContext(Dispatchers.IO) { viewModel.listAvailableFonts() }
+    }
 
     var showThemePicker by remember { mutableStateOf(false) }
     var showFontPicker  by remember { mutableStateOf(false) }
@@ -172,137 +182,99 @@ internal fun QuickSettingsDialog(
         )
     }
 
-    // ── The top-anchored drawer ────────────────────────────────────
-    androidx.compose.ui.window.Dialog(
-        onDismissRequest = onDismiss,
-        properties = androidx.compose.ui.window.DialogProperties(
-            usePlatformDefaultWidth = false,
-            dismissOnBackPress = true,
-            dismissOnClickOutside = true,
-        ),
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            val windowInfo = androidx.compose.ui.platform.LocalWindowInfo.current
-            val density = androidx.compose.ui.platform.LocalDensity.current
-            val maxSheetHeight = with(density) {
-                (windowInfo.containerSize.height * 0.92f).toInt().toDp()
-            }
-            androidx.compose.material3.Surface(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .fillMaxWidth()
-                    .heightIn(max = maxSheetHeight),
-                shape = RoundedCornerShape(bottomStart = PodroidTokens.Radius.Sheet, bottomEnd = PodroidTokens.Radius.Sheet),
-                color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                tonalElevation = 0.dp,
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = PodroidTokens.Spacing.LG)
-                        .padding(top = PodroidTokens.Spacing.SM, bottom = PodroidTokens.Spacing.MD),
-                ) {
-                    // Drag handle
-                    Box(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = PodroidTokens.Spacing.XS),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(width = 32.dp, height = 3.dp)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(MaterialTheme.colorScheme.onSurfaceVariant),
-                        )
-                    }
-
-                    // Header
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            stringResource(R.string.settings),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.weight(1f),
-                        )
-                        IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close))
-                        }
-                    }
-
-                    PodroidSectionLabel(stringResource(R.string.display_section))
-
-                    // Size slider: sliding doesn't dismiss (you want to adjust),
-                    // but releasing the thumb does (matches the "any interaction
-                    // closes the drawer" rule).
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().padding(vertical = PodroidTokens.Spacing.SM),
-                    ) {
-                        Text(
-                            stringResource(R.string.size_label),
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.width(56.dp),
-                        )
-                        Slider(
-                            value = fontSize.toFloat(),
-                            onValueChange = { v ->
-                                val rounded = v.toInt()
-                                if (rounded != fontSize) onFontSizeChange(rounded)
-                            },
-                            onValueChangeFinished = onDismiss,
-                            // Shared with pinch-to-zoom so the two can't disagree.
-                            valueRange = TerminalViewModel.MIN_FONT_SIZE.toFloat()..TerminalViewModel.MAX_FONT_SIZE.toFloat(),
-                            modifier = Modifier.weight(1f),
-                        )
-                        Text(
-                            "$fontSize",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.width(36.dp),
-                            textAlign = TextAlign.End,
-                        )
-                    }
-
-                    // Theme + Font: full-width ghost buttons so they read as
-                    // actions, not list rows. Picker's onPick already calls
-                    // onDismiss to close the drawer.
-                    Spacer(Modifier.height(PodroidTokens.Spacing.SM))
-                    PodroidGhostButton(
-                        text = stringResource(R.string.theme_with_value, prettyName(colorTheme)),
-                        onClick = { showThemePicker = true },
-                    )
-                    Spacer(Modifier.height(PodroidTokens.Spacing.SM))
-                    PodroidGhostButton(
-                        text = stringResource(R.string.font_with_value, prettyName(terminalFont)),
-                        onClick = { showFontPicker = true },
-                    )
-
-                    PodroidSectionLabel(stringResource(R.string.input_section))
-
-                    // Toggles: flipping any of these dismisses the drawer
-                    // immediately so the terminal is unblocked.
-                    PodroidListRow(
-                        label = stringResource(R.string.extra_keys),
-                        rightSlot = {
-                            PodroidSwitch(
-                                checked = showExtraKeys,
-                                onCheckedChange = { onToggleExtraKeys(it); onDismiss() },
-                            )
-                        },
-                    )
-                    PodroidListRow(
-                        label = stringResource(R.string.haptics),
-                        rightSlot = {
-                            PodroidSwitch(
-                                checked = hapticsEnabled,
-                                onCheckedChange = { onToggleHaptics(it); onDismiss() },
-                            )
-                        },
-                        divider = false,
-                    )
+    // ── The settings sheet ──────────────────────────────────────────
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = PodroidTokens.Spacing.LG)
+                .padding(bottom = PodroidTokens.Spacing.MD),
+        ) {
+            // Header
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(R.string.settings),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close))
                 }
             }
+
+            PodroidSectionLabel(stringResource(R.string.display_section))
+
+            // Size slider: sliding doesn't dismiss (you want to adjust),
+            // but releasing the thumb does (matches the "any interaction
+            // closes the drawer" rule).
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(vertical = PodroidTokens.Spacing.SM),
+            ) {
+                Text(
+                    stringResource(R.string.size_label),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.width(56.dp),
+                )
+                Slider(
+                    value = fontSize.toFloat(),
+                    onValueChange = { v ->
+                        val rounded = v.toInt()
+                        if (rounded != fontSize) onFontSizeChange(rounded)
+                    },
+                    onValueChangeFinished = onDismiss,
+                    // Shared with pinch-to-zoom so the two can't disagree.
+                    valueRange = TerminalViewModel.MIN_FONT_SIZE.toFloat()..TerminalViewModel.MAX_FONT_SIZE.toFloat(),
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    "$fontSize",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.width(36.dp),
+                    textAlign = TextAlign.End,
+                )
+            }
+
+            // Theme + Font: full-width ghost buttons so they read as
+            // actions, not list rows. Picker's onPick already calls
+            // onDismiss to close the drawer.
+            Spacer(Modifier.height(PodroidTokens.Spacing.SM))
+            PodroidGhostButton(
+                text = stringResource(R.string.theme_with_value, prettyName(colorTheme)),
+                onClick = { showThemePicker = true },
+            )
+            Spacer(Modifier.height(PodroidTokens.Spacing.SM))
+            PodroidGhostButton(
+                text = stringResource(R.string.font_with_value, prettyName(terminalFont)),
+                onClick = { showFontPicker = true },
+            )
+
+            PodroidSectionLabel(stringResource(R.string.input_section))
+
+            // Toggles: flipping any of these dismisses the drawer
+            // immediately so the terminal is unblocked.
+            PodroidListRow(
+                label = stringResource(R.string.extra_keys),
+                rightSlot = {
+                    PodroidSwitch(
+                        checked = showExtraKeys,
+                        onCheckedChange = { onToggleExtraKeys(it); onDismiss() },
+                    )
+                },
+            )
+            PodroidListRow(
+                label = stringResource(R.string.haptics),
+                rightSlot = {
+                    PodroidSwitch(
+                        checked = hapticsEnabled,
+                        onCheckedChange = { onToggleHaptics(it); onDismiss() },
+                    )
+                },
+                divider = false,
+            )
         }
     }
 }
@@ -321,8 +293,11 @@ private fun ThemeSwatch(
     onLongClick: (() -> Unit)?,
     viewModel: TerminalViewModel,
 ) {
-    val colors = remember(name) {
-        viewModel.peekThemeColors(name) ?: (0xFF101010.toInt() to 0xFFE0E0E0.toInt())
+    val placeholderColors = remember { 0xFF101010.toInt() to 0xFFE0E0E0.toInt() }
+    val colors by produceState(initialValue = placeholderColors, name) {
+        value = withContext(Dispatchers.IO) {
+            viewModel.peekThemeColors(name) ?: placeholderColors
+        }
     }
     SwatchBox(
         selected = selected,
@@ -359,7 +334,9 @@ private fun FontSwatch(
     onLongClick: (() -> Unit)?,
     viewModel: TerminalViewModel,
 ) {
-    val typeface = remember(name) { viewModel.loadFont(name) }
+    val typeface by produceState<android.graphics.Typeface?>(initialValue = null, name) {
+        value = withContext(Dispatchers.IO) { viewModel.loadFont(name) }
+    }
     val previewColor = MaterialTheme.colorScheme.onSurface.toArgb()
     SwatchBox(
         selected = selected,
@@ -430,7 +407,7 @@ private fun AddSwatch(
  * buttons: search field + grid of preview swatches. Long-press a custom item
  * to delete it.
  */
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun FullPickerDialog(
     title: String,
@@ -451,62 +428,55 @@ private fun FullPickerDialog(
         if (query.isBlank()) items
         else items.filter { it.contains(query, ignoreCase = true) }
     }
-    androidx.compose.ui.window.Dialog(
-        onDismissRequest = onDismiss,
-        properties = androidx.compose.ui.window.DialogProperties(
-            usePlatformDefaultWidth = false,
-        ),
-    ) {
-        androidx.compose.material3.Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.92f)
-                .padding(8.dp),
-            shape = RoundedCornerShape(PodroidTokens.Radius.Sheet),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-            tonalElevation = 0.dp,
-            color = MaterialTheme.colorScheme.surface,
-        ) {
-            Column(modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp, vertical = 12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(title, style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.weight(1f))
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close))
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f))
+                IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close))
+                }
+            }
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                placeholder = { Text(stringResource(R.string.search_n_items, items.size)) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            // Single scroll surface, bounded by whatever room the sheet actually
+            // has left after the header/search field above (not a fraction of max
+            // height): the dialog-era fixed-height Column + inner verticalScroll
+            // put the viewport's bottom outside the sheet's visible area, so the
+            // trailing chip could never be scrolled into view, and once the inner
+            // scroll bottomed out, leftover drag delta went to the sheet's own
+            // nested-scroll connection and replayed a settle animation on every
+            // swipe near the end. A lazy grid also avoids composing all N chips
+            // (each with its own produceState file read) up front.
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 104.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().weight(1f),
+            ) {
+                items(filtered, key = { it }) { name ->
+                    val custom = isCustom(name)
+                    Box(contentAlignment = Alignment.Center) {
+                        renderChip(
+                            name,
+                            name == selected,
+                            { onPick(name) },
+                            if (custom) ({ onLongPressCustom(name) }) else null,
+                        )
                     }
                 }
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    placeholder = { Text(stringResource(R.string.search_n_items, items.size)) },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Box(modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState())) {
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        filtered.forEach { name ->
-                            val custom = isCustom(name)
-                            renderChip(
-                                name,
-                                name == selected,
-                                { onPick(name) },
-                                if (custom) ({ onLongPressCustom(name) }) else null,
-                            )
-                        }
-                        extraTrailingChip()
-                    }
+                item(key = "__extra_trailing__") {
+                    Box(contentAlignment = Alignment.Center) { extraTrailingChip() }
                 }
             }
         }

@@ -151,6 +151,16 @@ fun X11Screen(
             ctrl.show(WindowInsetsCompat.Type.systemBars())
         }
     }
+    // Belt-and-braces: force the system bars back on when this screen goes
+    // away, so a future navigation path that bypasses Back (and therefore the
+    // fullscreen-exit LaunchedEffect above) can't strand the next screen with
+    // hidden bars.
+    DisposableEffect(Unit) {
+        onDispose {
+            val window = activity?.window ?: return@onDispose
+            WindowInsetsControllerCompat(window, view).show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
 
     // Keep the display awake while the X11 viewer is open, matching the
     // terminal (TerminalScreen adds the same flag). The VM-lifetime WakeLock in

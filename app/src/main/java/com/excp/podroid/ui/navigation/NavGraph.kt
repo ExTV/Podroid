@@ -1,9 +1,14 @@
 package com.excp.podroid.ui.navigation
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
 import androidx.activity.compose.LocalActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -44,10 +49,19 @@ fun PodroidNavGraph(
     // Scoped to PodroidNavGraph composable — survives all navigation including popUpTo(0)
     val terminalViewModel: TerminalViewModel = hiltViewModel()
 
+    if (isSetupDone == null) {
+        // isSetupDone starts null on every fresh composition (e.g. the
+        // activity.recreate() a language change triggers) until the flow's
+        // first value arrives. Paint the themed background instead of
+        // returning with nothing composed, so that frame doesn't flash an
+        // empty window.
+        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
+        return
+    }
+
     val startDestination = when (isSetupDone) {
         true  -> Routes.HOME
-        false -> Routes.SETUP
-        null  -> return
+        else  -> Routes.SETUP
     }
 
     NavHost(

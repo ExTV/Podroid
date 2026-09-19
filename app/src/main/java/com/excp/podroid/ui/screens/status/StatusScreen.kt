@@ -1,5 +1,6 @@
 package com.excp.podroid.ui.screens.status
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.excp.podroid.R
@@ -112,7 +114,19 @@ fun StatusScreen(
                 PodroidSectionLabel(stringResource(R.string.status_vm_section))
                 PodroidListRow(
                     label = stringResource(R.string.vm_status),
-                    value = vmStatusLabel(ui.vmState, ui.uptimeLabel),
+                    rightSlot = {
+                        AnimatedContent(
+                            targetState = vmStatusLabel(ui.vmState, ui.uptimeLabel),
+                            label = "status_vm_status",
+                        ) { text ->
+                            Text(
+                                text = text,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.End,
+                            )
+                        }
+                    },
                 )
                 PodroidListRow(
                     label = stringResource(R.string.backend),

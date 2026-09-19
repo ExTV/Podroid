@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Matches PodroidDarkBg in ui/theme/Color.kt: the launch window must not
+         flash a color the Compose dark scheme doesn't use. -->
+    <color name="window_background">#FF0A0A0A</color>
+</resources>

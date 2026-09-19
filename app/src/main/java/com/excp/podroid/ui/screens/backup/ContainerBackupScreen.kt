@@ -1,6 +1,5 @@
 package com.excp.podroid.ui.screens.backup
 
-import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -18,12 +17,15 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -36,6 +38,7 @@ import com.excp.podroid.ui.components.PodroidPrimaryButton
 import com.excp.podroid.ui.components.PodroidSectionLabel
 import com.excp.podroid.ui.components.PodroidTopBar
 import com.excp.podroid.ui.theme.PodroidTokens
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,7 +48,9 @@ fun ContainerBackupScreen(
     viewModel: ContainerBackupViewModel = hiltViewModel(),
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val copiedMessage = stringResource(R.string.container_backup_copied)
 
     Scaffold(
         topBar = {
@@ -58,6 +63,7 @@ fun ContainerBackupScreen(
                 },
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { innerPadding ->
         AdaptiveContainer(
             windowSizeClass = windowSizeClass,
@@ -117,7 +123,7 @@ fun ContainerBackupScreen(
                     text = stringResource(R.string.container_backup_copy_export),
                     onClick = {
                         if (viewModel.copyExportCommand()) {
-                            Toast.makeText(context, context.getString(R.string.container_backup_copied), Toast.LENGTH_SHORT).show()
+                            scope.launch { snackbarHostState.showSnackbar(copiedMessage) }
                         }
                     },
                     enabled = ui.containerName.isNotBlank(),
@@ -136,7 +142,7 @@ fun ContainerBackupScreen(
                     text = stringResource(R.string.container_backup_copy_save),
                     onClick = {
                         if (viewModel.copySaveCommand()) {
-                            Toast.makeText(context, context.getString(R.string.container_backup_copied), Toast.LENGTH_SHORT).show()
+                            scope.launch { snackbarHostState.showSnackbar(copiedMessage) }
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -147,7 +153,7 @@ fun ContainerBackupScreen(
                     text = stringResource(R.string.container_backup_copy_list),
                     onClick = {
                         viewModel.copyListCommand()
-                        Toast.makeText(context, context.getString(R.string.container_backup_copied), Toast.LENGTH_SHORT).show()
+                        scope.launch { snackbarHostState.showSnackbar(copiedMessage) }
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -155,7 +161,7 @@ fun ContainerBackupScreen(
                     text = stringResource(R.string.container_backup_copy_all),
                     onClick = {
                         viewModel.copyAllCommand()
-                        Toast.makeText(context, context.getString(R.string.container_backup_copied), Toast.LENGTH_SHORT).show()
+                        scope.launch { snackbarHostState.showSnackbar(copiedMessage) }
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -174,7 +180,13 @@ fun ContainerBackupScreen(
                     onClick = viewModel::refresh,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                if (ui.backupFiles.isEmpty()) {
+                if (ui.backupListError) {
+                    Text(
+                        text = stringResource(R.string.container_backup_list_error),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                } else if (ui.backupFiles.isEmpty()) {
                     Text(
                         text = stringResource(R.string.container_backup_none),
                         style = MaterialTheme.typography.bodyMedium,
