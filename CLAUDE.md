@@ -233,7 +233,7 @@ In `QemuEngine.buildCommand()`: `tcg,thread=multi`, larger `tb-size` for ≥2GB 
 
 ## VM migration / upgrades (how the guest updates without a reset)
 
-Asset extraction readiness fails if any bundled asset cannot be extracted, so `PodroidService` aborts startup rather than booting a mixed asset set. Extraction retries on the next app process launch; temporary-file cleanup targets only known asset destinations. Resource chips keep an existing RAM/storage selection visible when device filtering yields no fitting options, so low-memory devices do not lose their saved configuration.
+Asset extraction readiness fails if any bundled asset cannot be extracted, so `PodroidService` aborts startup rather than booting a mixed asset set. Extraction retries on the next app process launch; temporary-file cleanup targets only known asset destinations.
 
 The guest system layer updates across app versions with **no VM reset and no data loss**, on both backends. The machinery:
 

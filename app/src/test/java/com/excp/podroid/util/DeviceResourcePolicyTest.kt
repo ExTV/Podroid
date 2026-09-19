@@ -39,7 +39,8 @@ class DeviceResourcePolicyTest {
 
     @Test
     fun ramOptionsFor_capsToLeaveHeadroomForAndroid() {
-        // 6 GB device: only options <= 3072 MB fit.
+        // 6 GB device: only options <= 3072 MB fit, but the floor guarantees
+        // at least the first three options anyway.
         assertEquals(listOf(512, 1024, 2048), DeviceResourcePolicy.ramOptionsFor(6_144))
     }
 
@@ -49,16 +50,8 @@ class DeviceResourcePolicyTest {
     }
 
     @Test
-    fun ramOptionsFor_doesNotAdvertiseOptionsAboveCapacity() {
-        assertEquals(listOf(512, 1024), DeviceResourcePolicy.ramOptionsFor(4_096))
-        assertEquals(emptyList<Int>(), DeviceResourcePolicy.ramOptionsFor(2_048))
-    }
-
-    @Test
-    fun withCurrentOption_keepsExistingSelectionWhenFilteredOptionsAreEmpty() {
-        assertEquals(listOf(512), DeviceResourcePolicy.withCurrentOption(emptyList(), 512))
-        assertEquals(listOf(2, 4), DeviceResourcePolicy.withCurrentOption(listOf(2, 4), 4))
-        assertEquals(listOf(2, 4, 8), DeviceResourcePolicy.withCurrentOption(listOf(2, 4), 8))
+    fun ramOptionsFor_neverDropsBelowThreeOptions() {
+        assertEquals(listOf(512, 1024, 2048), DeviceResourcePolicy.ramOptionsFor(2_048))
     }
 
     @Test
@@ -72,8 +65,7 @@ class DeviceResourcePolicyTest {
     }
 
     @Test
-    fun storageOptionsFor_doesNotAdvertiseOptionsAboveCapacity() {
-        assertEquals(listOf(2, 4), DeviceResourcePolicy.storageOptionsFor(5))
-        assertEquals(emptyList<Int>(), DeviceResourcePolicy.storageOptionsFor(1))
+    fun storageOptionsFor_neverDropsBelowThreeOptions() {
+        assertEquals(listOf(2, 4, 8), DeviceResourcePolicy.storageOptionsFor(1))
     }
 }
