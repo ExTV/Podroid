@@ -26,7 +26,19 @@ class ContainerStatsRepository @Inject constructor(
     suspend fun readContainerCount(): Int? {
         val file = statsFile()
         val text = withContext(Dispatchers.IO) {
-            if (file.isFile) file.readText() else null
+            if (!file.isFile) return@withContext null
+            try {
+                file.readText()
+            } catch (e: java.io.IOException) {
+                // isFile can succeed (stat) while the read still fails, e.g. no
+                // all-files access to the shared Downloads dir (EACCES). Fall
+                // back to the cached count instead of crashing the caller.
+                android.util.Log.w("ContainerStatsRepository", "failed to read $file", e)
+                null
+            } catch (e: SecurityException) {
+                android.util.Log.w("ContainerStatsRepository", "failed to read $file", e)
+                null
+            }
         } ?: return settingsRepository.getLastContainerCount()
         val parsed = text.trim().toIntOrNull() ?: return settingsRepository.getLastContainerCount()
         settingsRepository.setLastContainerCount(parsed)
