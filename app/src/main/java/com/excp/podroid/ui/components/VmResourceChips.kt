@@ -39,9 +39,10 @@ fun VmRamChips(
             ),
         )
         val totalRamMb = DeviceResourcePolicy.deviceTotalRamMb(LocalContext.current)
-        val ramOptions = DeviceResourcePolicy.ramOptionsFor(totalRamMb).let { options ->
-            if (currentMb in options) options else options + currentMb
-        }
+        val ramOptions = DeviceResourcePolicy.withCurrentOption(
+            DeviceResourcePolicy.ramOptionsFor(totalRamMb),
+            currentMb,
+        )
         FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(PodroidTokens.Spacing.SM),
@@ -140,9 +141,10 @@ fun VmStorageChips(
             ),
         )
         val availableGb = DeviceResourcePolicy.deviceAvailableStorageGb(LocalContext.current)
-        val storageOptions = DeviceResourcePolicy.storageOptionsFor(availableGb).let { options ->
-            if (currentGb in options) options else options + currentGb
-        }
+        val storageOptions = DeviceResourcePolicy.withCurrentOption(
+            DeviceResourcePolicy.storageOptionsFor(availableGb),
+            currentGb,
+        )
         FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(PodroidTokens.Spacing.SM),
@@ -219,7 +221,6 @@ fun VmBandwidthChips(
     }
 }
 
-@Composable
 private fun formatRam(mb: Int): String =
     if (mb >= 1024) "${mb / 1024} GB" else "$mb MB"
 

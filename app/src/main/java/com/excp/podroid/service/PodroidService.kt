@@ -395,7 +395,7 @@ class PodroidService : Service() {
                 } catch (c: CancellationException) {
                     throw c // a stop/teardown cancelled this launch; not a start failure
                 } catch (e: Exception) {
-                    Log.e(TAG, "QEMU failed to start", e)
+                    Log.e(TAG, "VM failed to start", e)
                     // A Service-side throw here (failed asset extraction, a
                     // snapshot read, or engine.start()) can happen before the
                     // engine state ever leaves Idle. In that window the shutdown

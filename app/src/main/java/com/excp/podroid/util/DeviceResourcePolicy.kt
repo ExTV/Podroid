@@ -38,20 +38,19 @@ object DeviceResourcePolicy {
         return (stat.availableBytes / (1024L * 1024 * 1024)).toInt()
     }
 
-    /** RAM options that fit the device, leaving ~3 GB for Android. Always at
-     * least the first three options, so small devices still get a usable list. */
+    /** RAM options that fit the device, leaving ~3 GB for Android. */
     fun ramOptionsFor(totalRamMb: Long): List<Int> {
         val cap = totalRamMb - 3072
-        val filtered = RAM_OPTIONS_MB.filter { it <= cap }
-        return if (filtered.size >= 3) filtered else RAM_OPTIONS_MB.take(3)
+        return RAM_OPTIONS_MB.filter { it <= cap }
     }
 
-    /** Storage options that fit the device's free app-private space. Always at
-     * least the first three options, so small devices still get a usable list. */
-    fun storageOptionsFor(availableGb: Int): List<Int> {
-        val filtered = STORAGE_OPTIONS_GB.filter { it <= availableGb }
-        return if (filtered.size >= 3) filtered else STORAGE_OPTIONS_GB.take(3)
-    }
+    /** Storage options that fit the device's free app-private space. */
+    fun storageOptionsFor(availableGb: Int): List<Int> =
+        STORAGE_OPTIONS_GB.filter { it <= availableGb }
+
+    /** Keeps an existing setting selectable even when device filtering returns no options. */
+    fun withCurrentOption(options: List<Int>, current: Int): List<Int> =
+        if (current in options) options else options + current
 
     fun nearestAtMost(options: List<Int>, target: Int): Int =
         options.filter { it <= target }.maxOrNull() ?: options.first()

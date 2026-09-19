@@ -233,6 +233,8 @@ In `QemuEngine.buildCommand()`: `tcg,thread=multi`, larger `tb-size` for ≥2GB 
 
 ## VM migration / upgrades (how the guest updates without a reset)
 
+Asset extraction readiness fails if any bundled asset cannot be extracted, so `PodroidService` aborts startup rather than booting a mixed asset set. Extraction retries on the next app process launch; temporary-file cleanup targets only known asset destinations. Resource chips keep an existing RAM/storage selection visible when device filtering yields no fitting options, so low-memory devices do not lose their saved configuration.
+
 The guest system layer updates across app versions with **no VM reset and no data loss**, on both backends. The machinery:
 
 - **Plain overlay (never re-add metacopy/index/redirect).** `init-podroid` mounts the rootfs overlay as `lowerdir=/mnt/lower,upperdir=/mnt/persist/upper,workdir=/mnt/persist/work` only. Plain overlayfs tolerates a swapped lower, so a new squashfs (re-extracted by `PodroidApplication` on every update) goes live on the next boot while the persistent upper is preserved. **Do not re-add `metacopy=on`/`index=on`/`redirect_dir=on`** - they bind the upper to a specific lower and reintroduce the corruption-on-update bug (the whole reason resets used to be needed).
