@@ -27,6 +27,13 @@ data class ContainerBackupFile(
 class ContainerBackupRepository @Inject constructor() {
     companion object {
         const val BACKUP_SUBDIR = "Podroid/backups"
+
+        internal fun ensureBackupDirectory(dir: File): Boolean = runCatching {
+            if (!dir.isDirectory) dir.mkdirs()
+            // Recheck even if mkdirs returned false: another caller may have
+            // created the directory. An existing regular file is not usable.
+            dir.isDirectory
+        }.getOrDefault(false)
     }
 
     fun backupDirectory(): File {
@@ -46,7 +53,7 @@ class ContainerBackupRepository @Inject constructor() {
         // 9p/virtio-9p mount. Nothing else creates this dir, so without it every
         // backup would fall back to the guest-internal path and never surface in
         // Downloads.
-        return runCatching { dir.exists() || dir.mkdirs() }.getOrDefault(false)
+        return ensureBackupDirectory(dir)
     }
 
     fun listBackupFiles(): List<ContainerBackupFile> {
