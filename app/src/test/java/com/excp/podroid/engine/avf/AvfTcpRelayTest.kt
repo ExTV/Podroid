@@ -16,11 +16,14 @@ import java.net.ServerSocket
 import java.net.Socket
 
 class AvfTcpRelayTest {
+    private val noOpLog: (String, Throwable?) -> Unit = { _, _ -> }
+
     @Test
     fun request_half_close_still_delivers_delayed_reply() = runBlocking {
         val pair = RelaySockets.open()
         val relay = BidirectionalRelay(
             SocketRelayEndpoint(pair.left.endpoint),
+            log = noOpLog,
         )
         val right = SocketRelayEndpoint(pair.right.endpoint)
         assertTrue(relay.attach(right))
@@ -57,7 +60,10 @@ class AvfTcpRelayTest {
     @Test
     fun both_directions_can_half_close_symmetrically() = runBlocking {
         val pair = RelaySockets.open()
-        val relay = BidirectionalRelay(SocketRelayEndpoint(pair.left.endpoint))
+        val relay = BidirectionalRelay(
+            SocketRelayEndpoint(pair.left.endpoint),
+            log = noOpLog,
+        )
         assertTrue(relay.attach(SocketRelayEndpoint(pair.right.endpoint)))
         val job = launch(Dispatchers.Default) { relay.run() }
         try {
@@ -83,7 +89,10 @@ class AvfTcpRelayTest {
     @Test
     fun external_abort_closes_both_idle_sockets() = runBlocking {
         val pair = RelaySockets.open()
-        val relay = BidirectionalRelay(SocketRelayEndpoint(pair.left.endpoint))
+        val relay = BidirectionalRelay(
+            SocketRelayEndpoint(pair.left.endpoint),
+            log = noOpLog,
+        )
         assertTrue(relay.attach(SocketRelayEndpoint(pair.right.endpoint)))
         val job = launch(Dispatchers.Default) { relay.run() }
         try {
@@ -101,7 +110,10 @@ class AvfTcpRelayTest {
     @Test
     fun cancellation_closes_both_idle_sockets() = runBlocking {
         val pair = RelaySockets.open()
-        val relay = BidirectionalRelay(SocketRelayEndpoint(pair.left.endpoint))
+        val relay = BidirectionalRelay(
+            SocketRelayEndpoint(pair.left.endpoint),
+            log = noOpLog,
+        )
         assertTrue(relay.attach(SocketRelayEndpoint(pair.right.endpoint)))
         val job = launch(Dispatchers.Default) { relay.run() }
         try {
@@ -118,7 +130,10 @@ class AvfTcpRelayTest {
     @Test
     fun hard_peer_error_aborts_the_other_side() = runBlocking {
         val pair = RelaySockets.open()
-        val relay = BidirectionalRelay(SocketRelayEndpoint(pair.left.endpoint))
+        val relay = BidirectionalRelay(
+            SocketRelayEndpoint(pair.left.endpoint),
+            log = noOpLog,
+        )
         assertTrue(relay.attach(SocketRelayEndpoint(pair.right.endpoint)))
         val job = launch(Dispatchers.Default) { relay.run() }
         try {
