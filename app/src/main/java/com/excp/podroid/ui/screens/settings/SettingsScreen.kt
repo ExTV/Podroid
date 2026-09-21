@@ -343,14 +343,19 @@ fun SettingsScreen(
                     // Annotate, don't disable: the user may grant AVF permissions
                     // later, so the chip stays selectable while explaining why the
                     // VM is actually running on QEMU right now.
-                    if (ui.engineSelection == EngineSelection.AVF && backendFallback != null) {
-                        Spacer(Modifier.height(PodroidTokens.Spacing.XS))
-                        Text(
-                            text = stringResource(R.string.backend_avf_unavailable, backendFallback ?: ""),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(horizontal = PodroidTokens.Spacing.MD),
-                        )
+                    if (ui.engineSelection == EngineSelection.AVF) {
+                        backendFallback?.let { reasonResId ->
+                            Spacer(Modifier.height(PodroidTokens.Spacing.XS))
+                            Text(
+                                text = stringResource(
+                                    R.string.backend_avf_unavailable,
+                                    stringResource(reasonResId),
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(horizontal = PodroidTokens.Spacing.MD),
+                            )
+                        }
                     }
                     Spacer(Modifier.height(PodroidTokens.Spacing.MD))
                     AdvancedFieldsBlock(

@@ -4,8 +4,11 @@
  */
 package com.excp.podroid.engine
 
+import com.excp.podroid.R
 import com.excp.podroid.engine.EngineHolder.Companion.FallbackReason
 import com.excp.podroid.engine.EngineHolder.Companion.decideBackend
+import com.excp.podroid.engine.EngineHolder.Companion.fallbackReasonResId
+import com.excp.podroid.engine.avf.AvfReport
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -85,4 +88,64 @@ class EngineHolderDecideBackendTest {
         assertEquals("qemu", backendId)
         assertEquals(FallbackReason.PROTECTED_ONLY, reason)
     }
+
+    @Test
+    fun `protected-only fallback maps to its dedicated resource`() {
+        assertEquals(
+            R.string.backend_fallback_reason_protected_only,
+            fallbackReasonResId(
+                FallbackReason.PROTECTED_ONLY,
+                report(featureSupported = false),
+            ),
+        )
+    }
+
+    @Test
+    fun `unavailable fallback reports the missing feature first`() {
+        assertEquals(
+            R.string.backend_fallback_reason_feature,
+            fallbackReasonResId(
+                FallbackReason.UNAVAILABLE,
+                report(featureSupported = false),
+            ),
+        )
+    }
+
+    @Test
+    fun `unavailable fallback reports missing permissions before service`() {
+        assertEquals(
+            R.string.backend_fallback_reason_permissions,
+            fallbackReasonResId(
+                FallbackReason.UNAVAILABLE,
+                report(managePermissionGranted = false, serviceReachable = false),
+            ),
+        )
+    }
+
+    @Test
+    fun `unavailable fallback reports service when prerequisites are present`() {
+        assertEquals(
+            R.string.backend_fallback_reason_service,
+            fallbackReasonResId(
+                FallbackReason.UNAVAILABLE,
+                report(serviceReachable = false),
+            ),
+        )
+    }
+
+    private fun report(
+        featureSupported: Boolean = true,
+        managePermissionGranted: Boolean = true,
+        customPermissionGranted: Boolean = true,
+        serviceReachable: Boolean = true,
+    ) = AvfReport(
+        featureSupported = featureSupported,
+        managePermissionGranted = managePermissionGranted,
+        customPermissionGranted = customPermissionGranted,
+        virtApexPresent = true,
+        managerClassPresent = true,
+        serviceReachable = serviceReachable,
+        customVmConfigSupported = true,
+        smokeTestResult = null,
+    )
 }
