@@ -18,21 +18,51 @@ import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.annotation.RequiresApi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Semaphore
-import java.io.InputStream
-import java.io.OutputStream
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketException
+import java.util.concurrent.atomic.AtomicBoolean
+
+/**
+ * Owns the resources acquired for one accepted connection until its coroutine
+ * completes, including the case where cancellation wins before the body starts.
+ */
+internal class RelayJobCompletion(
+    private val abort: () -> Unit,
+    private val remove: () -> Unit,
+    private val release: () -> Unit,
+) {
+    private val completed = AtomicBoolean(false)
+
+    fun attach(job: Job) {
+        job.invokeOnCompletion { cleanup() }
+    }
+
+    fun cleanup() {
+        if (!completed.compareAndSet(false, true)) return
+        try {
+            abort()
+        } finally {
+            try {
+                remove()
+            } finally {
+                release()
+            }
+        }
+    }
+}
 
 @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
 class VsockPortForwarder(
@@ -60,14 +90,17 @@ class VsockPortForwarder(
     }
 
     private var server: ServerSocket? = null
+    private var acceptCancellationWatcher: Job? = null
     // Parent of every per-connection coroutine so close() cancels them all at
     // once and completed connections don't accumulate Job references for the
     // forwarder's lifetime (the old plain list never removed finished jobs).
-    private val connections = SupervisorJob()
+    private val connections = SupervisorJob(scope.coroutineContext[Job])
     private var acceptJob: Job? = null
-    // Live client sockets — force-closed in close() so a pump blocked in a
-    // native read() unblocks (cancel() alone can't interrupt a blocking read).
-    private val openSockets = java.util.Collections.synchronizedSet(mutableSetOf<Socket>())
+    // Registration happens before the synchronous framework connectVsock call.
+    // A close can therefore abort the TCP side immediately and reject a raw
+    // vsock endpoint returned after that call races with close().
+    private val lifecycleLock = Any()
+    private val activeRelays = mutableSetOf<BidirectionalRelay>()
     // Caps concurrent in-flight proxy() coroutines so an accept burst can't
     // exhaust fds/coroutines. tryAcquire (non-suspending) keeps the accept loop
     // hot: when the cap is hit we drop the new connection immediately rather than
@@ -77,76 +110,118 @@ class VsockPortForwarder(
 
     override fun start() {
         val s = ServerSocket(hostPort, /* backlog */ 16, InetAddress.getByName(bindAddress))
-        server = s
-        Log.d(TAG, "listening on $bindAddress:$hostPort → vsock:$guestVsockPort")
-        // The accept loop blocks on ServerSocket.accept() for the forwarder's
-        // whole lifetime, so it runs on the shared AvfForwarderDispatcher
-        // rather than the 64-thread-capped Dispatchers.IO (see its doc).
-        acceptJob = AvfForwarderDispatcher.launch(scope) {
-            while (!closed) {
-                val client = try { s.accept() } catch (_: SocketException) { break }
-                if (!inflight.tryAcquire()) {
-                    Log.w(TAG, "inflight cap ($MAX_INFLIGHT) reached on :$hostPort; dropping connection")
-                    runCatching { client.close() }
-                    continue
+        synchronized(lifecycleLock) {
+            if (closed) {
+                runCatching { s.close() }
+                return
+            }
+            // Publish the listener under the same lock close() uses. Otherwise
+            // close() can observe null, return, and leave this socket behind.
+            server = s
+            Log.d(TAG, "listening on $bindAddress:$hostPort → vsock:$guestVsockPort")
+            // The accept loop blocks on ServerSocket.accept() for the forwarder's
+            // whole lifetime, so it runs on the shared AvfForwarderDispatcher
+            // rather than the 64-thread-capped Dispatchers.IO (see its doc).
+            val accept = AvfForwarderDispatcher.launch(scope) {
+                while (!closed) {
+                    currentCoroutineContext().ensureActive()
+                    val client = try { s.accept() } catch (_: SocketException) { break }
+                    try {
+                        currentCoroutineContext().ensureActive()
+                    } catch (e: CancellationException) {
+                        runCatching { client.close() }
+                        throw e
+                    }
+                    if (!inflight.tryAcquire()) {
+                        Log.w(TAG, "inflight cap ($MAX_INFLIGHT) reached on :$hostPort; dropping connection")
+                        runCatching { client.close() }
+                        continue
+                    }
+
+                    val relay = BidirectionalRelay(SocketRelayEndpoint(client))
+                    val registered = synchronized(lifecycleLock) {
+                        if (closed) {
+                            false
+                        } else {
+                            activeRelays.add(relay)
+                            true
+                        }
+                    }
+                    if (!registered) {
+                        relay.abort()
+                        inflight.release()
+                        continue
+                    }
+                    val completion = RelayJobCompletion(
+                        abort = relay::abort,
+                        remove = { synchronized(lifecycleLock) { activeRelays.remove(relay) } },
+                        release = inflight::release,
+                    )
+                    val connection = try {
+                        // Lazy start closes the registration window: the
+                        // completion handler is installed before any body can
+                        // run, while still handling a parent already cancelled.
+                        scope.launch(Dispatchers.IO + connections, start = CoroutineStart.LAZY) {
+                            proxy(relay)
+                        }
+                    } catch (t: Throwable) {
+                        completion.cleanup()
+                        throw t
+                    }
+                    completion.attach(connection)
+                    connection.start()
                 }
-                openSockets.add(client)
-                scope.launch(Dispatchers.IO + connections) {
-                    try { proxy(client) } finally { inflight.release() }
+            }
+            acceptJob = accept
+            // Coroutine cancellation does not interrupt a native accept(). This
+            // watcher is scoped to this listener run; it closes the endpoint
+            // when the owning scope is cancelled, and is cancelled by close().
+            acceptCancellationWatcher = scope.launch(Dispatchers.IO, start = CoroutineStart.UNDISPATCHED) {
+                try {
+                    accept.join()
+                } finally {
+                    close()
                 }
             }
         }
     }
 
-    private suspend fun proxy(tcp: Socket) = coroutineScope {
-        val pfd = connectVsockWithRetry()
-        if (pfd == null) {
-            openSockets.remove(tcp)
-            runCatching { tcp.close() }
-            return@coroutineScope
-        }
-        // FD ownership: the read side owns `pfd`; the write side owns a dup of
-        // it. Each AutoClose stream closes exactly ONE descriptor, and there is
-        // no explicit pfd.close() in the finally. The previous code wrapped the
-        // SAME pfd in both an AutoCloseInputStream and an AutoCloseOutputStream
-        // AND closed it again in finally — three closers of one descriptor, a
-        // classic double-close / FD-reuse cross-talk hazard.
-        val pfdOut = runCatching { pfd.dup() }.getOrNull()
-        if (pfdOut == null) {
-            openSockets.remove(tcp)
-            runCatching { pfd.close() }
-            runCatching { tcp.close() }
-            return@coroutineScope
-        }
-        val vsockIn  = ParcelFileDescriptor.AutoCloseInputStream(pfd)
-        val vsockOut = ParcelFileDescriptor.AutoCloseOutputStream(pfdOut)
-        val tcpIn  = tcp.getInputStream()
-        val tcpOut = tcp.getOutputStream()
-        try {
-            val a = launch(Dispatchers.IO) { copyUntilEof(tcpIn, vsockOut) }
-            val b = launch(Dispatchers.IO) { copyUntilEof(vsockIn, tcpOut) }
-            // Whichever direction EOFs first cancels its sibling so the
-            // socket closes cleanly on both halves.
-            select<Unit> {
-                a.onJoin { b.cancel() }
-                b.onJoin { a.cancel() }
-            }
-        } finally {
-            openSockets.remove(tcp)
-            runCatching { tcp.close() }
-            // Close both stream owners; each owns a distinct fd (pfd / its dup).
-            runCatching { vsockIn.close() }
-            runCatching { vsockOut.close() }
-        }
+    private suspend fun proxy(relay: BidirectionalRelay) {
+        val pfd = connectVsockWithRetry() ?: return
+        val vsock = runCatching { VsockRelayEndpoint.open(pfd) }.getOrNull() ?: return
+        if (!relay.attach(vsock)) return
+        relay.run()
     }
 
     private suspend fun connectVsockWithRetry(): ParcelFileDescriptor? {
         var lastCause: Throwable? = null
         repeat(CONNECT_ATTEMPTS) { attempt ->
             if (closed) return null
-            val pfd = runCatching { AvfReflect.connectVsock(vm, guestVsockPort.toLong()) }
-                .getOrElse { lastCause = it.cause ?: it; null }
-            if (pfd != null) return pfd
+            val pfd = try {
+                AvfReflect.connectVsock(vm, guestVsockPort.toLong())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                lastCause = t.cause ?: t
+                null
+            }
+            if (pfd != null) {
+                // Android's synchronous framework connect cannot be made
+                // cancellable cheaply. Invalidate the result if cancellation or
+                // forwarder close won while it was blocked; relay.attach() also
+                // rejects and closes a descriptor returned in that close window.
+                try {
+                    currentCoroutineContext().ensureActive()
+                } catch (e: CancellationException) {
+                    runCatching { pfd.close() }
+                    throw e
+                }
+                if (closed) {
+                    runCatching { pfd.close() }
+                    return null
+                }
+                return pfd
+            }
             if (attempt < CONNECT_ATTEMPTS - 1) delay(CONNECT_RETRY_MS)
         }
         // Surface the underlying ErrnoException class — e.message alone is null
@@ -158,28 +233,31 @@ class VsockPortForwarder(
         return null
     }
 
-    private fun copyUntilEof(src: InputStream, dst: OutputStream) {
-        val buf = ByteArray(16 * 1024)
-        try {
-            while (true) {
-                val n = src.read(buf)
-                if (n <= 0) break
-                dst.write(buf, 0, n); dst.flush()
-            }
-        } catch (_: java.io.IOException) { /* peer closed — normal exit */ }
-    }
-
     override fun close() {
-        if (closed) return
-        closed = true
-        runCatching { server?.close() }            // unblocks accept()
-        runCatching { acceptJob?.cancel() }
-        // Force-close live sockets so pumps blocked in native read() throw + exit;
-        // cancelling the coroutines alone wouldn't interrupt a blocking read.
-        synchronized(openSockets) {
-            openSockets.forEach { runCatching { it.close() } }
-            openSockets.clear()
+        val relays: List<BidirectionalRelay>
+        val listener: ServerSocket?
+        val accept: Job?
+        val watcher: Job?
+        synchronized(lifecycleLock) {
+            if (closed) return
+            closed = true
+            // Mark every relay aborted before releasing the lock: a late
+            // connect cannot attach a raw endpoint and start pumps after close.
+            relays = activeRelays.toList()
+            activeRelays.clear()
+            relays.forEach { it.abort() }
+            listener = server
+            server = null
+            accept = acceptJob
+            acceptJob = null
+            watcher = acceptCancellationWatcher
+            acceptCancellationWatcher = null
         }
+        runCatching { listener?.close() } // unblocks native accept()
+        runCatching { accept?.cancel() }
+        runCatching { watcher?.cancel() }
+        // Abort both TCP and raw-vsock endpoints so native reads wake; cancelling
+        // coroutines alone cannot interrupt a blocking read.
         runCatching { connections.cancel() }
     }
 }
