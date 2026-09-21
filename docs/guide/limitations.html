@@ -88,9 +88,9 @@
             <td>The AVF API exposes only one vCPU or all host cores, not an exact count, so the CPU count setting is precise on the QEMU backend only. As of v1.2.5, multi-core AVF works reliably: if a device cannot bring up every core at boot (seen on Tensor G3/G4 Pixels), Podroid automatically retries with fewer cores and remembers the highest count that boots.</td>
           </tr>
           <tr>
-            <td>AVF on the Android 17 beta</td>
-            <td>VMs fail to boot (boot loop, empty console)</td>
-            <td>On the Android 17 beta, the system VM manager and its bundled crosvm disagree on guest networking, so AVF VMs reset before the guest loads. This is a platform-side beta regression, not a Podroid bug. Switch the backend to QEMU (TCG) in Settings until Google resolves it; QEMU is unaffected.</td>
+            <td>AVF networking on some OEM builds</td>
+            <td>AVF VMs boot without a network interface</td>
+            <td>Guest networking over AVF depends on a build-time flag in the device's virtualization module. Some manufacturer builds ship it disabled, and the system VM manager then starts the VM without a network device no matter what Podroid requests. There is no in-app workaround; use the QEMU backend on those devices, which is unaffected.</td>
           </tr>
           <tr>
             <td>USB passthrough</td>
@@ -135,7 +135,7 @@
           <tr>
             <td>First boot</td>
             <td>Slower due to SSH host-key generation</td>
-            <td>On the very first boot, Dropbear generates RSA and ECDSA host keys. This is a one-time cost that typically adds 15-60 seconds on slower devices. Subsequent boots skip key generation and are noticeably faster.</td>
+            <td>On the very first boot, Dropbear generates RSA, ECDSA and ED25519 host keys. This is a one-time cost that typically adds 15-60 seconds on slower devices. Subsequent boots skip key generation and are noticeably faster.</td>
           </tr>
           <tr>
             <td>CPU performance</td>
@@ -178,7 +178,7 @@
       <p>Two timeouts govern boot: QEMU fails and surfaces an error if it cannot create its Unix sockets within 10 seconds (this usually means a stale socket file from a previous crash - try a force-stop and re-open). If sockets open but the guest never emits the <code>Ready!</code> marker, a 60-second boot timeout fires and the app declares the boot failed. In either case, go to <strong>Settings &rarr; Export diagnostic log</strong> and inspect <code>console.log</code>; the last few lines usually show exactly where the guest stalled.</p>
 
       <h3>First boot is very slow</h3>
-      <p>Expected. Dropbear generates RSA and ECDSA host keys on the first boot, which takes 15-60 seconds on low-end hardware under TCG emulation. Once the keys exist on the persistent overlay they are never regenerated; subsequent boots skip this step entirely.</p>
+      <p>Expected. Dropbear generates RSA, ECDSA and ED25519 host keys on the first boot, which takes 15-60 seconds on low-end hardware under TCG emulation. Once the keys exist on the persistent overlay they are never regenerated; subsequent boots skip this step entirely.</p>
 
       <h3>Right-click exits fullscreen when I use a mouse</h3>
       <p>This is a known limitation of the X11 viewer: Android's fullscreen gesture handler intercepts the right mouse button before it reaches the VNC client. Use a two-finger touch gesture to right-click instead - that path bypasses the gesture handler and is delivered correctly to the guest X session.</p>

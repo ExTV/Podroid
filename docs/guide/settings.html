@@ -168,7 +168,7 @@
           <tr>
             <td>USB passthrough</td>
             <td>Toggle</td>
-            <td>Passes a physically attached USB device (Wi-Fi adapter, storage, serial adapter, audio interface) into the VM, with no root. QEMU backend only. It adds a USB controller at boot, so the toggle takes effect only after a VM restart and is locked while the VM is running. When it is on, each device you attach prompts for permission once and then appears inside the guest while the app runs.</td>
+            <td>Passes a physically attached USB device (Wi-Fi adapter, storage, serial adapter, audio interface) into the VM, with no root. QEMU backend only. It adds a USB controller at boot, so the toggle takes effect only after a VM restart and is locked while the VM is running. When it is on, each device you attach prompts for permission once and then appears inside the guest while the app runs. A Wi-Fi adapter also needs firmware installed inside the guest before it will associate, since the guest image ships none: <code>apk add linux-firmware-rtw88</code> for RTL8821AU/8812AU/8814AU dongles, <code>apk add linux-firmware-rtlwifi</code> for RTL8188/8192 ones, then replug the adapter.</td>
           </tr>
         </tbody>
       </table>
@@ -207,7 +207,7 @@
           <tr>
             <td>Reset VM</td>
             <td>Button</td>
-            <td>Wipes all VM data: the persistent overlay (<code>storage.img</code>) is deleted and recreated on next boot. Does not affect app settings.</td>
+            <td>Clears all application data: the persistent overlay (<code>storage.img</code>), your settings and your port forward rules. The app closes and returns to a freshly installed state, so the setup wizard runs again. There is no way to keep settings while wiping only the VM.</td>
           </tr>
         </tbody>
       </table>

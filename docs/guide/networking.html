@@ -182,7 +182,7 @@ podroid-server status</code></pre>
       </div>
 
       <h2>LAN reachability</h2>
-      <p>All port forward listeners bind <code>0.0.0.0</code>, not <code>127.0.0.1</code>. This means any device on the same Wi-Fi network can reach the phone by its local IP address. The phone's current IP is shown in <strong>Settings</strong>.</p>
+      <p>Port forwards you create, and the SSH forward, bind <code>0.0.0.0</code> rather than <code>127.0.0.1</code>. This means any device on the same Wi-Fi network can reach the phone by its local IP address. The phone's current IP is shown in <strong>Settings</strong>. The two implicit desktop forwards are the exception: VNC (5900) and audio (4713) bind loopback only, so the passwordless X session is never exposed to the network.</p>
 
       <pre><code><span class="c"># SSH from a laptop on the same Wi-Fi</span>
 <span class="p">$</span> ssh root@&lt;phone-ip&gt; -p 9922

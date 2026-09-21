@@ -27,10 +27,9 @@ You will need:
 ./build-all.sh initramfs    # kernel + minimal initramfs
 ./build-all.sh rootfs       # Alpine squashfs (~30 s, Docker-cached)
 ./build-all.sh qemu         # QEMU + podroid-bridge (~30 min first run)
-./build-all.sh termux       # terminal-emulator JNI via local NDK
 ./build-all.sh apk          # Android APK via Gradle
 ./build-all.sh all          # everything
-./build-all.sh deploy       # all + install + launch
+./build-all.sh deploy       # APK + install in place (adb install -r)
 ./build-all.sh test         # deploys APK, polls console.log for "Ready!"
 ```
 

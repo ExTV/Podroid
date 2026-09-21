@@ -121,7 +121,7 @@
       <ol>
         <li>Create <code>build-rootfs/files/etc/podroid/migrations/&lt;versionCode&gt;.sh</code>. Use the app's <code>versionCode</code> (an integer, found in <code>app/build.gradle.kts</code>) as the filename.</li>
         <li>Make the script <strong>idempotent</strong>. It may run more than once if the guest crashes mid-migration; it must be safe to re-run.</li>
-        <li>Register it in <code>build-rootfs.sh</code> so it is copied into the squashfs.</li>
+        <li>That is all. Every <code>*.sh</code> file in that directory is copied into the squashfs and made executable by the rootfs build, so no build script edit is needed.</li>
       </ol>
 
       <p>Example - enabling a newly-added service:</p>

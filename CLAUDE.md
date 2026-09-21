@@ -215,7 +215,7 @@ The terminal emulator JNI is built from the vendored `terminal-emulator` module 
 
 ## Performance tuning (TCG path; KVM is impossible without root)
 
-In `QemuEngine.buildCommand()`: `tcg,thread=multi`, larger `tb-size` for ≥2GB RAM, dedicated `iothread` on `virtio-blk-pci`, `-cpu max,pauth-impdef=on`. More vCPUs are not better here: on an 8-core phone, 8 measured slower than 4 on every metric. Guest cmdline: `mitigations=off` (safe inside TCG), per-device `mq-deadline`. `init-podroid`/bootstrap: ZRAM lz4 swap at half RAM. `CONFIG_EXT4_FS_SECURITY=y` + `CONFIG_SQUASHFS_XATTR=y` keep `security.capability` xattrs across the overlay (rootless podman's `newuidmap` needs them). What won't work without root: `io_uring` (seccomp), CPU affinity, KSM, TAP networking, host hugepages.
+In `QemuEngine.buildCommand()`: `tcg,thread=multi`, larger `tb-size` for ≥2GB RAM, dedicated `iothread` on `virtio-blk-pci`, `-cpu max,pauth-impdef=on`. More vCPUs are not better here: on an 8-core phone, 8 measured slower than 4 on every metric. Guest cmdline: `mitigations=off` (safe inside TCG), per-device `mq-deadline`. `init-podroid`/bootstrap: ZRAM lz4 swap at 1.5x RAM (lz4 averages about 3x, so the backing store stays well under RAM). `CONFIG_EXT4_FS_SECURITY=y` + `CONFIG_SQUASHFS_XATTR=y` keep `security.capability` xattrs across the overlay (rootless podman's `newuidmap` needs them). What won't work without root: `io_uring` (seccomp), CPU affinity, KSM, TAP networking, host hugepages.
 
 ## Quirks & gotchas
 

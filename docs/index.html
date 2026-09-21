@@ -998,14 +998,14 @@ qmp.sock               →  runtime port-forward control</div>
       <details>
         <summary>Can I plug in a USB device?</summary>
         <div class="faq-answer">
-          Yes, on the QEMU backend. Enable <strong>USB passthrough</strong> in Settings (it adds a USB controller at boot, so set it while the VM is stopped), then attach a device through a USB-C hub or OTG adapter. Android asks for permission once per device, and it then appears inside the guest while Podroid is running. Works with Wi-Fi adapters, storage, serial adapters, audio interfaces, and more. Not available on the AVF backend, which has no channel to hand the device to the VM.
+          Yes, on the QEMU backend. Enable <strong>USB passthrough</strong> in Settings (it adds a USB controller at boot, so set it while the VM is stopped), then attach a device through a USB-C hub or OTG adapter. Android asks for permission once per device, and it then appears inside the guest while Podroid is running. Wi-Fi adapters need firmware installed inside the guest before they will associate, because the guest image ships none. Install the package for your chipset, for example <code>apk add linux-firmware-rtw88</code> for RTL8821AU/8812AU/8814AU dongles or <code>apk add linux-firmware-rtlwifi</code> for RTL8188/8192 ones, then replug the adapter. Works with Wi-Fi adapters, storage, serial adapters, audio interfaces, and more. Not available on the AVF backend, which has no channel to hand the device to the VM.
         </div>
       </details>
 
       <details>
         <summary>How much storage does it use?</summary>
         <div class="faq-answer">
-          The APK is ~200 MB (QEMU + kernel + initramfs + Alpine squashfs + fonts). On first launch you choose a VM disk size between 2 GB and 64 GB; this is a sparse <code>storage.img</code> that only grows as you pull images and install packages.
+          The APK is ~200 MB (QEMU + kernel + initramfs + Alpine squashfs + fonts). On first launch you choose a VM disk size between 2 GB and 512 GB; this is a sparse <code>storage.img</code> that only grows as you pull images and install packages.
         </div>
       </details>
 
