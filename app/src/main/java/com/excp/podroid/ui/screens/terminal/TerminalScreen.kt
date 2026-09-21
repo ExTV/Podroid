@@ -60,13 +60,14 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.excp.podroid.R
 import com.excp.podroid.engine.VmState
@@ -120,7 +121,6 @@ fun TerminalScreen(
 
     val colorTheme by viewModel.terminalColorTheme.collectAsStateWithLifecycle()
     val terminalFont by viewModel.terminalFont.collectAsStateWithLifecycle()
-    val keyboardController = LocalSoftwareKeyboardController.current
 
     if (showQuickSettings) {
         // Pass the screen's viewModel explicitly so QuickSettingsDialog uses
@@ -153,7 +153,17 @@ fun TerminalScreen(
             title = stringResource(R.string.terminal_title),
             navigationIcon = {
                 IconButton(onClick = {
-                    keyboardController?.hide()
+                    // The IME here belongs to the embedded TerminalView (an
+                    // AndroidView), not a Compose text input session, so
+                    // LocalSoftwareKeyboardController would be a no-op. Go
+                    // through the platform insets controller instead, so the
+                    // keyboard starts closing before the back transition; the
+                    // DisposableEffect in TerminalSurface guarantees the hide
+                    // for every other way this screen is left.
+                    (context as? Activity)?.let { activity ->
+                        WindowCompat.getInsetsController(activity.window, activity.window.decorView)
+                            .hide(WindowInsetsCompat.Type.ime())
+                    }
                     onNavigateBack()
                 }) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
@@ -382,7 +392,18 @@ private fun TerminalSurface(
             view.setTerminalCursorBlinkerRate(500)
             view.setTerminalCursorBlinkerState(true, false)
 
-            onDispose { viewModel.bindView(null) }
+            onDispose {
+                viewModel.bindView(null)
+                // Guaranteed hide for every way this screen is left (back arrow, X11
+                // navigation, system back, or the VM stopping): the IME is owned by this
+                // TerminalView, not a Compose text field, so LocalSoftwareKeyboardController
+                // can't reach it. Use decorView, not `view`: this TerminalView may already
+                // be detached when onDispose runs, and hide() no-ops on a detached view.
+                (context as? Activity)?.let { activity ->
+                    WindowCompat.getInsetsController(activity.window, activity.window.decorView)
+                        .hide(WindowInsetsCompat.Type.ime())
+                }
+            }
         }
 
         // Dead-session auto-reconnect: when the bridge dies while the VM stays
