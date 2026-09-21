@@ -15,6 +15,7 @@
 package com.excp.podroid.engine
 
 import android.content.Context
+import androidx.annotation.StringRes
 import com.excp.podroid.R
 import com.excp.podroid.data.repository.PortForwardRepository
 import com.excp.podroid.data.repository.PortForwardRule
@@ -94,13 +95,15 @@ class EngineHolder @Inject constructor(
         .stateIn(scope, SharingStarted.Eagerly, _currentFlow.value.backendId)
 
     // Non-null only while the current pick is a forced-AVF selection that fell
-    // back to QEMU: a short, localized human reason (see FallbackReason /
-    // pick()). Updated at the same two points _currentFlow is (publishFirstPick,
-    // trySwap) so it always describes the pick that produced the active engine,
-    // even on a no-op swap where the engine instance doesn't change but the
-    // selection (and therefore the reason) does.
-    private val _backendFallback = MutableStateFlow<String?>(null)
-    val backendFallback: StateFlow<String?> = _backendFallback.asStateFlow()
+    // back to QEMU: the @StringRes ID of the reason (see FallbackReason /
+    // pick()). Keep the ID unresolved until the UI renders it so a locale
+    // change cannot leave this in-memory state with text from the old locale.
+    // Updated at the same two points _currentFlow is (publishFirstPick, trySwap)
+    // so it always describes the pick that produced the active engine, even on
+    // a no-op swap where the engine instance doesn't change but the selection
+    // (and therefore the reason) does.
+    private val _backendFallback = MutableStateFlow<Int?>(null)
+    val backendFallback: StateFlow<Int?> = _backendFallback.asStateFlow()
 
     /** Last rule set we pushed into the engine, used to compute add/remove diffs. */
     @Volatile private var appliedRules: Set<PortForwardRule> = emptySet()
@@ -226,8 +229,11 @@ class EngineHolder @Inject constructor(
     }
 
     /** Result of a pick: the chosen engine plus, when a forced-AVF selection
-     *  fell back to QEMU, a short localized reason for [backendFallback]. */
-    private data class PickResult(val engine: VmEngine, val fallbackMessage: String?)
+     *  fell back to QEMU, the @StringRes ID of its reason for [backendFallback]. */
+    private data class PickResult(
+        val engine: VmEngine,
+        @StringRes val fallbackReasonResId: Int?,
+    )
 
     private fun pick(sel: EngineSelection): PickResult {
         val probe = AvfDiagnostics.probe(context)
@@ -274,23 +280,8 @@ class EngineHolder @Inject constructor(
                 "customVm=${probe.customVmConfigSupported} " +
                 "caps=${probe.capabilitiesRaw}(${probe.capabilitiesDecoded}) → ${engine.backendId}"
         )
-        val fallbackMessage = fallbackReason?.let { fallbackReasonText(it, probe) }
-        return PickResult(engine, fallbackMessage)
-    }
-
-    /** Short, localized reason for [backendFallback], reusing the same
-     *  prerequisite checks the pick() log above already dumps: feature, then
-     *  permissions, then service/custom-VM reachability, in that order - the
-     *  first one that fails is reported. */
-    private fun fallbackReasonText(reason: FallbackReason, probe: AvfReport): String {
-        val resId = when {
-            reason == FallbackReason.PROTECTED_ONLY -> R.string.backend_fallback_reason_protected_only
-            !probe.featureSupported -> R.string.backend_fallback_reason_feature
-            !probe.managePermissionGranted || !probe.customPermissionGranted ->
-                R.string.backend_fallback_reason_permissions
-            else -> R.string.backend_fallback_reason_service
-        }
-        return context.getString(resId)
+        val fallbackReasonResId = fallbackReason?.let { fallbackReasonResId(it, probe) }
+        return PickResult(engine, fallbackReasonResId)
     }
 
     /**
@@ -311,7 +302,7 @@ class EngineHolder @Inject constructor(
             startedEngine = null
             _currentFlow.value = first
         }
-        _backendFallback.value = result.fallbackMessage
+        _backendFallback.value = result.fallbackReasonResId
     }
 
     private suspend fun trySwap(newSel: EngineSelection) {
@@ -331,7 +322,7 @@ class EngineHolder @Inject constructor(
         // Update the surfaced reason even on a no-op engine swap: forcing AVF
         // on an already-QEMU device changes the selection (and therefore the
         // reason) without changing the engine instance.
-        _backendFallback.value = result.fallbackMessage
+        _backendFallback.value = result.fallbackReasonResId
         val next = result.engine
         if (next === currentFlow.value) return
         // NOTE: AvfEngine.stop() flips state to Stopped before cleanup() finishes
@@ -447,6 +438,20 @@ class EngineHolder @Inject constructor(
          *  devices get their own value because pick() already logs them on a
          *  dedicated branch (a signed pvmfw kernel can never appear later). */
         enum class FallbackReason { UNAVAILABLE, PROTECTED_ONLY }
+
+        /**
+         * Select the localized reason resource for a forced-AVF fallback. The
+         * first failed prerequisite is reported, except protected-only devices
+         * which have their dedicated explanation.
+         */
+        @StringRes
+        internal fun fallbackReasonResId(reason: FallbackReason, probe: AvfReport): Int = when {
+            reason == FallbackReason.PROTECTED_ONLY -> R.string.backend_fallback_reason_protected_only
+            !probe.featureSupported -> R.string.backend_fallback_reason_feature
+            !probe.managePermissionGranted || !probe.customPermissionGranted ->
+                R.string.backend_fallback_reason_permissions
+            else -> R.string.backend_fallback_reason_service
+        }
 
         /**
          * Pure backend-selection decision, extracted from pick() so it's unit

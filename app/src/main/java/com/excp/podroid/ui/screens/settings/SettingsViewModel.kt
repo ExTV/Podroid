@@ -328,9 +328,10 @@ class SettingsViewModel @Inject constructor(
      */
     val activeBackendIdFlow: StateFlow<String> = engine.backendIdFlow
 
-    /** Non-null when the current pick forced AVF but fell back to QEMU; a
-     *  short localized reason for the Settings backend caption. See #66. */
-    val backendFallback: StateFlow<String?> = engine.backendFallback
+    /** Non-null when the current pick forced AVF but fell back to QEMU; the
+     *  @StringRes ID for the Settings backend caption. The screen resolves it
+     *  in the current locale. See #66. */
+    val backendFallback: StateFlow<Int?> = engine.backendFallback
 
     private val _exportError = MutableStateFlow<String?>(null)
     /** One-shot export failure message; clear after showing with [clearExportError]. */
