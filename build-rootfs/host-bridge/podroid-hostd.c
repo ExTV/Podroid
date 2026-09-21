@@ -18,6 +18,7 @@
  *   QEMU (otherwise): open /dev/hvc2.
  */
 #define _GNU_SOURCE
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <libgen.h>
@@ -27,17 +28,28 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/inotify.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/un.h>
 #include <termios.h>
+#include <time.h>
 #include <unistd.h>
 
 #define SOCK_PATH   "/run/podroid-host.sock"
 #define HVC_PATH    "/dev/hvc2"
 #define VSOCK_PORT  9101
 #define HOST_TIMEOUT_S 5
+
+/* Podman container count, pushed to Android over the host channel instead of
+ * being polled: graphroot is pinned in
+ * build-rootfs/files/etc/containers/storage.conf, and podman creates one
+ * subdirectory per container here, named by its 64-char hex id. */
+#define STATS_DIR "/var/lib/containers/storage/overlay-containers"
+#define STATS_DEBOUNCE_MS 500
+#define STATS_SLOW_TICK_MS 15000
+#define STATS_WATCH_MASK (IN_CREATE | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO | IN_DELETE_SELF | IN_MOVE_SELF)
 
 /* base64 (standard alphabet, no wrap) */
 static const char B64[] =
@@ -385,6 +397,174 @@ static int make_vsock_listener(void) {
     return fd;
 }
 
+/* Opens the host channel if not already open: accepts Android's vsock
+ * connection on AVF (bounded by HOST_TIMEOUT_S so a slow or absent Android
+ * side can't wedge the caller), or opens /dev/hvc2 on QEMU. No-op if already
+ * connected. Returns 1 if this call established a fresh connection, 0 if
+ * already connected, -1 on failure. */
+static int ensure_host_fd(int *host_fd, int avf, int vsock_listener) {
+    if (*host_fd >= 0) return 0;
+    if (avf) {
+        struct pollfd pfd = { .fd = vsock_listener, .events = POLLIN };
+        int pr;
+        do { pr = poll(&pfd, 1, HOST_TIMEOUT_S * 1000); } while (pr < 0 && errno == EINTR);
+        if (pr > 0) *host_fd = accept(vsock_listener, NULL, NULL);
+    } else {
+        *host_fd = open(HVC_PATH, O_RDWR | O_NOCTTY);
+    }
+    if (*host_fd < 0) return -1;
+    set_raw_if_tty(*host_fd);
+    return 1;
+}
+
+/* Writes `req` to the already-open host channel and reads one response line
+ * into resp, draining any stale bytes first so resp always corresponds to
+ * req. Same return convention as read_line_timeout. The one path to the host
+ * channel - both CLI relaying and the daemon's own STATS push go through it. */
+static int host_roundtrip(int host_fd, const char *req, char *resp, size_t cap) {
+    drain_pending(host_fd);  /* clear any stale/orphaned bytes so resp matches this req */
+    if (write_line(host_fd, req) < 0) return -1;
+    return read_line_timeout(host_fd, resp, cap, HOST_TIMEOUT_S);
+}
+
+static long long mono_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+/* podman names one overlay-containers subdirectory per container after its
+ * 64-character lowercase hex id. */
+static int is_container_id(const char *name) {
+    size_t len = strlen(name);
+    if (len != 64) return 0;
+    for (size_t i = 0; i < len; i++) {
+        char c = name[i];
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return 0;
+    }
+    return 1;
+}
+
+/* Counts podman containers by counting STATS_DIR subdirectories whose name is
+ * a container id. Never execs podman or parses JSON. A missing directory (no
+ * containers created yet) counts as 0. */
+static int count_containers(void) {
+    DIR *dir = opendir(STATS_DIR);
+    if (!dir) {
+        if (errno != ENOENT)
+            fprintf(stderr, "podroid-hostd: opendir %s: %s\n", STATS_DIR, strerror(errno));
+        return 0;
+    }
+    int count = 0;
+    struct dirent *ent;
+    while ((ent = readdir(dir)) != NULL) {
+        if (!is_container_id(ent->d_name)) continue;
+        if (ent->d_type == DT_DIR) {
+            count++;
+        } else if (ent->d_type == DT_UNKNOWN) {
+            /* Some filesystems never fill d_type in; fall back to stat(). */
+            char path[sizeof(STATS_DIR) + 66];
+            snprintf(path, sizeof(path), "%s/%s", STATS_DIR, ent->d_name);
+            struct stat st;
+            if (stat(path, &st) == 0 && S_ISDIR(st.st_mode)) count++;
+        }
+    }
+    closedir(dir);
+    return count;
+}
+
+/* Guest-side state for the STATS push: change detection (inotify), debounce
+ * and the last count Android acknowledged. No threads - this lives entirely
+ * in the daemon's single event loop. */
+struct stats_state {
+    int inotify_fd;              /* -1 if inotify_init1 failed: feature disabled */
+    int wd;                      /* -1 if STATS_DIR isn't currently watched */
+    int last_acked;              /* -1 = nothing acknowledged yet (forces a first push) */
+    int dirty;                   /* 1 = current count may differ from last_acked */
+    long long debounce_until_ms; /* 0 = no debounce pending */
+    long long next_slow_tick_ms;
+};
+
+/* Establishes the inotify watch on STATS_DIR if it isn't already watched.
+ * Safe to call when the directory doesn't exist yet (podman hasn't created a
+ * container) - just retried on the next slow tick. */
+static void stats_try_watch(struct stats_state *st) {
+    if (st->inotify_fd < 0 || st->wd >= 0) return;
+    int wd = inotify_add_watch(st->inotify_fd, STATS_DIR, STATS_WATCH_MASK);
+    if (wd >= 0) {
+        st->wd = wd;
+        st->dirty = 1;  /* may have missed changes while unwatched */
+    } else if (errno != ENOENT) {
+        fprintf(stderr, "podroid-hostd: inotify_add_watch %s: %s\n", STATS_DIR, strerror(errno));
+    }
+}
+
+static void stats_init(struct stats_state *st) {
+    st->inotify_fd = inotify_init1(IN_NONBLOCK);
+    if (st->inotify_fd < 0)
+        fprintf(stderr, "podroid-hostd: inotify_init1: %s\n", strerror(errno));
+    st->wd = -1;
+    st->last_acked = -1;
+    st->dirty = 1;  /* push the current count once the host channel is up */
+    st->debounce_until_ms = 0;
+    st->next_slow_tick_ms = mono_ms() + STATS_SLOW_TICK_MS;
+    stats_try_watch(st);
+}
+
+/* Drains pending inotify events (the fd is O_NONBLOCK, so this never blocks)
+ * and marks the count dirty with a fresh debounce deadline, so a burst of
+ * events (e.g. `podman run --rm`) coalesces into one push. */
+static void stats_drain_inotify(struct stats_state *st) {
+    char buf[4096] __attribute__((aligned(__alignof__(struct inotify_event))));
+    for (;;) {
+        ssize_t n = read(st->inotify_fd, buf, sizeof(buf));
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            break;  /* EAGAIN: drained */
+        }
+        if (n == 0) break;
+        ssize_t off = 0;
+        while (off < n) {
+            struct inotify_event *ev = (struct inotify_event *)(buf + off);
+            if (ev->mask & (IN_DELETE_SELF | IN_MOVE_SELF | IN_IGNORED)) {
+                /* The watched directory itself is gone; the slow tick
+                 * re-establishes the watch once it reappears. */
+                st->wd = -1;
+            }
+            off += (ssize_t)(sizeof(struct inotify_event) + ev->len);
+        }
+        st->dirty = 1;
+        st->debounce_until_ms = mono_ms() + STATS_DEBOUNCE_MS;
+    }
+}
+
+/* Sends the current count over the host channel, reusing ensure_host_fd() /
+ * host_roundtrip() - no second code path to the host channel. Unless `force`,
+ * skips the roundtrip entirely when the count already matches the last value
+ * Android acknowledged. Leaves `dirty` set on any failure (no channel, no
+ * reply, unexpected reply) so the caller retries on the next slow tick;
+ * never busy-loops and never blocks longer than ensure_host_fd's own
+ * HOST_TIMEOUT_S bound. */
+static void stats_push(struct stats_state *st, int *host_fd, int avf, int vsock_listener, int force) {
+    int count = count_containers();
+    if (!force && count == st->last_acked) { st->dirty = 0; return; }
+    if (ensure_host_fd(host_fd, avf, vsock_listener) < 0) { st->dirty = 1; return; }
+    char req[64], resp[32];
+    snprintf(req, sizeof(req), "STATS containers=%d", count);
+    int hn = host_roundtrip(*host_fd, req, resp, sizeof(resp));
+    if (hn <= 0) {
+        if (hn != LINE_TOO_LONG) { close(*host_fd); *host_fd = -1; }
+        st->dirty = 1;
+        return;
+    }
+    if (strcmp(resp, "OK") == 0) {
+        st->last_acked = count;
+        st->dirty = 0;
+    } else {
+        st->dirty = 1;  /* unexpected reply: don't assume it was acknowledged */
+    }
+}
+
 static int daemon_main(void) {
     signal(SIGPIPE, SIG_IGN);
     int avf = is_avf();
@@ -397,8 +577,50 @@ static int daemon_main(void) {
         if (vsock_listener < 0) { perror("podroid-hostd: vsock listener"); return 1; }
     }
 
+    struct stats_state stats;
+    stats_init(&stats);
+
     int host_fd = -1;
     for (;;) {
+        struct pollfd pfds[2];
+        pfds[0].fd = cli_listener; pfds[0].events = POLLIN; pfds[0].revents = 0;
+        int nfds = 1;
+        int inotify_idx = -1;
+        if (stats.inotify_fd >= 0) {
+            inotify_idx = nfds;
+            pfds[nfds].fd = stats.inotify_fd; pfds[nfds].events = POLLIN; pfds[nfds].revents = 0;
+            nfds++;
+        }
+
+        long long now = mono_ms();
+        long long deadline = stats.next_slow_tick_ms;
+        if (stats.debounce_until_ms != 0 && stats.debounce_until_ms < deadline)
+            deadline = stats.debounce_until_ms;
+        int timeout_ms = (int)(deadline > now ? deadline - now : 0);
+
+        int pr = poll(pfds, (nfds_t)nfds, timeout_ms);
+        if (pr < 0) { if (errno == EINTR) continue; break; }
+
+        if (inotify_idx >= 0 && (pfds[inotify_idx].revents & POLLIN))
+            stats_drain_inotify(&stats);
+
+        /* Act on whichever timer fired: re-establish the watch if it's down,
+         * and push a dirty count once the debounce (or the slow-tick catch-all
+         * for a failed/missed push) elapses. */
+        now = mono_ms();
+        int slow_tick_due = now >= stats.next_slow_tick_ms;
+        int debounce_due = stats.debounce_until_ms != 0 && now >= stats.debounce_until_ms;
+        if (slow_tick_due) {
+            stats.next_slow_tick_ms = now + STATS_SLOW_TICK_MS;
+            if (stats.wd < 0) stats_try_watch(&stats);
+        }
+        if (slow_tick_due || debounce_due) {
+            stats.debounce_until_ms = 0;
+            if (stats.dirty) stats_push(&stats, &host_fd, avf, vsock_listener, 0);
+        }
+
+        if (!(pfds[0].revents & POLLIN)) continue;
+
         int cli = accept(cli_listener, NULL, NULL);
         if (cli < 0) { if (errno == EINTR) continue; break; }
 
@@ -413,28 +635,11 @@ static int daemon_main(void) {
         if (rn == LINE_TOO_LONG) { write_line(cli, "ERR cmVxdWVzdCB0b28gbG9uZw=="); close(cli); continue; }
         if (rn <= 0) { close(cli); continue; }
 
-        if (host_fd < 0) {
-            if (avf) {
-                /* Bound the wait for Android's vsock connection: without this,
-                 * a slow or absent Android side would block accept() forever,
-                 * wedging the single-threaded loop and every other podroid-*
-                 * call behind this one CLI connection. */
-                struct pollfd pfd = { .fd = vsock_listener, .events = POLLIN };
-                int pr;
-                do { pr = poll(&pfd, 1, HOST_TIMEOUT_S * 1000); } while (pr < 0 && errno == EINTR);
-                if (pr > 0) host_fd = accept(vsock_listener, NULL, NULL);
-            } else {
-                host_fd = open(HVC_PATH, O_RDWR | O_NOCTTY);
-            }
-            if (host_fd >= 0) set_raw_if_tty(host_fd);
-        }
-        if (host_fd < 0) { write_line(cli, "ERR aG9zdCBjaGFubmVsIG5vdCBjb25uZWN0ZWQ="); close(cli); continue; }
+        int conn = ensure_host_fd(&host_fd, avf, vsock_listener);
+        if (conn < 0) { write_line(cli, "ERR aG9zdCBjaGFubmVsIG5vdCBjb25uZWN0ZWQ="); close(cli); continue; }
 
         char resp[8192];
-        drain_pending(host_fd);  /* clear any stale/orphaned bytes so resp matches this req */
-        int hn = write_line(host_fd, req) < 0
-            ? -1
-            : read_line_timeout(host_fd, resp, sizeof(resp), HOST_TIMEOUT_S);
+        int hn = host_roundtrip(host_fd, req, resp, sizeof(resp));
         /* "response too long": the channel is still aligned, since the reader
          * consumed the rest of the line, so keep the connection and just refuse
          * to pass on a half a reply. */
@@ -447,6 +652,11 @@ static int daemon_main(void) {
         }
         write_line(cli, resp);
         close(cli);
+
+        /* A fresh host connection means Android's server just (re)started (or
+         * this is the first connection since boot); push the current count
+         * once instead of waiting on the next change or slow tick. */
+        if (conn == 1) stats_push(&stats, &host_fd, avf, vsock_listener, 1);
     }
     return 0;
 }

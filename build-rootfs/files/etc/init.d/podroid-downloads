@@ -25,6 +25,19 @@ start() {
         --stderr /var/log/podroid-downloads.log \
         --exec /usr/local/bin/podroid-vsock-agent -- downloads-9p
     eend $?
+
+    # One-time cleanup of the stray container-count file an older Podroid
+    # version wrote into the user's real Downloads dir (the guest host bridge's
+    # STATS push replaced it). Detached because the 9p mount above completes
+    # asynchronously once Android accepts the vsock rendezvous; rm -f is
+    # idempotent so giving up after the wait just leaves it for next boot.
+    ( _i=0
+      while [ "$_i" -lt 30 ] && ! mountpoint -q /mnt/downloads 2>/dev/null; do
+          sleep 1
+          _i=$((_i + 1))
+      done
+      rm -f /mnt/downloads/Podroid/container-count 2>/dev/null
+    ) &
 }
 
 stop() {

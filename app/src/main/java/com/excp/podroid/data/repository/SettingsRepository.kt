@@ -195,10 +195,10 @@ class SettingsRepository @Inject constructor(
     suspend fun setDynamicColorEnabled(value: Boolean)   = set(KEY_DYNAMIC_COLOR_ENABLED, value)
     suspend fun setLastBootDurationMs(value: Long)       = set(KEY_LAST_BOOT_DURATION_MS, value)
     suspend fun setLastContainerCount(value: Int)        = set(KEY_LAST_CONTAINER_COUNT, value)
-    suspend fun getLastContainerCount(): Int? {
-        val v = context.dataStore.data.first()[KEY_LAST_CONTAINER_COUNT] ?: -1
-        return if (v < 0) null else v
-    }
+    // Guest push over the host bridge (STATS verb) keeps this live; -1/missing means null.
+    val lastContainerCount: Flow<Int?> = context.dataStore.data
+        .catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
+        .map { (it[KEY_LAST_CONTAINER_COUNT] ?: -1).let { v -> if (v < 0) null else v } }
     suspend fun setLanguage(value: String)               = set(KEY_LANGUAGE, value)
     suspend fun setEngineSelection(value: EngineSelection) = set(KEY_ENGINE_SELECTION, value.name)
     suspend fun setAvfHintDismissed(value: Boolean)      = set(KEY_AVF_HINT_DISMISSED, value)

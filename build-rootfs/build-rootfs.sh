@@ -115,7 +115,6 @@ cp /work/files/usr/local/bin/podroid-resize "$ROOTFS/usr/local/bin/"
 cp /work/files/usr/local/bin/podroid-login  "$ROOTFS/usr/local/bin/"
 cp /work/files/usr/local/bin/podroid-getty  "$ROOTFS/usr/local/bin/"
 cp /work/files/usr/local/bin/podroid-backup "$ROOTFS/usr/local/bin/"
-cp /work/files/usr/local/bin/podroid-update-stats "$ROOTFS/usr/local/bin/"
 # podroid-vsock-agent is COPY'd in from the vsock-builder Docker stage. Make
 # sure it's executable (cross-arch COPY can lose the mode bit on some buildkit
 # versions).

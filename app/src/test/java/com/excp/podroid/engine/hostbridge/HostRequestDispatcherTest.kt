@@ -36,6 +36,7 @@ private fun dispatcher(
     openUrl: suspend (String) -> String = { HostProtocol.ok() },
     power: suspend (String) -> String = { HostProtocol.ok() },
     setHeadless: suspend (String) -> String = { HostProtocol.ok() },
+    setContainerCount: suspend (Int) -> Unit = {},
     addResult: AddRuleResult = AddRuleResult.ADDED,
 ) = HostRequestDispatcher(
     notifications = poster,
@@ -52,6 +53,7 @@ private fun dispatcher(
     openUrl = openUrl,
     power = power,
     setHeadless = setHeadless,
+    setContainerCount = setContainerCount,
 )
 
 class HostRequestDispatcherTest {
@@ -197,5 +199,47 @@ class HostRequestDispatcherTest {
         assertEquals("OK", d.handle("HEADLESS on"))
         assertEquals("on", seen)
         assertTrue(d.handle("HEADLESS sideways").startsWith("ERR "))
+    }
+
+    @Test fun statsPersistsAndReturnsOk() = runBlocking {
+        var seen: Int? = null
+        val d = dispatcher(setContainerCount = { seen = it })
+        assertEquals("OK", d.handle("STATS containers=3"))
+        assertEquals(3, seen)
+    }
+
+    @Test fun statsRejectsMissingArg() = runBlocking {
+        var seen: Int? = null
+        val d = dispatcher(setContainerCount = { seen = it })
+        assertTrue(d.handle("STATS").startsWith("ERR "))
+        assertEquals(null, seen)
+    }
+
+    @Test fun statsRejectsNonNumeric() = runBlocking {
+        var seen: Int? = null
+        val d = dispatcher(setContainerCount = { seen = it })
+        assertTrue(d.handle("STATS containers=abc").startsWith("ERR "))
+        assertEquals(null, seen)
+    }
+
+    @Test fun statsRejectsNegative() = runBlocking {
+        var seen: Int? = null
+        val d = dispatcher(setContainerCount = { seen = it })
+        assertTrue(d.handle("STATS containers=-1").startsWith("ERR "))
+        assertEquals(null, seen)
+    }
+
+    @Test fun statsRejectsOverRange() = runBlocking {
+        var seen: Int? = null
+        val d = dispatcher(setContainerCount = { seen = it })
+        assertTrue(d.handle("STATS containers=100001").startsWith("ERR "))
+        assertEquals(null, seen)
+    }
+
+    @Test fun statsRejectsWrongKeyName() = runBlocking {
+        var seen: Int? = null
+        val d = dispatcher(setContainerCount = { seen = it })
+        assertTrue(d.handle("STATS count=3").startsWith("ERR "))
+        assertEquals(null, seen)
     }
 }

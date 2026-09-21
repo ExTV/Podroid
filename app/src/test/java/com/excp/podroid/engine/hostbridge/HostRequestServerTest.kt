@@ -245,6 +245,7 @@ class HostRequestServerTest {
         openUrl = openUrl,
         power = { HostProtocol.ok() },
         setHeadless = { HostProtocol.ok() },
+        setContainerCount = {},
     )
 
     private class BlockingTransport(private val resultAfterClose: String? = null) : HostTransport {
@@ -278,7 +279,6 @@ class HostRequestServerTest {
             if (closeCount.incrementAndGet() == 1) closed.countDown()
         }
     }
-}
 
     /** Throws [failure] from its first read, then reports EOF so the loop does not spin. */
     private class ThrowingTransport(private val failure: Exception) : HostTransport {
@@ -296,3 +296,4 @@ class HostRequestServerTest {
             if (closeCount.incrementAndGet() == 1) closed.countDown()
         }
     }
+}

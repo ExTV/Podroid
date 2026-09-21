@@ -26,12 +26,6 @@ notify_err() {
 	fi
 }
 
-refresh_stats() {
-	if [ -x /usr/local/bin/podroid-update-stats ]; then
-		/usr/local/bin/podroid-update-stats || true
-	fi
-}
-
 usage() {
 	cat <<'EOF'
 usage:
@@ -75,7 +69,6 @@ cmd_export() {
 	fi
 	echo "exported $name -> $out"
 	notify_ok "Exported container $name"
-	refresh_stats
 }
 
 cmd_save() {
@@ -93,7 +86,6 @@ cmd_save() {
 	fi
 	echo "saved $ref -> $out"
 	notify_ok "Saved image $ref"
-	refresh_stats
 }
 
 cmd_all() {
@@ -116,7 +108,6 @@ cmd_all() {
 	done
 	notify_ok "Backed up $ok container(s)${fail:+, $fail failed}"
 	echo "done: $ok ok, $fail failed"
-	refresh_stats
 }
 
 main() {

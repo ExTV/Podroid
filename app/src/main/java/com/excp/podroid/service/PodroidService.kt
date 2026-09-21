@@ -317,6 +317,7 @@ class PodroidService : Service() {
             openUrl = { handleOpenUrl(it) },
             power = { handlePowerRequest(it) },
             setHeadless = { handleHeadlessRequest(it) },
+            setContainerCount = { settingsRepository.setLastContainerCount(it) },
         )
         return com.excp.podroid.engine.hostbridge.HostRequestServer(
             openTransport = { engine.openHostTransport() },

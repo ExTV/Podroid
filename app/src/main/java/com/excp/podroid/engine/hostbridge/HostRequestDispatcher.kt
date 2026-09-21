@@ -22,11 +22,13 @@ class HostRequestDispatcher(
     private val openUrl: suspend (String) -> String,
     private val power: suspend (String) -> String,
     private val setHeadless: suspend (String) -> String,
+    private val setContainerCount: suspend (Int) -> Unit,
 ) {
     private val validProtocols = setOf("tcp", "udp")
 
     private companion object {
         private val WHITESPACE = Regex("\\s+")
+        private val STATS_ARG = Regex("^containers=(\\d+)$")
     }
 
     suspend fun handle(line: String): String {
@@ -45,6 +47,7 @@ class HostRequestDispatcher(
                 "OPEN" -> handleOpen(parts)
                 "POWER" -> handlePower(parts)
                 "HEADLESS" -> handleHeadless(parts)
+                "STATS" -> handleStats(parts)
                 "PING" -> "PONG"
                 else -> HostProtocol.err("bad request")
             }
@@ -138,5 +141,15 @@ class HostRequestDispatcher(
         if (p.size != 2) return HostProtocol.err("bad request")
         if (p[1] !in setOf("on", "off", "status")) return HostProtocol.err("usage: on|off|status")
         return setHeadless(p[1])
+    }
+
+    // STATS containers=<n>, 0..100000
+    private suspend fun handleStats(p: List<String>): String {
+        if (p.size != 2) return HostProtocol.err("bad request")
+        val count = STATS_ARG.matchEntire(p[1])?.groupValues?.get(1)?.toIntOrNull()
+            ?: return HostProtocol.err("bad request")
+        if (count !in 0..100000) return HostProtocol.err("bad request")
+        setContainerCount(count)
+        return HostProtocol.ok()
     }
 }
