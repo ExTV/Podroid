@@ -39,10 +39,9 @@ All native/VM components are coordinated by `build-all.sh` (Docker-cached):
 ./build-all.sh initramfs   # kernel + minimal initramfs
 ./build-all.sh rootfs      # Alpine squashfs -> app/src/main/assets/alpine-rootfs.squashfs
 ./build-all.sh qemu        # QEMU + native helpers via Docker (slow first time)
-./build-all.sh termux      # terminal-emulator JNI for 16KB pages
 ./build-all.sh apk         # Android APK via Gradle
 ./build-all.sh all         # everything
-./build-all.sh deploy      # all + install + launch
+./build-all.sh deploy      # APK + install in place (adb install -r)
 ./build-all.sh test        # boot validation: installs, polls console.log for "Ready!"
 ```
 

@@ -65,7 +65,7 @@
       </div>
 
       <h2>Setup wizard</h2>
-      <p>The first time you open Podroid a three-step wizard runs before anything else.</p>
+      <p>The first time you open Podroid a four-step wizard runs before anything else.</p>
 
       <h3>Step 1: Persistent storage size</h3>
       <p>Choose how large the writable VM disk image will be: from 2 GB up to 512 GB, limited to the free space on your phone. This image lives in the app's private storage and holds everything you install inside the VM - packages, container images, config files. Pick more than you think you need.</p>
@@ -85,6 +85,9 @@
         <span class="label">Instability warning</span>
         <p>On the QEMU backend, Downloads sharing can be unstable on some devices. If the VM behaves oddly after enabling it, try disabling it in Settings. The AVF path is stable.</p>
       </div>
+
+      <h3>Step 4: Permissions</h3>
+      <p>The last card lists the permissions Podroid asks for, with the reason for each and a Grant button. Notifications, because the VM runs in a foreground service whose notification is how you see its state and stop it. Unrestricted background use, because Android otherwise stops the VM once the app is in the background. Both can be skipped. If one is missing later, including after an update that starts needing a new one, the same rows appear at the top of the home screen.</p>
 
       <h2>First boot</h2>
       <p>Tap <strong>Start VM</strong> on the home screen. The first boot takes roughly 50-60 seconds, noticeably longer than the 10-15 seconds of later boots. Two one-time tasks run:</p>
@@ -127,7 +130,7 @@
         <a class="prev" href="index.html"><span class="dir">Previous</span>&larr; Overview</a>
         <a class="next" href="how-it-works.html"><span class="dir">Next</span>How it works &rarr;</a>
       </div>
-      <p class="docfoot">Podroid is free software (GPL). Docs for v1.2.8. Found something inaccurate? <a href="https://github.com/ExTV/Podroid/issues">Open an issue</a>.</p>
+      <p class="docfoot">Podroid is free software (GPL). Docs for v1.2.9. Found something inaccurate? <a href="https://github.com/ExTV/Podroid/issues">Open an issue</a>.</p>
     </main>
   </div>
 

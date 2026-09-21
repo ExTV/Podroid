@@ -228,6 +228,10 @@ password=na</code></pre>
             <td>96 to 192. Tells Xvnc what DPI to report to apps. Takes effect on the next VM start.</td>
           </tr>
           <tr>
+            <td>Render scale</td>
+            <td>100%, 75% or 50%. Lower is faster: the desktop is drawn at a reduced size and scaled up to fit the screen.</td>
+          </tr>
+          <tr>
             <td>Audio</td>
             <td>PulseAudio streams PCM from the VM to the app over port 4713. Toggle to enable or disable.</td>
           </tr>
@@ -241,14 +245,14 @@ password=na</code></pre>
 
       <div class="callout note">
         <span class="label">Performance</span>
-        <p>The viewer currently uses uncompressed Raw encoding (ZRLE was disabled after it desynced on complex content). On a high-DPI phone, selecting the 720p or 900p preset reduces the amount of screen data transferred each frame and noticeably improves smoothness on heavy desktops. See the <a href="performance.html">Performance</a> page for general tuning advice.</p>
+        <p>The viewer draws on its own thread and lets the GPU do the scaling, so the desktop stays responsive while frames arrive. It uses uncompressed Raw encoding. On a high-DPI phone, selecting the 720p or 900p preset, or a lower render scale, reduces the amount of screen data handled each frame and noticeably improves smoothness on heavy desktops. See the <a href="performance.html">Performance</a> page for general tuning advice.</p>
       </div>
 
       <div class="pagenav">
         <a class="prev" href="packages.html"><span class="dir">Previous</span>← Packages &amp; services</a>
         <a class="next" href="settings.html"><span class="dir">Next</span>Terminal &amp; settings →</a>
       </div>
-      <p class="docfoot">Podroid is free software (GPL). Docs for v1.2.8. Found something inaccurate? <a href="https://github.com/ExTV/Podroid/issues">Open an issue</a>.</p>
+      <p class="docfoot">Podroid is free software (GPL). Docs for v1.2.9. Found something inaccurate? <a href="https://github.com/ExTV/Podroid/issues">Open an issue</a>.</p>
     </main>
   </div>
 
