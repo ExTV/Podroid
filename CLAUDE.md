@@ -160,6 +160,7 @@ Single-activity Compose app: `ui/navigation/NavGraph.kt` routes `setup → home 
 │       │   │   │   └── ninep/                # in-process 9p2000.L server (Ninep2000LServer, NinepCodec)
 │       │   │   ├── hostbridge/           # guest->Android bridge (transport, server, dispatcher, notify)
 │       │   │   │   └── HeadlessModeManager.kt # single source of truth for server (headless) mode
+│       │   │   ├── control/              # ControlProvider: shell-only `adb shell content call` test interface
 │       │   │   └── usb/                  # UsbPassthroughManager
 │       │   ├── service/PodroidService.kt # foreground service; owns VM lifecycle, wakelock, notification; also VmControlReceiver (boot autostart + START_VM/STOP_VM automation intents)
 │       │   ├── data/repository/          # Settings, PortForward, Update, Language, ContainerBackup, ContainerStats (all DataStore)
@@ -269,6 +270,23 @@ adb shell pm list features | grep virtualization
 A device without that feature can *never* run `AvfEngine`, no matter the `EngineSelection` setting. `EngineHolder.pick()` re-evaluates only at process start, so a fresh `pm grant` does not take effect until the app is force-stopped and relaunched.
 
 **A change that touches both backends is unproven until it has been installed and walked on both.** Backend asymmetry is the #1 source of bugs (see Quirks & gotchas), and `AvfEngine.kt` is the most-churned file in the repository, so a QEMU-only test is the easiest way to ship a regression.
+
+### Driving the app from adb
+
+`engine/control/ControlProvider.kt` answers `adb shell content call`, so a device test does not have to tap through the UI. It ships in both build types, because release is where R8 bugs show up. Each call returns one line, `ok ...` or `error ...`.
+
+```bash
+C="adb shell content call --uri content://com.excp.podroid.control --method"   # debug: com.excp.podroid.debug.control
+$C state                              # vm, backend, selection, boot stage, forwards, versionCode
+$C set-backend --arg qemu             # auto | avf | qemu; force-stop and relaunch to re-pick
+$C forward-add --arg tcp:8080:80      # goes through PortForwardRepository, so EngineHolder applies it live
+$C forward-remove --arg tcp:8080:80
+$C backups                            # archive names the app sees
+$C navigate --arg container_backup    # home | terminal | settings | status | container_backup
+adb shell am broadcast -a com.excp.podroid.action.START_VM -n com.excp.podroid/.service.VmControlReceiver   # and STOP_VM
+```
+
+The framework does **not** permission-check `ContentProvider.call()`, so the manifest `android:permission` is only defense in depth. The real gate is `isCallerAllowed()` in `call()`: uid 0, uid 2000 (shell), or a caller holding `DUMP`. Keep that check first in `call()`; without it any installed app could open a LAN-facing port forward. New methods must go through the same repositories the UI uses, never straight to an engine.
 
 Reading the VM console depends on build type: `run-as` works on debug, but **release builds are not `run-as`-able**, so use `su` or **Settings → Diagnostics → Export Log** there.
 

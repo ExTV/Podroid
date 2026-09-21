@@ -6,9 +6,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.activity.compose.LocalActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -16,6 +18,8 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.excp.podroid.engine.control.ControlProviderEntryPoint
+import dagger.hilt.android.EntryPointAccessors
 import com.excp.podroid.ui.screens.home.HomeScreen
 import com.excp.podroid.ui.screens.settings.SettingsScreen
 import com.excp.podroid.ui.screens.setup.SetupScreen
@@ -62,6 +66,23 @@ fun PodroidNavGraph(
     val startDestination = when (isSetupDone) {
         true  -> Routes.HOME
         else  -> Routes.SETUP
+    }
+
+    // adb `content call --method navigate` control surface (ControlProvider):
+    // collect the Hilt-singleton route bus instead of field-injecting it, so
+    // NavGraph doesn't need its own ViewModel wiring just for this. Emissions
+    // while the wizard is showing are ignored - jumping mid-setup is meaningless.
+    val context = LocalContext.current
+    LaunchedEffect(navController) {
+        val navigator = EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            ControlProviderEntryPoint::class.java,
+        ).controlNavigator()
+        navigator.routes.collect { route ->
+            if (navController.currentDestination?.route != Routes.SETUP) {
+                navController.navigate(route) { launchSingleTop = true }
+            }
+        }
     }
 
     NavHost(

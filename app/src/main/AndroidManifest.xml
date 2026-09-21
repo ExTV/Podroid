@@ -119,6 +119,19 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!--
+            adb-only control surface for on-device test automation (state,
+            backend switch, port forwards, backups, navigate). The manifest
+            permission is defense in depth only - ControlProvider.call()
+            enforces the real check (shell/root uid or DUMP) in code, since
+            the framework performs no permission check on call() itself.
+        -->
+        <provider
+            android:name=".engine.control.ControlProvider"
+            android:authorities="${applicationId}.control"
+            android:exported="true"
+            android:permission="android.permission.DUMP" />
+
         <!-- Foreground service that hosts the QEMU process -->
         <service
             android:name=".service.PodroidService"
