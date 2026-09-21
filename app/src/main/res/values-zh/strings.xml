@@ -244,6 +244,7 @@
 
     <!-- Error -->
     <string name="error_title">错误</string>
+    <string name="asset_extraction_failed">无法解压虚拟机文件。请释放一些存储空间并重启应用。</string>
     <string name="try_again">重试</string>
 
     <!-- Sharing -->

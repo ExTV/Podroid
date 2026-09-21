@@ -244,6 +244,7 @@
 
     <!-- Error -->
     <string name="error_title">Error</string>
+    <string name="asset_extraction_failed">Could not unpack the VM files. Free some storage and restart the app.</string>
     <string name="try_again">Try again</string>
 
     <!-- Sharing -->

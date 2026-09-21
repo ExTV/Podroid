@@ -71,6 +71,26 @@ private fun runIgnoringBackgroundFgsDenial(tag: String, action: () -> Unit) {
     }
 }
 
+/**
+ * Awaits application asset readiness and publishes a user-visible VM error if
+ * readiness fails. The original exception is rethrown so the service's normal
+ * startup-failure cleanup still releases the WakeLock and foreground service.
+ */
+internal suspend fun awaitAssetsReadyForVm(
+    awaitReady: suspend () -> Unit,
+    failureMessage: String,
+    reportFailure: (String) -> Unit,
+) {
+    try {
+        awaitReady()
+    } catch (c: CancellationException) {
+        throw c
+    } catch (e: Exception) {
+        reportFailure(failureMessage)
+        throw e
+    }
+}
+
 @AndroidEntryPoint
 class PodroidService : Service() {
 
@@ -351,7 +371,13 @@ class PodroidService : Service() {
                     // reads vmlinuz/initrd/squashfs synchronously in start(), so
                     // we MUST block here until extraction has fully completed or
                     // the VM could launch against a partial/missing file.
-                    (application as? PodroidApplication)?.awaitAssetsReady()
+                    (application as? PodroidApplication)?.let { app ->
+                        awaitAssetsReadyForVm(
+                            awaitReady = { app.awaitAssetsReady() },
+                            failureMessage = getString(R.string.asset_extraction_failed),
+                            reportFailure = engine::reportStartFailure,
+                        )
+                    }
 
                     val rules = portForwardRepository.getRulesSnapshot().toMutableList()
                     val sshEnabled = settingsRepository.getSshEnabledSnapshot()
@@ -396,7 +422,7 @@ class PodroidService : Service() {
                 } catch (c: CancellationException) {
                     throw c // a stop/teardown cancelled this launch; not a start failure
                 } catch (e: Exception) {
-                    Log.e(TAG, "QEMU failed to start", e)
+                    Log.e(TAG, "VM failed to start", e)
                     // A Service-side throw here (failed asset extraction, a
                     // snapshot read, or engine.start()) can happen before the
                     // engine state ever leaves Idle. In that window the shutdown

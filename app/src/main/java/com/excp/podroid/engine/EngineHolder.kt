@@ -130,6 +130,11 @@ class EngineHolder @Inject constructor(
     // publish; set when start() runs.
     @Volatile private var startedEngine: VmEngine? = null
 
+    // Service-side preflight can fail before a concrete backend is started.
+    // Keep that failure at the holder layer so it survives the asynchronous
+    // first backend pick and is visible through the same state flow the UI uses.
+    private val _startFailure = MutableStateFlow<VmState.Error?>(null)
+
     init {
         // 0. Publish the real first pick as soon as it resolves off-main, so the
         //    delegate flows (state/bootStage/consoleText via flatMapLatest) and
@@ -362,9 +367,14 @@ class EngineHolder @Inject constructor(
     // Stopped that PodroidService would treat as a teardown signal. Once start()
     // marks the engine started, its real state (including a later Stopped) passes
     // through unchanged.
-    override val state: StateFlow<VmState> = currentFlow
-        .flatMapLatest { eng -> eng.state.map { st -> normalizeCycleState(eng, st) } }
-        .stateIn(scope, SharingStarted.Eagerly, VmState.Idle)
+    override val state: StateFlow<VmState> = combine(
+        currentFlow.flatMapLatest { eng ->
+            eng.state.map { st -> normalizeCycleState(eng, st) }
+        },
+        _startFailure,
+    ) { backendState, failure ->
+        failure ?: backendState
+    }.stateIn(scope, SharingStarted.Eagerly, VmState.Idle)
 
     override val bootStage: StateFlow<String> = currentFlow
         .flatMapLatest { it.bootStage }
@@ -386,7 +396,12 @@ class EngineHolder @Inject constructor(
         get() = current.sessionClientDelegate
         set(v) { current.sessionClientDelegate = v }
 
+    override fun reportStartFailure(message: String) {
+        _startFailure.value = VmState.Error(message)
+    }
+
     override suspend fun start(portForwards: List<PortForwardRule>, config: VmConfig) {
+        _startFailure.value = null
         // Guarantee the first Start runs on the correctly-picked engine even on a
         // fast cold launch where Start beats the init publish coroutine. start()
         // is always called off-main (PodroidService.launchPodroid → withContext
