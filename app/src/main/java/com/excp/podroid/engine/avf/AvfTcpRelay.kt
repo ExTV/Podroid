@@ -12,6 +12,7 @@ package com.excp.podroid.engine.avf
 import android.os.ParcelFileDescriptor
 import android.system.Os
 import android.system.OsConstants
+import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -51,7 +52,14 @@ internal interface RelayEndpoint {
  */
 internal class BidirectionalRelay(
     private val source: RelayEndpoint,
+    private val log: (String, Throwable?) -> Unit = { message, error ->
+        if (error == null) Log.d(TAG, message) else Log.w(TAG, message, error)
+    },
 ) {
+    companion object {
+        private const val TAG = "AvfTcpRelay"
+    }
+
     private val lock = Any()
     private var destination: RelayEndpoint? = null
     private var started = false
@@ -78,6 +86,8 @@ internal class BidirectionalRelay(
             aborted = true
             listOfNotNull(source, destination)
         }
+        // Best-effort cleanup: one endpoint failing to abort must not prevent
+        // teardown of the other endpoint or hide the original relay failure.
         endpoints.forEach { runCatching { it.abort() } }
     }
 
@@ -144,18 +154,22 @@ internal class BidirectionalRelay(
         } catch (e: CancellationException) {
             abort()
             throw e
-        } catch (_: IOException) {
+        } catch (e: IOException) {
+            log("relay pump ended after I/O failure: ${e.message}", null)
             abort()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             // Android's Os methods report some native I/O failures as an
             // exception other than IOException. They are still hard relay
             // failures and must not leave the opposite pump blocked.
+            log("relay pump failed unexpectedly", e)
             abort()
         }
     }
 
     private fun closeEndpoints() {
         val endpoints = synchronized(lock) { listOfNotNull(source, destination) }
+        // Final close is best-effort cleanup: a close failure must not keep the
+        // peer endpoint open or replace the relay's original failure.
         endpoints.forEach { runCatching { it.close() } }
     }
 }
@@ -183,6 +197,8 @@ internal class SocketRelayEndpoint(
         synchronized(lock) {
             if (closed) return
             closed = true
+            // Best-effort abort cleanup: peer teardown can make any individual
+            // operation fail, but the remaining shutdown/close steps must run.
             runCatching { socket.shutdownInput() }
             runCatching { socket.shutdownOutput() }
             runCatching { socket.close() }
@@ -257,6 +273,8 @@ internal class VsockRelayEndpoint private constructor(
             closed = true
             // The native shutdown must happen before either AutoClose stream
             // closes its descriptor. This is also the wakeup for blocked reads.
+            // Cleanup is best-effort so one failure cannot skip the remaining
+            // descriptor owners.
             runCatching { Os.shutdown(inputPfd.fileDescriptor, OsConstants.SHUT_RDWR) }
             runCatching { input.close() }
             runCatching { output.close() }
@@ -267,6 +285,8 @@ internal class VsockRelayEndpoint private constructor(
         synchronized(lock) {
             if (closed) return
             closed = true
+            // Best-effort final cleanup: both descriptor owners should get a
+            // close attempt even if the first one fails.
             runCatching { input.close() }
             runCatching { output.close() }
         }
