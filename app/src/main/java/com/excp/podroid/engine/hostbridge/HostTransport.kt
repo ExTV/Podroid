@@ -35,7 +35,15 @@ import java.nio.charset.CodingErrorAction
  */
 internal const val MAX_REQUEST_LINE_BYTES = 8191
 
-internal class RequestLineTooLongException : IOException("host request line exceeds $MAX_REQUEST_LINE_BYTES bytes")
+/**
+ * A malformed request from the guest daemon (too long, or not valid UTF-8):
+ * a protocol violation from a hostile or buggy guest, not a peer disconnect.
+ * Callers should log this with its stack trace like any other real bug.
+ */
+internal open class HostProtocolViolationException(message: String, cause: Throwable? = null) : IOException(message, cause)
+
+internal class RequestLineTooLongException :
+    HostProtocolViolationException("host request line exceeds $MAX_REQUEST_LINE_BYTES bytes")
 
 /** Reads exactly one complete UTF-8 request line, or null for EOF. */
 internal object HostRequestLineReader {
@@ -58,7 +66,7 @@ internal object HostRequestLineReader {
                         .decode(ByteBuffer.wrap(bytes, 0, contentSize))
                         .toString()
                 } catch (e: CharacterCodingException) {
-                    throw IOException("invalid UTF-8 request", e)
+                    throw HostProtocolViolationException("invalid UTF-8 request", e)
                 }
             }
             if (size == bytes.size) throw RequestLineTooLongException()

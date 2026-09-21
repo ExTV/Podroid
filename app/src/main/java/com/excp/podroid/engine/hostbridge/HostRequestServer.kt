@@ -20,6 +20,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -153,6 +154,15 @@ class HostRequestServer(
                     }
                 } catch (c: CancellationException) {
                     throw c // don't log a stop/swap's cancellation as a loop error
+                } catch (e: HostProtocolViolationException) {
+                    // A malformed request line (too long, bad UTF-8): a real bug
+                    // from a hostile or buggy guest, not a peer disconnect. Keep
+                    // the throwable, unlike the generic IOException case below.
+                    log("host bridge loop error: ${e.message}", e)
+                } catch (e: IOException) {
+                    // The peer went away: expected at every VM stop (also a VM
+                    // crash). No throwable/stack trace for the routine case.
+                    log("host bridge peer closed: ${e.message}", null)
                 } catch (e: Exception) {
                     log("host bridge loop error: ${e.message}", e)
                 } finally {

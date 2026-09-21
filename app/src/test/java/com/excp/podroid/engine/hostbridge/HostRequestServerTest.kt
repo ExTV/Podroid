@@ -2,6 +2,7 @@ package com.excp.podroid.engine.hostbridge
 
 import com.excp.podroid.data.repository.AddRuleResult
 import com.excp.podroid.data.repository.PortForwardRule
+import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -134,6 +135,95 @@ class HostRequestServerTest {
         }
     }
 
+    @Test(timeout = 5000) fun ioExceptionFromReadLogsWithoutAThrowable() {
+        val scope = testScope()
+        try {
+            val logged = CountDownLatch(1)
+            var loggedMessage: String? = null
+            var loggedError: Throwable? = null
+            val transport = ThrowingTransport(IOException("read failed: ECONNRESET"))
+            val server = HostRequestServer(
+                openTransport = { transport },
+                dispatcher = dispatcher(),
+                scope = scope,
+                log = { message, error ->
+                    if (message.startsWith("host bridge peer closed")) {
+                        loggedMessage = message
+                        loggedError = error
+                        logged.countDown()
+                    }
+                },
+            )
+            server.start()
+
+            assertTrue(logged.await(1, TimeUnit.SECONDS))
+            assertEquals("host bridge peer closed: read failed: ECONNRESET", loggedMessage)
+            assertEquals(null, loggedError)
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test(timeout = 5000) fun nonIoExceptionFromReadLogsWithItsThrowable() {
+        val scope = testScope()
+        try {
+            val logged = CountDownLatch(1)
+            var loggedMessage: String? = null
+            var loggedError: Throwable? = null
+            val failure = IllegalStateException("boom")
+            val transport = ThrowingTransport(failure)
+            val server = HostRequestServer(
+                openTransport = { transport },
+                dispatcher = dispatcher(),
+                scope = scope,
+                log = { message, error ->
+                    if (message.startsWith("host bridge loop error")) {
+                        loggedMessage = message
+                        loggedError = error
+                        logged.countDown()
+                    }
+                },
+            )
+            server.start()
+
+            assertTrue(logged.await(1, TimeUnit.SECONDS))
+            assertEquals("host bridge loop error: boom", loggedMessage)
+            assertEquals(failure, loggedError)
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test(timeout = 5000) fun protocolViolationFromReadLogsWithItsThrowable() {
+        val scope = testScope()
+        try {
+            val logged = CountDownLatch(1)
+            var loggedMessage: String? = null
+            var loggedError: Throwable? = null
+            val failure = RequestLineTooLongException()
+            val transport = ThrowingTransport(failure)
+            val server = HostRequestServer(
+                openTransport = { transport },
+                dispatcher = dispatcher(),
+                scope = scope,
+                log = { message, error ->
+                    if (message.startsWith("host bridge loop error")) {
+                        loggedMessage = message
+                        loggedError = error
+                        logged.countDown()
+                    }
+                },
+            )
+            server.start()
+
+            assertTrue(logged.await(1, TimeUnit.SECONDS))
+            assertEquals("host bridge loop error: ${failure.message}", loggedMessage)
+            assertEquals(failure, loggedError)
+        } finally {
+            scope.cancel()
+        }
+    }
+
     private fun awaitChildren(scope: CoroutineScope) = runBlocking {
         withTimeout(1000) { scope.coroutineContext[Job]!!.children.toList().joinAll() }
         assertTrue(scope.coroutineContext[Job]!!.children.none())
@@ -189,3 +279,20 @@ class HostRequestServerTest {
         }
     }
 }
+
+    /** Throws [failure] from its first read, then reports EOF so the loop does not spin. */
+    private class ThrowingTransport(private val failure: Exception) : HostTransport {
+        val closed = CountDownLatch(1)
+        val closeCount = AtomicInteger(0)
+        private val returned = AtomicInteger(0)
+
+        override fun readRequest(): String? {
+            if (returned.getAndIncrement() == 0) throw failure
+            return null
+        }
+
+        override fun writeResponse(line: String) = Unit
+        override fun close() {
+            if (closeCount.incrementAndGet() == 1) closed.countDown()
+        }
+    }
