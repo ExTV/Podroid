@@ -68,6 +68,15 @@ interface VmEngine {
      */
     var sessionClientDelegate: TerminalSessionClient?
 
+    /**
+     * Publishes a launch failure that happened before a concrete backend's
+     * [start] method was entered. EngineHolder layers this into [state] so the
+     * existing UI error handling can explain service-side preflight failures.
+     * Concrete backends keep the default because these failures happen outside
+     * them.
+     */
+    fun reportStartFailure(message: String) = Unit
+
     suspend fun start(portForwards: List<PortForwardRule>, config: VmConfig)
     fun stop()
 

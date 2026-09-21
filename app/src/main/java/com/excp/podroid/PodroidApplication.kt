@@ -148,7 +148,13 @@ class PodroidApplication : Application() {
         // Only inspect the temporary sibling owned by this extraction
         // destination. Never scan filesDir recursively: unrelated app data may
         // legitimately use a .tmp suffix.
-        AssetExtractionSupport.deleteStaleTemporaryFile(destFile)
+        if (!AssetExtractionSupport.deleteStaleTemporaryFile(destFile)) {
+            Log.w(
+                TAG,
+                "Could not delete stale temporary asset " +
+                    "${AssetExtractionSupport.temporaryFileFor(destFile).path}; continuing",
+            )
+        }
         if (!forceCopy && destFile.exists() && (assetSize < 0 || destFile.length() == assetSize)) return
 
         destFile.parentFile?.mkdirs()

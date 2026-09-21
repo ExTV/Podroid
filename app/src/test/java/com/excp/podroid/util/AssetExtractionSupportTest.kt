@@ -37,9 +37,22 @@ class AssetExtractionSupportTest {
         destinationTemporary.writeText("stale")
         unrelatedTemporary.writeText("keep")
 
-        AssetExtractionSupport.deleteStaleTemporaryFile(destination)
+        assertTrue(AssetExtractionSupport.deleteStaleTemporaryFile(destination))
 
         assertFalse(destinationTemporary.exists())
         assertTrue(unrelatedTemporary.exists())
+    }
+
+    @Test
+    fun deleteStaleTemporaryFile_reportsFailureWithoutThrowing() {
+        val destination = File(temporaryFolder.root, "assets/initrd.img").apply {
+            parentFile.mkdirs()
+        }
+        val destinationTemporary = AssetExtractionSupport.temporaryFileFor(destination)
+        destinationTemporary.mkdirs()
+        File(destinationTemporary, "child").writeText("keep")
+
+        assertFalse(AssetExtractionSupport.deleteStaleTemporaryFile(destination))
+        assertTrue(destinationTemporary.exists())
     }
 }

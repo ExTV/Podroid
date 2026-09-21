@@ -44,13 +44,12 @@ internal object AssetExtractionSupport {
     fun temporaryFileFor(destFile: File): File =
         File(destFile.parentFile, destFile.name + TMP_SUFFIX)
 
-    /** Deletes only the temporary sibling owned by [destFile]. */
-    fun deleteStaleTemporaryFile(destFile: File) {
+    /**
+     * Deletes only the temporary sibling owned by [destFile]. Returns false if
+     * a stale sibling exists but cannot be removed; callers may log and continue.
+     */
+    fun deleteStaleTemporaryFile(destFile: File): Boolean {
         val temporaryFile = temporaryFileFor(destFile)
-        if (temporaryFile.exists() && !temporaryFile.delete()) {
-            throw java.io.IOException(
-                "stale temporary asset file ${temporaryFile.path} could not be deleted",
-            )
-        }
+        return !temporaryFile.exists() || temporaryFile.delete()
     }
 }
