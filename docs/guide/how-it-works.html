@@ -33,7 +33,7 @@
       <h4>Going deeper</h4>
       <ul>
         <li><a href="performance.html">Performance &amp; why it's slow</a></li>
-        <li><a href="backends.html">Backends: QEMU &amp; AVF</a></li>
+        <li><a href="backends.html">Backends: QEMU, AVF &amp; UML</a></li>
         <li><a href="networking.html">Networking &amp; ports</a></li>
         <li><a href="packages.html">Packages &amp; services</a></li>
         <li><a href="migrations.html">Updates &amp; migrations</a></li>
@@ -54,11 +54,11 @@
       <h2>A real VM</h2>
       <p>When you tap "Start VM", the app launches a real hypervisor with a real aarch64 Alpine Linux guest. The guest kernel, the init system, the shell, and every process you run are all executing real ARM64 machine code inside a fully virtualized machine. There is no instruction translation of Alpine binaries, no Android kernel namespace trick, and no chroot. The guest sees a completely clean Linux environment.</p>
 
-      <h2>Two backends</h2>
-      <p>Podroid supports two hypervisor backends, selectable in Settings. The guest is identical either way - only the host-side virtualization layer differs.</p>
+      <h2>Three backends</h2>
+      <p>Podroid supports three VM backends, selectable in Settings. The guest is identical either way - only the host-side virtualization layer differs.</p>
       <ul>
         <li><strong>QEMU (default):</strong> software CPU emulation via TCG. Works on any ARM64 Android 8+ device. Slower than native because every guest instruction is translated and executed by the host CPU. See the <a href="backends.html">Backends</a> page for tuning options.</li>
-        <li><strong>AVF / pKVM:</strong> hardware virtualization via Android's Virtualization Framework. Available on recent Pixel devices that ship pKVM. Runs at near-native speed. Requires two one-time <code>adb</code> permission grants. See <a href="backends.html">Backends: QEMU &amp; AVF</a>.</li>
+        <li><strong>AVF / pKVM:</strong> hardware virtualization via Android's Virtualization Framework. Available on recent Pixel devices that ship pKVM. Runs at near-native speed. Requires two one-time <code>adb</code> permission grants. See <a href="backends.html">Backends: QEMU, AVF &amp; UML</a>.</li>
         <li><strong>UML (experimental, opt-in):</strong> User-Mode Linux runs the guest kernel as an ordinary Android process, so guest code runs natively without root or special permissions. Never chosen by Auto. See <a href="backends.html#uml">Backends</a>.</li>
       </ul>
 

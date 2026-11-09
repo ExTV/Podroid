@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Podroid: Linux containers on Android, no root required</title>
-  <meta name="description" content="Podroid runs Podman, Docker, and LXC on Android in a real Alpine Linux VM with a custom Linux 7.3 kernel - via QEMU on any ARM64 device, or hardware-accelerated AVF (pKVM) on supported Pixels - plus an in-app X11 desktop for GUI apps. No root, no custom recovery." />
+  <meta name="description" content="Podroid runs Podman, Docker, and LXC on Android in a real Alpine Linux VM with a custom Linux 7.3 kernel - via QEMU on any ARM64 device, hardware-accelerated AVF (pKVM) on supported Pixels, or the experimental UML backend - plus an in-app X11 desktop for GUI apps. No root, no custom recovery." />
   <meta property="og:title" content="Podroid: Linux containers on Android, no root required" />
-  <meta property="og:description" content="Spin up a real Alpine Linux VM with a full Podman runtime on any Android 8+ ARM64 device. QEMU software emulation everywhere, or near-native AVF (pKVM) acceleration on supported Pixels. No root, no Magisk." />
+  <meta property="og:description" content="Spin up a real Alpine Linux VM with a full Podman runtime on any Android 8+ ARM64 device. QEMU software emulation everywhere, near-native AVF (pKVM) acceleration on supported Pixels, or experimental UML. No root, no Magisk." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://extv.github.io/Podroid/" />
   <meta property="og:image" content="https://extv.github.io/Podroid/logo.png" />
@@ -641,7 +641,7 @@
           <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
         </div>
         <h3>Notify from the VM</h3>
-        <p>Run <code>podroid-notify "build done"</code> inside the guest and it pops an Android notification — with a title, priority, and an <code>--id</code> to update one in place. Perfect for long builds, downloads, and cron jobs. Works on both backends.</p>
+        <p>Run <code>podroid-notify "build done"</code> inside the guest and it pops an Android notification - with a title, priority, and an <code>--id</code> to update one in place. Perfect for long builds, downloads, and cron jobs. Works on every backend.</p>
       </div>
 
       <div class="feature-card">
@@ -689,7 +689,15 @@
           <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>
         </div>
         <h3>Hardware acceleration (AVF)</h3>
-        <p>On a Pixel that ships pKVM, switch the backend to the Android Virtualization Framework and the same Alpine guest runs on real CPU cores - no TCG, near-native speed. Two one-time <code>adb</code> grants, then it's automatic. Falls back to QEMU everywhere else. An experimental, opt-in UML backend runs the guest kernel as a plain process for a speedup on devices without AVF. <a href="guide/backends.html">Backends guide</a>.</p>
+        <p>On a Pixel that ships pKVM, switch the backend to the Android Virtualization Framework and the same Alpine guest runs on real CPU cores - no TCG, near-native speed. Two one-time <code>adb</code> grants, then it's automatic. Falls back to QEMU everywhere else. <a href="guide/backends.html">Backends guide</a>.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </div>
+        <h3>Faster without AVF (UML, experimental)</h3>
+        <p>User-Mode Linux runs the guest kernel as an ordinary Android process, so guest code runs natively instead of being emulated. On a phone without AVF that measured about 2x faster npm installs and up to 4x on CPU-bound work than QEMU. Opt-in in Settings, no root or adb grant. <a href="guide/backends.html#uml">UML backend</a>.</p>
       </div>
 
       <div class="feature-card">
@@ -784,7 +792,7 @@
           </tr>
           <tr>
             <td class="row-label">Downloads folder sharing</td>
-            <td class="col-podroid"><span class="check">✓ virtio-9p (QEMU) + vsock (AVF)</span></td>
+            <td class="col-podroid"><span class="check">✓ virtio-9p (QEMU) + vsock (AVF) + hostfs (UML)</span></td>
             <td><span class="check">✓</span></td>
             <td><span class="cross">✗</span></td>
           </tr>
@@ -975,9 +983,16 @@ qmp.sock               →  runtime port-forward control</div>
       </details>
 
       <details>
+        <summary>What is the UML backend, and should I use it?</summary>
+        <div class="faq-answer">
+          UML (User-Mode Linux) is an experimental, opt-in backend that runs the guest kernel as an ordinary Android process, so guest code runs natively instead of being emulated. It needs no root and no adb grant: enable it in Settings under Backend. On a phone without AVF it measured about 2x faster npm installs and up to 4x faster on CPU-bound work than QEMU (single-device numbers, results vary). It has no USB passthrough. Where AVF is available it is still roughly ten times faster, so prefer AVF there. See the <a href="guide/backends.html#uml">UML section</a> of the Backends guide.
+        </div>
+      </details>
+
+      <details>
         <summary>Can I do things on Android from inside the VM?</summary>
         <div class="faq-answer">
-          Yes. Two CLIs ship in the guest: <code>podroid-notify "build done"</code> pops an Android notification (with a title, priority, and an <code>--id</code> to update one in place), and <code>podroid-forward 8888 80</code> adds a port-forward rule without opening Settings. Both work on either backend and are handy for long builds, downloads, and cron jobs. See <a href="guide/networking.html">Networking &amp; ports</a>.
+          Yes. Two CLIs ship in the guest: <code>podroid-notify "build done"</code> pops an Android notification (with a title, priority, and an <code>--id</code> to update one in place), and <code>podroid-forward 8888 80</code> adds a port-forward rule without opening Settings. Both work on every backend and are handy for long builds, downloads, and cron jobs. See <a href="guide/networking.html">Networking &amp; ports</a>.
         </div>
       </details>
 
@@ -991,14 +1006,14 @@ qmp.sock               →  runtime port-forward control</div>
       <details>
         <summary>Can I access my Android files from the VM?</summary>
         <div class="faq-answer">
-          Yes. Toggle <strong>Downloads folder sharing</strong> in Settings and the Android Downloads folder is exposed to the VM on both backends - via <code>virtio-9p</code> on QEMU, and via an in-process 9p2000.L server over vsock on AVF - mounted inside the guest at <code>/mnt/downloads</code>. It's bidirectional: files you drop in Downloads on the phone show up there immediately, and anything the VM writes to <code>/mnt/downloads</code> appears back in Downloads.
+          Yes. Toggle <strong>Downloads folder sharing</strong> in Settings and the Android Downloads folder is exposed to the VM on every backend - via <code>virtio-9p</code> on QEMU, via an in-process 9p2000.L server over vsock on AVF, and via hostfs on UML - mounted inside the guest at <code>/mnt/downloads</code>. It's bidirectional: files you drop in Downloads on the phone show up there immediately, and anything the VM writes to <code>/mnt/downloads</code> appears back in Downloads.
         </div>
       </details>
 
       <details>
         <summary>Can I plug in a USB device?</summary>
         <div class="faq-answer">
-          Yes, on the QEMU backend. Enable <strong>USB passthrough</strong> in Settings (it adds a USB controller at boot, so set it while the VM is stopped), then attach a device through a USB-C hub or OTG adapter. Android asks for permission once per device, and it then appears inside the guest while Podroid is running. Wi-Fi adapters need firmware installed inside the guest before they will associate, because the guest image ships none. Install the package for your chipset, for example <code>apk add linux-firmware-rtw88</code> for RTL8821AU/8812AU/8814AU dongles or <code>apk add linux-firmware-rtlwifi</code> for RTL8188/8192 ones, then replug the adapter. Works with Wi-Fi adapters, storage, serial adapters, audio interfaces, and more. Not available on the AVF backend, which has no channel to hand the device to the VM.
+          Yes, on the QEMU backend. Enable <strong>USB passthrough</strong> in Settings (it adds a USB controller at boot, so set it while the VM is stopped), then attach a device through a USB-C hub or OTG adapter. Android asks for permission once per device, and it then appears inside the guest while Podroid is running. Wi-Fi adapters need firmware installed inside the guest before they will associate, because the guest image ships none. Install the package for your chipset, for example <code>apk add linux-firmware-rtw88</code> for RTL8821AU/8812AU/8814AU dongles or <code>apk add linux-firmware-rtlwifi</code> for RTL8188/8192 ones, then replug the adapter. Works with Wi-Fi adapters, storage, serial adapters, audio interfaces, and more. Not available on the AVF or UML backends, which have no channel to hand the device to the VM.
         </div>
       </details>
 
