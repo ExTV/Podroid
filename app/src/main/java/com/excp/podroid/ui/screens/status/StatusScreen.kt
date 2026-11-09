@@ -43,13 +43,13 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.excp.podroid.R
-import com.excp.podroid.engine.EngineSelection
 import com.excp.podroid.engine.VmState
 import com.excp.podroid.ui.components.AdaptiveContainer
 import com.excp.podroid.ui.components.ChartSeries
 import com.excp.podroid.ui.components.MetricChartCard
 import com.excp.podroid.ui.components.MetricLegend
 import com.excp.podroid.ui.components.PodroidListRow
+import com.excp.podroid.ui.components.backendLabel
 import com.excp.podroid.ui.components.PodroidSectionLabel
 import com.excp.podroid.ui.components.PodroidTopBar
 import com.excp.podroid.ui.theme.PodroidTokens
@@ -437,22 +437,4 @@ private fun vmStatusLabel(vmState: VmState, uptime: String?, bootStage: String):
     is VmState.Starting -> bootStage.ifEmpty { stringResource(R.string.status_starting) }
     is VmState.Error -> stringResource(R.string.status_error)
     else -> stringResource(R.string.status_stopped)
-}
-
-@Composable
-private fun backendLabel(selection: EngineSelection, activeId: String): String {
-    val activeLabel = when (activeId) {
-        "avf" -> stringResource(R.string.avf_kvm)
-        "uml" -> stringResource(R.string.uml_status_label)
-        else -> stringResource(R.string.qemu_tcg)
-    }
-    return when (selection) {
-        EngineSelection.AUTO -> "${stringResource(R.string.auto)} ($activeId)"
-        // Forced AVF but the actual pick fell back to QEMU (device can't run AVF) -
-        // say so instead of claiming AVF is active.
-        EngineSelection.AVF -> if (activeId == "avf") activeLabel else activeLabel + stringResource(R.string.backend_fallback_suffix)
-        EngineSelection.QEMU -> activeLabel
-        // Forced UML but the pick fell back (probe failed or demoted): say so.
-        EngineSelection.UML -> if (activeId == "uml") activeLabel else activeLabel + stringResource(R.string.backend_fallback_suffix_uml)
-    }
 }

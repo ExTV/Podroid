@@ -74,6 +74,11 @@ class HomeViewModel @Inject constructor(
     // Pushed live by the guest over the host bridge (STATS verb), persisted via
     // SettingsRepository.setLastContainerCount and read back here as a Flow -
     // works identically on both backends, no polling needed.
+    val backendId: StateFlow<String> = engine.backendIdFlow
+
+    val engineSelection: StateFlow<com.excp.podroid.engine.EngineSelection> = settingsRepository.engineSelection
+        .stateIn(viewModelScope, SharingStarted.Eagerly, com.excp.podroid.engine.EngineSelection.AUTO)
+
     val containerCount: StateFlow<Int?> = settingsRepository.lastContainerCount
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
