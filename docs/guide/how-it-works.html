@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>How it works · Podroid docs</title>
-  <meta name="description" content="Architecture of the Podroid Alpine Linux VM: kernel, OpenRC, squashfs, ext4 overlay, QEMU/AVF, and how the app keeps it alive." />
+  <meta name="description" content="Architecture of the Podroid Alpine Linux VM: kernel, OpenRC, squashfs, ext4 overlay, QEMU/AVF/UML, and how the app keeps it alive." />
   <link rel="icon" type="image/png" href="../logo.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -84,17 +84,17 @@
       </ul>
 
       <h2>Guest-to-Android bridge</h2>
-      <p>A small daemon, <code>podroid-hostd</code>, lets processes inside the VM reach back to Android. It listens on a guest-local Unix socket and relays one-line requests to the app over the same control transport the VM already uses - a virtio-console port on QEMU, vsock on AVF. Two CLIs are wired to it: <code>podroid-notify</code> posts an Android notification, and <code>podroid-forward</code> creates, removes, or (with <code>clean</code>) wipes all user port-forward rules without leaving the shell. The app posts the notification or writes the rule on the host side. See <a href="networking.html">Networking &amp; ports</a> for usage.</p>
+      <p>A small daemon, <code>podroid-hostd</code>, lets processes inside the VM reach back to Android. It listens on a guest-local Unix socket and relays one-line requests to the app over the same control transport the VM already uses - a virtio-console port on QEMU, vsock on AVF, a serial line on UML. Two CLIs are wired to it: <code>podroid-notify</code> posts an Android notification, and <code>podroid-forward</code> creates, removes, or (with <code>clean</code>) wipes all user port-forward rules without leaving the shell. The app posts the notification or writes the rule on the host side. See <a href="networking.html">Networking &amp; ports</a> for usage.</p>
 
       <h2>Boot stages</h2>
       <p>The app watches the VM's serial console and updates the persistent notification as each stage marker appears. You can follow along in real time during the first boot, where host-key generation adds a visible pause between "Starting SSH..." and the next stage.</p>
 
       <h2>Keeping the VM alive</h2>
-      <p>A foreground Android service holds a partial WakeLock for the lifetime of the VM. The WakeLock keeps the CPU running so QEMU (or AVF) is not paused by Android's power scheduler while the app is in the background. The foreground service also shows the persistent notification required by Android for any long-running background work.</p>
+      <p>A foreground Android service holds a partial WakeLock for the lifetime of the VM. The WakeLock keeps the CPU running so the VM is not paused by Android's power scheduler while the app is in the background. The foreground service also shows the persistent notification required by Android for any long-running background work.</p>
 
       <div class="callout warn">
         <span class="label">Phantom-process killer</span>
-        <p>On some Android builds, the OS aggressively kills child processes of apps running in the background, including the QEMU process. If your VM dies when you switch apps, see <a href="limitations.html">Limitations &amp; troubleshooting</a>.</p>
+        <p>On some Android builds, the OS aggressively kills child processes of apps running in the background, including the QEMU process and, on UML, the guest's own processes. If your VM dies when you switch apps, see <a href="limitations.html">Limitations &amp; troubleshooting</a>.</p>
       </div>
 
       <h2>Native binaries and page alignment</h2>
@@ -126,12 +126,12 @@
             <td>Writable persistent layer; all user changes and installed packages live here</td>
           </tr>
           <tr>
-            <td>QEMU / AVF</td>
+            <td>QEMU / AVF / UML</td>
             <td>Hypervisor backend; QEMU (software TCG) works on any device, AVF (hardware) on supported Pixels; UML (experimental) runs the guest kernel as a plain process</td>
           </tr>
           <tr>
             <td>podroid-hostd</td>
-            <td>Guest-to-Android bridge daemon; relays <code>podroid-notify</code> and <code>podroid-forward</code> (add / remove / list / clean) requests to the app over a virtio-console port (QEMU) or vsock (AVF)</td>
+            <td>Guest-to-Android bridge daemon; relays <code>podroid-notify</code> and <code>podroid-forward</code> (add / remove / list / clean) requests to the app over a virtio-console port (QEMU), vsock (AVF) or a serial line (UML)</td>
           </tr>
           <tr>
             <td>Foreground service</td>

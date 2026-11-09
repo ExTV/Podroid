@@ -90,7 +90,7 @@
       <p>The last card lists the permissions Podroid asks for, with the reason for each and a Grant button. Notifications, because the VM runs in a foreground service whose notification is how you see its state and stop it. Unrestricted background use, because Android otherwise stops the VM once the app is in the background. Both can be skipped. If one is missing later, including after an update that starts needing a new one, the same rows appear at the top of the home screen.</p>
 
       <h2>First boot</h2>
-      <p>Tap <strong>Start VM</strong> on the home screen. The first boot takes roughly 50-60 seconds, noticeably longer than the 10-15 seconds of later boots. Two one-time tasks run:</p>
+      <p>Tap <strong>Start VM</strong> on the home screen. The first boot takes roughly 50-60 seconds, noticeably longer than later boots, which take roughly 10 to 45 seconds depending on the backend and the phone. Two one-time tasks run:</p>
       <ul>
         <li><strong>SSH host key generation:</strong> Dropbear generates RSA, ECDSA, and ED25519 host keys. This takes 25-35 seconds on a typical phone and happens only once; the keys are stored on the persistent overlay and reused on every subsequent boot.</li>
         <li><strong>Filesystem formatting:</strong> the ext4 storage image is formatted to the size you chose in step 1.</li>

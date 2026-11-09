@@ -129,7 +129,7 @@ curl http://&lt;phone-ip&gt;:8080</code></pre>
       <p>Up to 2048 rules can be saved. The limit exists because each rule is a listening socket and a row in Settings, and because a shell loop can otherwise add thousands of them in a second. <code>podroid-forward</code> reports an error rather than reporting success once the list is full.</p>
 
       <h2>Talking back to Android from the guest</h2>
-      <p>Several command-line tools ship inside the VM so scripts and shell sessions can reach the Android side directly, without the in-app UI. They all work on the QEMU and AVF backends.</p>
+      <p>Several command-line tools ship inside the VM so scripts and shell sessions can reach the Android side directly, without the in-app UI. They all work on every backend.</p>
 
       <h3><code>podroid-forward</code> - manage port forwards from the shell</h3>
       <pre><code><span class="c"># forward phone :8888 -&gt; guest :80</span>
@@ -142,7 +142,7 @@ podroid-forward list
 podroid-forward remove 8888 tcp
 <span class="c"># drop every user rule at once (replies "removed N")</span>
 podroid-forward clean</code></pre>
-      <p>Rules created this way are identical to ones added in Settings: they apply live, persist across reboots, and appear in the Settings list. Both TCP and UDP work on QEMU and AVF. <code>clean</code> removes only user rules - the app's own SSH, display, and audio forwards are untouched.</p>
+      <p>Rules created this way are identical to ones added in Settings: they apply live, persist across reboots, and appear in the Settings list. Both TCP and UDP work on every backend. <code>clean</code> removes only user rules - the app's own SSH, display, and audio forwards are untouched.</p>
 
       <h3><code>podroid-notify</code> - post an Android notification</h3>
       <pre><code><span class="c"># simplest form</span>
@@ -293,7 +293,7 @@ pasv_addr_resolve=NO
 
       <div class="callout note">
         <span class="label">UDP on AVF</span>
-        <p>UDP forwarding works on both QEMU and AVF. Because vsock is a stream transport, each inbound UDP datagram is length-framed and carried over a per-client vsock connection, then delivered to the guest as a real UDP datagram - so a guest DNS server such as Pi-hole is reachable over UDP. Idle flows are reaped automatically, and the number of concurrent client flows is capped to bound resource use.</p>
+        <p>UDP forwarding works on every backend. On AVF, because vsock is a stream transport, each inbound UDP datagram is length-framed and carried over a per-client vsock connection, then delivered to the guest as a real UDP datagram - so a guest DNS server such as Pi-hole is reachable over UDP. Idle flows are reaped automatically, and the number of concurrent client flows is capped to bound resource use.</p>
         <p>The privileged-port limit applies at both ends: an unprivileged Android app can't bind a host port below 1024, and rootless Podman can't publish a privileged port inside the guest either. So run a DNS server like Pi-hole on a high port - for example host <code>5353/udp</code> to guest <code>5353/udp</code> - and point clients at <code>&lt;phone-ip&gt;:5353</code>.</p>
       </div>
 

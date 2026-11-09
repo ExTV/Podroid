@@ -120,7 +120,7 @@
           <tr>
             <td>CPU cores</td>
             <td>1 / 2 / 4 / 6 / 8</td>
-            <td>vCPU count passed to QEMU. Requires a VM restart. On AVF, any value above 1 uses all available host cores.</td>
+            <td>vCPU count for the VM, used as set on QEMU and UML. Requires a VM restart. On AVF, any value above 1 uses all available host cores.</td>
           </tr>
           <tr>
             <td>Storage size</td>
@@ -163,7 +163,7 @@
           <tr>
             <td>Downloads sharing</td>
             <td>Toggle</td>
-            <td>Shares the Android Downloads folder into the VM at <code>/mnt/downloads</code>: virtio-9p on QEMU, an in-process 9p2000.L server over vsock on AVF. Can be unstable on some QEMU configurations; disable it if the VM crashes on boot. The AVF path is stable.</td>
+            <td>Shares the Android Downloads folder into the VM at <code>/mnt/downloads</code>: virtio-9p on QEMU, an in-process 9p2000.L server over vsock on AVF, hostfs on UML. Can be unstable on some QEMU configurations; disable it if the VM crashes on boot. The AVF path is stable.</td>
           </tr>
           <tr>
             <td>USB passthrough</td>

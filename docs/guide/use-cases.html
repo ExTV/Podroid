@@ -97,7 +97,7 @@
 
       <div class="callout note">
         <span class="label">JVM-heavy services</span>
-        <p>Services backed by a JVM - Gitea's built-in runner, Jenkins, Gradle builds inside code-server, and anything running on Java or Kotlin - are noticeably slow on the QEMU TCG backend. JVM startup alone can take 10-30 seconds. If you rely on these services heavily, enabling the <a href="backends.html">AVF backend</a> on a Pixel device makes a large practical difference.</p>
+        <p>Services backed by a JVM - Gitea's built-in runner, Jenkins, Gradle builds inside code-server, and anything running on Java or Kotlin - are noticeably slow on the QEMU TCG backend. JVM startup alone can take 10-30 seconds. If you rely on these services heavily, enabling the <a href="backends.html">AVF backend</a> on a Pixel device makes a large practical difference. On phones without AVF, the experimental <a href="backends.html#uml">UML backend</a> is also faster than QEMU on CPU-bound work.</p>
       </div>
 
       <h2>Backing up containers</h2>

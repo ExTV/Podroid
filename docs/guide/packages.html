@@ -154,7 +154,7 @@
           </tr>
           <tr>
             <td><code>podroid-network</code></td>
-            <td>Brings up eth0 (10.0.2.15/24 on QEMU, DHCP on AVF), adds the default route, and writes <code>/etc/resolv.conf</code> with up to two distinct device resolvers first, then deduplicated <code>8.8.8.8</code> / <code>1.1.1.1</code> fallbacks.</td>
+            <td>Brings up the guest interface (<code>eth0</code>, or <code>vec0</code> on UML; 10.0.2.15/24 on QEMU and UML, DHCP on AVF), adds the default route, and writes <code>/etc/resolv.conf</code> with up to two distinct device resolvers first, then deduplicated <code>8.8.8.8</code> / <code>1.1.1.1</code> fallbacks.</td>
           </tr>
           <tr>
             <td><code>podroid-resize</code></td>
@@ -166,7 +166,7 @@
           </tr>
           <tr>
             <td><code>podroid-vsock</code></td>
-            <td>AVF only. Starts the vsock port-forwarding agent that bridges Android-side TCP connections to guest vsock ports. On QEMU this service marks itself inactive and does nothing.</td>
+            <td>AVF only. Starts the vsock port-forwarding agent that bridges Android-side TCP connections to guest vsock ports. On QEMU and UML this service marks itself inactive and does nothing.</td>
           </tr>
           <tr>
             <td><code>podroid-hostd</code></td>

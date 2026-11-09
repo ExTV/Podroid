@@ -253,15 +253,14 @@
        show the container's border colour. Card-coloured, non-interactive. */
     .feature-card.filler { pointer-events: none; }
 
-    /* 13 cards: 3-col leaves 2 trailing cells, 2-col leaves 1, 1-col leaves 0.
-       Show both fillers at 3-col, one at 2-col, none at 1-col. */
+    /* 14 cards: 3-col leaves 1 trailing cell, 2-col and 1-col leave 0.
+       Show the filler at 3-col only. */
     @media (max-width: 900px) {
       .features-grid { grid-template-columns: repeat(2, 1fr); }
-      .feature-card.filler-b { display: none; }
+      .feature-card.filler { display: none; }
     }
     @media (max-width: 600px) {
       .features-grid { grid-template-columns: 1fr; }
-      .feature-card.filler { display: none; }
     }
 
     /* ── COMPARISON ────────────────────────────────────── */
@@ -339,6 +338,8 @@
       color: var(--muted);
       overflow-x: auto;
       white-space: pre;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
     }
 
     .arch-green { color: var(--green); }
@@ -457,6 +458,8 @@
       color: var(--muted);
       overflow-x: auto;
       white-space: pre;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
     }
 
     .c-prompt  { color: var(--green); user-select: none; }
@@ -539,7 +542,9 @@
 
     /* ── RESPONSIVE ────────────────────────────────────── */
     @media (max-width: 600px) {
-      nav .nav-links { display: none; }
+      nav { padding: 0 1rem; }
+      nav .nav-links { gap: 1rem; }
+      nav .nav-links li:nth-child(-n+3) { display: none; }
       .arch-diagram  { font-size: 0.62rem; }
     }
   </style>
@@ -566,7 +571,7 @@
 <section id="hero">
   <h1>Linux containers on Android.<br /><em>No root required.</em></h1>
   <p class="hero-sub">
-    Podroid spins up a real Alpine Linux VM using QEMU and a custom&nbsp;kernel.<br />
+    Podroid boots a real Alpine Linux VM with its own kernel, on QEMU, AVF or&nbsp;UML.<br />
     Run <strong>Podman</strong>, <strong>Docker</strong>, and <strong>LXC</strong> with a polished built-in terminal,<br />
     or open the in-app <strong>X11 viewer</strong> for GUI apps. Install the APK, tap Start, go.
   </p>
@@ -625,7 +630,7 @@
           <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
         </div>
         <h3>Port Forwarding</h3>
-        <p>Expose any VM port to your Android device at runtime. Run a web server, database, or API and hit it from your phone's browser — from Settings, or with <code>podroid-forward</code> right inside the VM.</p>
+        <p>Expose any VM port to your Android device at runtime. Run a web server, database, or API and hit it from your phone's browser, from Settings, or with <code>podroid-forward</code> right inside the VM.</p>
       </div>
 
       <div class="feature-card">
@@ -649,7 +654,7 @@
           <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
         </div>
         <h3>Persistent &amp; Fast</h3>
-        <p>Overlayfs over a persistent ext4 image. Containers, packages, and configs survive reboots. ZRAM lz4 swap at 1.5× RAM adds headroom against the OOM killer. Boots in 6–30 seconds.</p>
+        <p>Overlayfs over a persistent ext4 image. Containers, packages, and configs survive reboots. ZRAM lz4 swap at 1.5× RAM adds headroom against the OOM killer. Boots in about 10 to 45 seconds, depending on the backend and the phone.</p>
       </div>
 
       <div class="feature-card">
@@ -708,8 +713,7 @@
         <p>Fully localized interface in English and Chinese, switchable in Settings or following your device language.</p>
       </div>
 
-      <div class="feature-card filler filler-a" aria-hidden="true"></div>
-      <div class="feature-card filler filler-b" aria-hidden="true"></div>
+      <div class="feature-card filler" aria-hidden="true"></div>
 
     </div>
   </div>
@@ -762,7 +766,7 @@
           </tr>
           <tr>
             <td class="row-label">VM isolation</td>
-            <td class="col-podroid"><span class="check">✓ QEMU + AVF</span> <span class="partial">own kernel, not a sandbox, on UML</span></td>
+            <td class="col-podroid"><span class="check">✓ QEMU + AVF</span><br /><span class="partial">UML: not a sandbox</span></td>
             <td><span class="cross">✗ shared kernel</span></td>
             <td><span class="check">✓ AVF</span></td>
           </tr>
@@ -786,7 +790,7 @@
           </tr>
           <tr>
             <td class="row-label">Port forwarding</td>
-            <td class="col-podroid"><span class="check">✓ via QMP</span></td>
+            <td class="col-podroid"><span class="check">✓ live, all backends</span></td>
             <td><span class="partial">via socat</span></td>
             <td><span class="cross">✗</span></td>
           </tr>
@@ -825,7 +829,7 @@
   <div class="container">
     <p class="section-label">Architecture</p>
     <h2>How it works</h2>
-    <p class="section-sub">Five sockets, one VM, zero root. Here's what happens when you tap Start.</p>
+    <p class="section-sub">Five sockets, one VM, zero root. Here's what happens when you tap Start on the default QEMU backend; AVF and UML boot the same Alpine guest over their own transports.</p>
 
     <div class="arch-diagram"><span class="arch-white">┌────────────────────── Android App (Compose) ─────────────────────────┐
 │                                                                      │
@@ -907,7 +911,7 @@ qmp.sock               →  runtime port-forward control</div>
         </div>
         <div class="qs-step">
           <div class="qs-step-num">3</div>
-          <p><strong>Tap Start VM.</strong> Watch the boot progress; typically ready in 6–30 seconds.</p>
+          <p><strong>Tap Start VM.</strong> Watch the boot progress; typically ready in 10 to 45 seconds, depending on the backend and the phone.</p>
         </div>
         <div class="qs-step">
           <div class="qs-step-num">4</div>
@@ -950,7 +954,7 @@ qmp.sock               →  runtime port-forward control</div>
       <details>
         <summary>Does this require root or a modified Android?</summary>
         <div class="faq-answer">
-          No. Podroid runs entirely in userspace using QEMU's TCG (software emulation). No root, no custom recovery, no Magisk. Any stock Android 8+ ARM64 device works.
+          No. Podroid runs entirely as a normal app: QEMU's TCG (software emulation) by default, with AVF and UML as faster backends that need no root either. No root, no custom recovery, no Magisk. Any stock Android 8+ ARM64 device works.
         </div>
       </details>
 
@@ -971,7 +975,7 @@ qmp.sock               →  runtime port-forward control</div>
       <details>
         <summary>Is performance usable? QEMU is slow.</summary>
         <div class="faq-answer">
-          TCG is software emulation, so compute-heavy workloads are slower than native. Podroid ships several optimizations: a 256–512 MB translation cache, a dedicated I/O thread for virtio-blk (big win for image pulls), ZRAM lz4 swap at 1.5× RAM, and <code>mitigations=off</code> in the guest kernel for a 5–15% CPU gain. For typical dev tasks like running a web server, a database, or CLI tools, it's very usable. On a Pixel that ships pKVM you can switch to the <a href="guide/backends.html">AVF backend</a> for near-native CPU speed.
+          TCG is software emulation, so compute-heavy workloads are slower than native. Podroid ships several optimizations: a 256–512 MB translation cache, a dedicated I/O thread for virtio-blk (big win for image pulls), ZRAM lz4 swap at 1.5× RAM, and <code>mitigations=off</code> in the guest kernel for a 5–15% CPU gain. For typical dev tasks like running a web server, a database, or CLI tools, it's very usable. On a Pixel that ships pKVM you can switch to the <a href="guide/backends.html">AVF backend</a> for near-native CPU speed, and on phones without it the experimental <a href="guide/backends.html#uml">UML backend</a> measured about 2x faster on npm installs than QEMU.
         </div>
       </details>
 
@@ -1020,7 +1024,7 @@ qmp.sock               →  runtime port-forward control</div>
       <details>
         <summary>How much storage does it use?</summary>
         <div class="faq-answer">
-          The APK is ~200 MB (QEMU + kernel + initramfs + Alpine squashfs + fonts). On first launch you choose a VM disk size between 2 GB and 512 GB; this is a sparse <code>storage.img</code> that only grows as you pull images and install packages.
+          The APK is about 325 MB (QEMU, the UML kernels, the guest kernel, initramfs, Alpine squashfs and fonts). On first launch you choose a VM disk size between 2 GB and 512 GB; this is a sparse <code>storage.img</code> that only grows as you pull images and install packages.
         </div>
       </details>
 
