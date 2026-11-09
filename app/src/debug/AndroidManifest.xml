@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug-only UML feasibility harness; merged into debug builds only. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <provider
+            android:name="com.excp.podroid.umltest.UmlTestProvider"
+            android:authorities="${applicationId}.umltest"
+            android:exported="true"
+            android:permission="android.permission.DUMP" />
+
+        <service
+            android:name="com.excp.podroid.umltest.UmlTestService"
+            android:exported="true"
+            android:permission="android.permission.DUMP"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User-Mode Linux test harness" />
+        </service>
+    </application>
+</manifest>
