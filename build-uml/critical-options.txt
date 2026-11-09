@@ -1,0 +1,15 @@
+# Options that must resolve to =y in the final .config of every UML kernel.
+# A silent Kconfig demotion (unmet dependency) would otherwise ship a kernel
+# that cannot run Podroid's guest. The page-size option is checked separately.
+CONFIG_UML_NET_VECTOR
+CONFIG_BLK_DEV_UBD
+CONFIG_SQUASHFS_ZSTD
+CONFIG_SQUASHFS_XATTR
+CONFIG_OVERLAY_FS
+CONFIG_EXT4_FS_SECURITY
+CONFIG_HOSTFS
+CONFIG_CGROUPS
+CONFIG_NETFILTER_XT_MATCH_COMMENT
+CONFIG_NFT_COMPAT
+CONFIG_CONFIGFS_FS
+CONFIG_SECCOMP

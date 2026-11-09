@@ -69,7 +69,16 @@ start() {
     # next-best after cache=fscache (which requires CONFIG_9P_FSCACHE=y, not
     # in this kernel build); mmap still page-caches mapped regions and is
     # noticeably better than cache=loose for re-reads.
-    if ! grep -q 'podroid\.backend=avf' /proc/cmdline 2>/dev/null; then
+    if grep -q 'podroid\.backend=uml' /proc/cmdline 2>/dev/null; then
+        # UML: no virtio-9p; the host Downloads dir is exposed via hostfs.
+        # The kernel confines every hostfs mount to the root the host passed
+        # as hostfs=, so the guest mounts that root itself (no -o path) and
+        # never sees the host path. podroid.downloads=1 says sharing is on.
+        if grep -qE '(^| )podroid\.downloads=1( |$)' /proc/cmdline 2>/dev/null; then
+            mkdir -p /mnt/downloads 2>/dev/null
+            mount -t hostfs none /mnt/downloads 2>/dev/null
+        fi
+    elif ! grep -q 'podroid\.backend=avf' /proc/cmdline 2>/dev/null; then
         mkdir -p /mnt/downloads 2>/dev/null
         mount -t 9p -o trans=virtio,version=9p2000.L,rw,msize=262144,cache=mmap,noatime \
             downloads /mnt/downloads 2>/dev/null

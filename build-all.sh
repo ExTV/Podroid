@@ -31,11 +31,12 @@ Podroid Unified Build Tool
 Usage: $0 [command] [options]
 
 Commands:
-  all           Build everything (Kernel, Initramfs, Rootfs, QEMU, APK)
+  all           Build everything (Kernel, Initramfs, Rootfs, QEMU, UML, APK)
   kernel        Build custom kernel only (podroid_kernel.config + Linux source)
   initramfs     Build custom kernel + Alpine VM initramfs (vmlinuz + initrd)
   rootfs        Build Alpine rootfs squashfs (alpine-rootfs.squashfs)
   qemu          Build QEMU + podroid-bridge + podroid-launcher
+  uml           Build UML kernels (4K/16K) + stubs + supervisor + GPL source tarball (out/)
   apk           Build the Android APK (also builds libtermux.so via Gradle NDK)
   deploy        Build APK, uninstall old version, and install to device
   test          Perform full build, install, and automated boot validation
@@ -163,6 +164,33 @@ build_qemu() {
     success "QEMU and bridge ready."
 }
 
+build_uml() {
+    local commit
+    commit=$(grep -E '^podroidUmlKernelCommit=' "${SCRIPT_DIR}/gradle.properties" | cut -d= -f2)
+    log "Building UML kernels (4K + 16K pages) at ${commit} (Docker)..."
+    docker build --network=host \
+        --build-arg "UML_COMMIT=${commit}" \
+        --build-context "repo=${SCRIPT_DIR}" \
+        -f "${SCRIPT_DIR}/build-uml/Dockerfile.uml" \
+        -t podroid-uml-builder --target artifacts "${SCRIPT_DIR}/build-uml"
+
+    log "Extracting UML artifacts..."
+    docker rm -f podroid-uml-extract 2>/dev/null || true
+    docker create --name podroid-uml-extract podroid-uml-builder /bin/true
+    mkdir -p "$JNILIBS" "${SCRIPT_DIR}/out"
+    local f
+    for f in libuml-4k.so libuml-16k.so libumlstub-4k.so libumlstub-16k.so libpodroid-uml.so; do
+        docker cp "podroid-uml-extract:/${f}" "$JNILIBS/"
+    done
+    docker cp "podroid-uml-extract:/uml-source-${commit}.tar.zst" "${SCRIPT_DIR}/out/"
+    docker rm podroid-uml-extract >/dev/null
+
+    for f in libuml-4k.so libuml-16k.so libumlstub-4k.so libumlstub-16k.so libpodroid-uml.so; do
+        verify_16kb_align "$JNILIBS/$f"
+    done
+    success "UML kernels and supervisor ready; source tarball out/uml-source-${commit}.tar.zst"
+}
+
 build_apk() {
     log "Building APK via Gradle..."
     ./gradlew assembleDebug
@@ -251,6 +279,7 @@ case "$1" in
     initramfs) build_initramfs ;;
     rootfs)    build_rootfs ;;
     qemu)      build_qemu ;;
+    uml)       build_uml ;;
     apk)       build_apk ;;
     deploy)    build_apk && deploy_apk ;;
     test)      run_boot_test ;;
@@ -258,12 +287,13 @@ case "$1" in
         build_initramfs
         build_rootfs
         build_qemu
+        build_uml
         build_apk
         ;;
     clean)
         log "Cleaning up..."
         ./gradlew clean
-        docker rmi podroid-builder podroid-qemu-builder podroid-rootfs:latest 2>/dev/null || true
+        docker rmi podroid-builder podroid-qemu-builder podroid-uml-builder podroid-rootfs:latest 2>/dev/null || true
         success "Cleaned."
         ;;
     *)

@@ -18,6 +18,7 @@ class VmLoadSampler(
     // Injected for tests; production reads the real monotonic clock and /proc.
     private val nowMs: () -> Long = { SystemClock.elapsedRealtime() },
     private val ticksReader: (Int) -> Long? = { readProcessCpuTicks(it) },
+    private val treeTicksReader: (Int) -> Long? = { readProcessTreeCpuTicks(it) },
 ) {
     private var lastTicks: Long? = null
     private var lastTimeMs: Long? = null
@@ -29,9 +30,11 @@ class VmLoadSampler(
 
     /**
      * CPU load as 0–100% of the VM's allocated vCPU count (QEMU process on Android).
+     * [wholeTree] counts [pid] and all its descendants instead (UML, whose guest
+     * CPU time is spent in the kernel and stub processes under the supervisor).
      */
-    fun sampleCpuPercent(pid: Int, vmCpus: Int): Float? {
-        val ticks = ticksReader(pid) ?: return null
+    fun sampleCpuPercent(pid: Int, vmCpus: Int, wholeTree: Boolean = false): Float? {
+        val ticks = (if (wholeTree) treeTicksReader(pid) else ticksReader(pid)) ?: return null
         val now = nowMs()
         val prevTicks = lastTicks
         val prevTime = lastTimeMs
@@ -58,6 +61,27 @@ class VmLoadSampler(
             else fields[11].toLong() + fields[12].toLong()
         } catch (_: Exception) {
             null
+        }
+
+        /**
+         * utime+stime+cutime+cstime summed over [root] and every descendant.
+         * The child terms keep the sum from dropping when a short-lived process
+         * (a UML stub) is reaped: its time moves into its parent's cutime/cstime.
+         * Null when [root] itself is unreadable; a descendant that vanishes
+         * mid-walk counts as zero.
+         */
+        fun readProcessTreeCpuTicks(root: Int, procRoot: File = File("/proc")): Long? {
+            val rootTicks = statCpuTicksWithChildren(root, procRoot) ?: return null
+            return rootTicks + HostMetrics.descendantPids(root, procRoot)
+                .filter { it != root }
+                .sumOf { statCpuTicksWithChildren(it, procRoot) ?: 0L }
+        }
+
+        private fun statCpuTicksWithChildren(pid: Int, procRoot: File): Long? {
+            val text = runCatching { File(procRoot, "$pid/stat").readText() }.getOrNull() ?: return null
+            val fields = text.substringAfterLast(')').trim().split(Regex("\\s+"))
+            if (fields.size < 15) return null
+            return (11..14).sumOf { fields[it].toLongOrNull() ?: return null }
         }
     }
 }

@@ -100,6 +100,73 @@ object HostMetrics {
         return null
     }
 
+    /** [root] followed by every descendant, found by walking /proc ppid links. */
+    fun descendantPids(root: Int, procRoot: File = File("/proc")): List<Int> {
+        val parent = HashMap<Int, Int>()
+        procRoot.listFiles()?.forEach { dir ->
+            val pid = dir.name.toIntOrNull() ?: return@forEach
+            val stat = runCatching { File(dir, "stat").readText() }.getOrNull() ?: return@forEach
+            stat.substringAfterLast(')').trim().split(' ').getOrNull(1)?.toIntOrNull()
+                ?.let { parent[pid] = it }
+        }
+        val out = mutableListOf(root)
+        var i = 0
+        while (i < out.size) {
+            val cur = out[i++]
+            parent.forEach { (pid, pp) -> if (pp == cur) out += pid }
+        }
+        return out
+    }
+
+    /**
+     * PIDs of processes owned by real [uid] for which [match] holds, given the
+     * file name of /proc/pid/exe (null when unreadable) and the argv from
+     * /proc/pid/cmdline. Zombies have an empty cmdline and no exe, so they
+     * only match a predicate that accepts that.
+     */
+    fun pidsMatching(
+        uid: Int,
+        procRoot: File = File("/proc"),
+        match: (exeName: String?, argv: List<String>) -> Boolean,
+    ): List<Int> {
+        val entries = procRoot.listFiles() ?: return emptyList()
+        val out = mutableListOf<Int>()
+        for (dir in entries) {
+            val pid = dir.name.toIntOrNull() ?: continue
+            val owner = runCatching {
+                File(dir, "status").useLines { lines ->
+                    lines.firstOrNull { it.startsWith("Uid:") }
+                        ?.substringAfter("Uid:")?.trim()?.split(Regex("\\s+"))?.firstOrNull()?.toIntOrNull()
+                }
+            }.getOrNull() ?: continue
+            if (owner != uid) continue
+            val exe = runCatching {
+                java.nio.file.Files.readSymbolicLink(File(dir, "exe").toPath()).toString().substringAfterLast('/')
+            }.getOrNull()
+            val argv = runCatching { File(dir, "cmdline").readText() }.getOrNull()
+                ?.split('\u0000')?.filter { it.isNotEmpty() } ?: emptyList()
+            if (match(exe, argv)) out += pid
+        }
+        return out
+    }
+
+    private fun statFields(pid: Int, procRoot: File): List<String>? =
+        runCatching { File(procRoot, "$pid/stat").readText() }.getOrNull()
+            ?.substringAfterLast(')')?.trim()?.split(' ')
+
+    /** Parent PID from /proc/[pid]/stat, or null when unreadable. */
+    fun parentPid(pid: Int, procRoot: File = File("/proc")): Int? =
+        statFields(pid, procRoot)?.getOrNull(1)?.toIntOrNull()
+
+    /** Process group ID from /proc/[pid]/stat, or null when unreadable. */
+    fun processGroupId(pid: Int, procRoot: File = File("/proc")): Int? =
+        statFields(pid, procRoot)?.getOrNull(2)?.toIntOrNull()
+
+    /** argv from /proc/[pid]/cmdline; empty for zombies and unreadable entries. */
+    fun processArgv(pid: Int, procRoot: File = File("/proc")): List<String> =
+        runCatching { File(procRoot, "$pid/cmdline").readText() }.getOrNull()
+            ?.split('\u0000')?.filter { it.isNotEmpty() } ?: emptyList()
+
     /** VmRSS from /proc/[pid]/status, in megabytes. */
     fun processVmRssMb(pid: Int): Long? {
         val kb = try {

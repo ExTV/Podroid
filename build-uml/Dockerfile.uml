@@ -1,0 +1,30 @@
+# Builds the Podroid UML kernels (4K and 16K pages), the UML stubs, the
+# supervisor and the GPL source tarball. Build context: build-uml/, plus the
+# repository root as the named context "repo".
+FROM debian:trixie AS uml-builder
+ARG UML_COMMIT
+ARG NDK_VERSION=r29
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git ca-certificates wget unzip make clang lld llvm bc bison flex \
+    libssl-dev libelf-dev python3 zstd file xz-utils rsync cpio \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN wget -q https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip -O /tmp/ndk.zip \
+    && unzip -q /tmp/ndk.zip -d /opt && mv /opt/android-ndk-${NDK_VERSION} /opt/ndk && rm /tmp/ndk.zip
+ENV NDK=/opt/ndk
+
+COPY kernel /work/build-uml/kernel
+COPY critical-options.txt build-uml.sh /work/build-uml/
+RUN UML_COMMIT=${UML_COMMIT} bash /work/build-uml/build-uml.sh
+
+# Supervisor (repo-root podroid-uml.c, from the "repo" named build context).
+# Last in the stage so editing it does not rebuild the kernels.
+COPY --from=repo podroid-uml.c /work/podroid-uml.c
+RUN "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/clang" \
+        --target=aarch64-linux-android26 -O2 -Wall -Wextra -static \
+        -Wl,-z,max-page-size=16384 /work/podroid-uml.c -o /out/libpodroid-uml.so \
+    && "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" /out/libpodroid-uml.so
+
+FROM scratch AS artifacts
+COPY --from=uml-builder /out/ /

@@ -441,12 +441,18 @@ private fun vmStatusLabel(vmState: VmState, uptime: String?, bootStage: String):
 
 @Composable
 private fun backendLabel(selection: EngineSelection, activeId: String): String {
-    val activeLabel = if (activeId == "avf") stringResource(R.string.avf_kvm) else stringResource(R.string.qemu_tcg)
+    val activeLabel = when (activeId) {
+        "avf" -> stringResource(R.string.avf_kvm)
+        "uml" -> stringResource(R.string.uml_status_label)
+        else -> stringResource(R.string.qemu_tcg)
+    }
     return when (selection) {
         EngineSelection.AUTO -> "${stringResource(R.string.auto)} ($activeId)"
         // Forced AVF but the actual pick fell back to QEMU (device can't run AVF) -
         // say so instead of claiming AVF is active.
         EngineSelection.AVF -> if (activeId == "avf") activeLabel else activeLabel + stringResource(R.string.backend_fallback_suffix)
         EngineSelection.QEMU -> activeLabel
+        // Forced UML but the pick fell back (probe failed or demoted): say so.
+        EngineSelection.UML -> if (activeId == "uml") activeLabel else activeLabel + stringResource(R.string.backend_fallback_suffix_uml)
     }
 }

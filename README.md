@@ -31,7 +31,7 @@ A real Alpine Linux VM with its own kernel - not a chroot or proot trick - so **
 ## What you get
 
 - **Podman, Docker and LXC** - pre-installed, ready the moment it boots
-- **A real VM** - Alpine Linux on a custom kernel via QEMU, or hardware-accelerated AVF on supported pKVM devices
+- **A real VM** - Alpine Linux on a custom kernel via QEMU, or hardware-accelerated AVF on supported pKVM devices; an experimental, opt-in **UML** backend (no USB passthrough yet) runs the guest kernel as a plain process and is selectable in Settings
 - **In-app terminal** - full xterm-256color, 122 color themes, 13 fonts, live resize
 - **X11 desktop** - run GUI Linux apps in a built-in viewer with touch, keyboard, mouse and audio
 - **USB passthrough**, **SSH**, **port forwarding** and a **guest-to-Android bridge**
@@ -49,7 +49,7 @@ podman run --rm alpine echo "hello from a container"
 docker run -d -p 8080:80 nginx
 
 # expose that container to your phone and LAN, right from the VM shell
-podroid-forward add 8080 8080 tcp     # TCP or UDP, on both the QEMU and AVF backends
+podroid-forward add 8080 8080 tcp     # TCP or UDP, on every backend
 curl http://<phone-ip>:8080
 podroid-forward clean                 # remove every rule you added, in one go
 
@@ -61,7 +61,7 @@ podroid-forward add 9980 9980 tcp     # forward the docs port to the phone
 podroid-docs                          # serves docs/guide at http://127.0.0.1:9980
 ```
 
-Setup, the two backends, networking, the X11 viewer and troubleshooting all live in the **[documentation](https://extv.github.io/Podroid/guide/)**.
+Setup, the backends, networking, the X11 viewer and troubleshooting all live in the **[documentation](https://extv.github.io/Podroid/guide/)**.
 
 ## Build
 

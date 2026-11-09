@@ -89,16 +89,25 @@ start() {
     echo "Configuring containers..." > /dev/console
     ip link set lo up 2>/dev/null
     NETIF=""
+    if grep -q 'podroid\.backend=uml' /proc/cmdline 2>/dev/null; then
+        # UML registers many virtual devices before its vector NIC; the
+        # exclusion search below can pick one of those, so name vec0.
+        for _i in $(seq 1 30); do
+            [ -e /sys/class/net/vec0 ] && { NETIF=vec0; break; }
+            sleep 0.1
+        done
+    else
     for _i in $(seq 1 10); do
         # Exclude virtual/bridge devices so the real virtio NIC is picked.
         # The LXC bridge lxcbr0 (brought up by the dnsmasq.lxcbr0 service),
         # podman/docker/cni bridges, and veth pairs would otherwise be
         # candidates; the grep below filters them all out by name.
         NETIF=$(ip -o link show 2>/dev/null | awk -F': ' '{print $2}' | \
-            grep -vE '^(lo|dummy[0-9]*|veth|podman|cni|docker|lxcbr|br-)' | head -1)
+            grep -vE '^(lo|dummy[0-9]*|veth|podman|cni|docker|lxcbr|br-|sit|tunl|ip6tnl|ip6gre|gre|erspan)' | head -1)
         [ -n "$NETIF" ] && break
         sleep 0.05
     done
+    fi
     if [ -z "$NETIF" ]; then
         eend 1 "no network interface"
         return 1

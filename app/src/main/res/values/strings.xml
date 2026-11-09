@@ -236,6 +236,23 @@
     <string name="backend_fallback_reason_protected_only">this device only supports protected virtual machines</string>
     <!-- #43: AUTO avoided AVF because the OEM build compiled out networking (isFeatureEnabled(com.android.kvm.NETWORK) == false). Standalone sentence, unlike the fragments above. -->
     <string name="backend_fallback_reason_network">This device\'s virtualization service has networking turned off, so Podroid uses QEMU to keep the VM online.</string>
+    <string name="backend_fallback_reason_uml_probe">UML did not pass its compatibility test on this device.</string>
+    <string name="backend_fallback_reason_uml_demoted">UML stopped working on this device and was switched off until the next update.</string>
+    <!-- UML backend: VM error messages shown on Home -->
+    <string name="uml_router_stopped">The UML network router stopped, so the VM was shut down.</string>
+    <string name="uml_exited_code">UML exited with code %1$d</string>
+    <string name="uml_crashed">UML crashed (%1$s)</string>
+    <string name="uml_binaries_missing">UML binaries not found.</string>
+    <string name="uml_unsupported_page_size">UML has no kernel for this device\'s %1$d-byte memory pages.</string>
+    <string name="uml_sockets_timeout">UML failed to create sockets within %1$d s</string>
+    <string name="uml_tmpdir_failed">Could not create the UML working directory.</string>
+    <string name="uml_disk_prepare_failed">Could not prepare the VM disk image.</string>
+    <string name="uml_unknown_error">Unknown error</string>
+    <string name="uml_boot_timeout">UML did not finish booting within %1$d s.</string>
+    <string name="uml_probe_stage">Testing UML on this device...</string>
+    <string name="uml_fallback_notice">UML failed on this device, so the VM was restarted on %1$s. Settings can try UML again.</string>
+    <string name="uml_tree_survived">UML processes did not exit, so the VM was not restarted on another backend to protect the disk image. Close Podroid and try again.</string>
+    <string name="uml_backend_failed">Podroid could not prepare the UML backend or switch away from it. Details are in the Diagnostics export. Start the VM again to retry.</string>
 
     <!-- Permissions -->
     <string name="permissions">Permissions</string>
@@ -368,4 +385,15 @@
     <string name="avf_action_switch_qemu">Switch to QEMU</string>
     <string name="avf_action_retry">Retry</string>
     <string name="avf_net_workaround_failed">A compatibility step needed for AVF networking failed on this device. Linux may start without network access. If so, switch the backend to QEMU.</string>
+    <string name="backend_uml_experimental">UML (experimental)</string>
+    <string name="backend_uml_avf_better_note">This device supports AVF, which is hardware accelerated and faster than UML.</string>
+    <string name="usb_not_available_on_uml">Not available on the UML backend: USB passthrough needs the QEMU backend.</string>
+    <string name="uml_try_again">Try UML again</string>
+    <string name="uml_retry_vm_active">Stop the VM first, then try UML again.</string>
+    <string name="uml_status_label">UML (user-mode)</string>
+    <string name="backend_fallback_suffix_uml">" - UML unavailable"</string>
+    <string name="qemu_extra_args_qemu_only">Extra QEMU args (QEMU only)</string>
+    <string name="uml_reason_detail">Reason: %1$s</string>
+    <string name="uml_diag_status">UML status: %1$s</string>
+    <string name="uml_diag_status_reason">UML status: %1$s (%2$s)</string>
 </resources>

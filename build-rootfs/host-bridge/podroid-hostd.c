@@ -16,6 +16,7 @@
  * Daemon transport (one request line -> one response line, serialized):
  *   AVF  (podroid.backend=avf in /proc/cmdline): listen AF_VSOCK :9101, accept
  *        the Android connection.
+ *   UML  (podroid.backend=uml): open /dev/ttyS2.
  *   QEMU (otherwise): open /dev/hvc2.
  */
 #define _GNU_SOURCE
@@ -40,6 +41,7 @@
 
 #define SOCK_PATH   "/run/podroid-host.sock"
 #define HVC_PATH    "/dev/hvc2"
+#define UML_PATH    "/dev/ttyS2"  /* host channel under User-Mode Linux */
 #define VSOCK_PORT  9101
 #define HOST_TIMEOUT_S 5
 
@@ -417,6 +419,15 @@ static int is_avf(void) {
     return strstr(buf, "podroid.backend=avf") != NULL;
 }
 
+static int is_uml(void) {
+    int fd = open("/proc/cmdline", O_RDONLY);
+    if (fd < 0) return 0;
+    char buf[4096]; ssize_t n = read(fd, buf, sizeof(buf) - 1); close(fd);
+    if (n <= 0) return 0;
+    buf[n] = '\0';
+    return strstr(buf, "podroid.backend=uml") != NULL;
+}
+
 static int make_unix_listener(void) {
     unlink(SOCK_PATH);
     int fd = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -448,7 +459,7 @@ static int make_vsock_listener(void) {
 
 /* Opens the host channel if not already open: accepts Android's vsock
  * connection on AVF (bounded by HOST_TIMEOUT_S so a slow or absent Android
- * side can't wedge the caller), or opens /dev/hvc2 on QEMU. No-op if already
+ * side can't wedge the caller), or opens /dev/hvc2 on QEMU (/dev/ttyS2 on UML). No-op if already
  * connected. Returns 1 if this call established a fresh connection, 0 if
  * already connected, -1 on failure. */
 static int ensure_host_fd(int *host_fd, int avf, int vsock_listener) {
@@ -459,7 +470,7 @@ static int ensure_host_fd(int *host_fd, int avf, int vsock_listener) {
         do { pr = poll(&pfd, 1, HOST_TIMEOUT_S * 1000); } while (pr < 0 && errno == EINTR);
         if (pr > 0) *host_fd = accept(vsock_listener, NULL, NULL);
     } else {
-        *host_fd = open(HVC_PATH, O_RDWR | O_NOCTTY);
+        *host_fd = open(is_uml() ? UML_PATH : HVC_PATH, O_RDWR | O_NOCTTY);
     }
     if (*host_fd < 0) return -1;
     set_raw_if_tty(*host_fd);

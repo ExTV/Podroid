@@ -7,4 +7,5 @@
 # instead of running getty there. This keeps the squashfs backend-agnostic.
 hvc0::respawn:/usr/local/bin/podroid-getty hvc0
 ttyS0::respawn:/usr/local/bin/podroid-getty ttyS0
+::ctrlaltdel:/sbin/poweroff
 ::shutdown:/sbin/openrc shutdown

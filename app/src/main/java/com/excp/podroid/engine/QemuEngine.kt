@@ -285,7 +285,7 @@ class QemuEngine @Inject constructor(
         }
 
         try {
-            ensureStorageImage(config.storageSizeGb)
+            ensureStorageImage(context.filesDir, config.storageSizeGb, TAG)
         } catch (e: java.io.IOException) {
             failEarlyStart(e.message ?: "Could not prepare the VM disk image.")
             return
@@ -677,48 +677,6 @@ class QemuEngine @Inject constructor(
             listOf(launcher.absolutePath, qemuExe.absolutePath) + args
         } else {
             listOf(qemuExe.absolutePath) + args
-        }
-    }
-
-    private fun ensureStorageImage(storageSizeGb: Int) {
-        val storageFile = File(context.filesDir, "storage.img")
-        val desiredBytes = storageSizeGb.toLong() * 1024L * 1024L * 1024L
-
-        if (storageFile.exists()) {
-            val current = storageFile.length()
-            when {
-                current == desiredBytes -> return
-                // NEVER delete: storage.img is the persistent ext4 overlay (every
-                // apk add, container, user file). Deleting on mismatch could wipe
-                // all guest data if the size ever changes (a corrupted DataStore
-                // falling back to the 2GB default, or a future resize UI). Grow in
-                // place when larger — the guest's first-boot resize2fs claims the
-                // new space; truncating to shrink would corrupt the filesystem.
-                desiredBytes > current -> {
-                    runCatching {
-                        java.io.RandomAccessFile(storageFile, "rw").use { it.setLength(desiredBytes) }
-                    }.onSuccess {
-                        Log.i(TAG, "storage.img grown ${current / (1024 * 1024)}MB → ${storageSizeGb}GB (guest resize2fs on next boot)")
-                    }.onFailure { Log.e(TAG, "Failed to grow storage.img", it) }
-                    return
-                }
-                else -> {
-                    Log.w(TAG, "storage.img (${current / (1024 * 1024)}MB) larger than requested ${storageSizeGb}GB; keeping existing image (shrink would corrupt the filesystem)")
-                    return
-                }
-            }
-        }
-
-        try {
-            java.io.RandomAccessFile(storageFile, "rw").use { it.setLength(desiredBytes) }
-            Log.d(TAG, "Created storage.img (${storageSizeGb}GB)")
-        } catch (e: Exception) {
-            // Don't swallow: a 0-byte / missing storage.img would otherwise boot
-            // into an opaque early-boot stop. Surface it so start() can report a
-            // clear storage error (mirrors the AVF disk-create path).
-            Log.e(TAG, "Failed to create storage.img", e)
-            runCatching { storageFile.delete() }
-            throw java.io.IOException("Couldn't create the ${storageSizeGb} GB VM disk image: ${e.message}", e)
         }
     }
 

@@ -12,12 +12,24 @@
 # or a tmpfs write hiccup must not terminate the daemon for the rest of
 # the VM's life; start-stop-daemon --background won't respawn it.
 
+# Channels: QEMU/AVF use hvc1 (resize) -> hvc0 (terminal). UML uses ttyS1 -> ttyS0.
+RESIZE_DEV=/dev/hvc1
+TERM_DEV=/dev/hvc0
+if grep -q 'podroid\.backend=uml' /proc/cmdline 2>/dev/null; then
+    RESIZE_DEV=/dev/ttyS1
+    TERM_DEV=/dev/ttyS0
+fi
+
 # Wait for the virtio-console node to appear (timing varies)
 for _i in $(seq 1 30); do
-    [ -c /dev/hvc1 ] && break
+    [ -c "$RESIZE_DEV" ] && break
     sleep 1
 done
-[ -c /dev/hvc1 ] || exit 0
+[ -c "$RESIZE_DEV" ] || exit 0
+
+# A UML serial line is a cooked tty by default (echo on, CR translation); make
+# it a clean byte pipe before reading. Not done on hvc1 to keep that path as-is.
+[ "$RESIZE_DEV" = /dev/ttyS1 ] && stty raw -echo <"$RESIZE_DEV" 2>/dev/null
 
 while IFS= read -r _line; do
     case "$_line" in
@@ -28,8 +40,8 @@ while IFS= read -r _line; do
             # podroid-login reads back) or stty a 0x0 winsize onto hvc0.
             case "$2" in ''|*[!0-9]*|0) continue;; esac
             case "$3" in ''|*[!0-9]*|0) continue;; esac
-            stty rows "$2" cols "$3" </dev/hvc0 2>/dev/null
+            stty rows "$2" cols "$3" <"$TERM_DEV" 2>/dev/null
             printf '%s %s\n' "$2" "$3" > /run/term_size 2>/dev/null
             ;;
     esac
-done </dev/hvc1
+done <"$RESIZE_DEV"

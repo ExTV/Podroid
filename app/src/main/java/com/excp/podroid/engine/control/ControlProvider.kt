@@ -34,12 +34,14 @@ import com.excp.podroid.data.repository.SettingsRepository
 import com.excp.podroid.engine.EngineHolder
 import com.excp.podroid.engine.EngineSelection
 import com.excp.podroid.engine.VmState
+import com.excp.podroid.engine.uml.UmlStatus
 import com.excp.podroid.ui.navigation.Routes
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.runBlocking
@@ -69,6 +71,7 @@ internal sealed class ControlCommand {
     data class ForwardAdd(val rule: PortForwardRule) : ControlCommand()
     data class ForwardRemove(val rule: PortForwardRule) : ControlCommand()
     object Backups : ControlCommand()
+    object UmlRetry : ControlCommand()
     data class Navigate(val route: String) : ControlCommand()
     object UnknownMethod : ControlCommand()
     object UnknownRoute : ControlCommand()
@@ -93,6 +96,7 @@ internal fun parseCommand(method: String?, arg: String?): ControlCommand = when 
         if (rule == null) ControlCommand.BadArg else ControlCommand.ForwardRemove(rule)
     }
     "backups" -> ControlCommand.Backups
+    "uml-retry" -> ControlCommand.UmlRetry
     "navigate" -> when {
         arg.isNullOrBlank() -> ControlCommand.BadArg
         arg !in ALLOWED_NAVIGATE_ROUTES -> ControlCommand.UnknownRoute
@@ -131,12 +135,25 @@ internal fun formatStateReply(
     bootStage: String,
     forwards: List<PortForwardRule>,
     versionCode: Int,
+    umlStatus: UmlStatus = UmlStatus.NOT_PROBED,
+    umlReason: String? = null,
 ): String {
     val stage = bootStage.replace(' ', '_')
     val forwardsField = if (forwards.isEmpty()) "none" else forwards.joinToString(",") { it.serialize() }
     return "ok vm=${vmStateLiteral(vmState)} backend=$backendId selection=${selection.name} " +
-        "stage=$stage forwards=$forwardsField vc=$versionCode"
+        "stage=$stage forwards=$forwardsField vc=$versionCode uml=${umlField(umlStatus, umlReason)}"
 }
+
+/** `uml=<status>[:<reason>]`: lowercase status, reason with whitespace runs as underscores so the reply stays one token. */
+internal fun umlField(status: UmlStatus, reason: String?): String {
+    val name = status.name.lowercase()
+    val tail = reason?.trim()?.replace(Regex("\\s+"), "_")?.takeIf { it.isNotEmpty() }
+    return if (tail == null) name else "$name:$tail"
+}
+
+/** `uml-retry` reply: [accepted] is false when a VM was starting or running and nothing was reset. */
+internal fun formatUmlRetryReply(accepted: Boolean): String =
+    if (accepted) "ok uml-retry" else "error vm-active"
 
 /** `forward-add` outcome -> reply literal. */
 internal fun formatAddRuleReply(result: AddRuleResult): String = when (result) {
@@ -177,7 +194,7 @@ internal interface ControlProviderEntryPoint {
 /**
  * `adb shell content call --uri content://<applicationId>.control --method <m> [--arg <a>]`
  *
- * Methods: state, set-backend, forward-add, forward-remove, backups, navigate.
+ * Methods: state, set-backend, forward-add, forward-remove, backups, navigate, uml-retry.
  * Reply is a Bundle with one String key "result": "ok ..." on success,
  * "error ..." on failure.
  */
@@ -211,6 +228,7 @@ class ControlProvider : ContentProvider() {
             is ControlCommand.ForwardAdd -> handleForwardAdd(ep, command.rule)
             is ControlCommand.ForwardRemove -> handleForwardRemove(ep, command.rule)
             ControlCommand.Backups -> handleBackups(ep)
+            ControlCommand.UmlRetry -> handleUmlRetry(ep)
             is ControlCommand.Navigate -> handleNavigate(ep, command.route)
             ControlCommand.UnknownMethod -> "error unknown-method"
             ControlCommand.UnknownRoute -> "error unknown-route"
@@ -220,6 +238,7 @@ class ControlProvider : ContentProvider() {
 
     private suspend fun handleState(ep: ControlProviderEntryPoint): String {
         val holder = ep.engineHolder()
+        val uml = holder.umlInfo.first()
         return formatStateReply(
             vmState = holder.state.value,
             backendId = holder.backendId,
@@ -227,8 +246,14 @@ class ControlProvider : ContentProvider() {
             bootStage = holder.bootStage.value,
             forwards = ep.portForwardRepository().getRulesSnapshot(),
             versionCode = BuildConfig.VERSION_CODE,
+            umlStatus = uml.status,
+            umlReason = uml.reason,
         )
     }
+
+    // Goes through EngineHolder like the Settings button; refused while a VM is up.
+    private fun handleUmlRetry(ep: ControlProviderEntryPoint): String =
+        formatUmlRetryReply(ep.engineHolder().retryUml())
 
     private suspend fun handleSetBackend(ep: ControlProviderEntryPoint, selection: EngineSelection): String {
         ep.settingsRepository().setEngineSelection(selection)

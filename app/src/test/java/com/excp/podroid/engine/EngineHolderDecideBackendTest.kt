@@ -8,8 +8,11 @@ import com.excp.podroid.R
 import com.excp.podroid.engine.EngineHolder.Companion.FallbackReason
 import com.excp.podroid.engine.EngineHolder.Companion.decideBackend
 import com.excp.podroid.engine.EngineHolder.Companion.fallbackReasonResId
+import com.excp.podroid.engine.EngineHolder.Companion.mustAwaitUmlTree
 import com.excp.podroid.engine.EngineHolder.Companion.shouldProbeNetworkFeature
+import com.excp.podroid.engine.EngineHolder.Companion.umlRetryAllowed
 import com.excp.podroid.engine.avf.AvfReport
+import com.excp.podroid.engine.uml.UmlStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -211,6 +214,28 @@ class EngineHolderDecideBackendTest {
     }
 
     @Test
+    fun `network feature probe runs for uml so its fallback matches auto`() {
+        assertTrue(shouldProbeNetworkFeature(EngineSelection.UML, avfUsable = true))
+        assertFalse(shouldProbeNetworkFeature(EngineSelection.UML, avfUsable = false))
+    }
+
+    @Test
+    fun `uml tree is awaited for a uml selection, leftover uml processes, or a uml run this process`() {
+        assertTrue(mustAwaitUmlTree(EngineSelection.UML, umlPidsPresent = false, umlStartedThisProcess = false))
+        assertTrue(mustAwaitUmlTree(EngineSelection.QEMU, umlPidsPresent = true, umlStartedThisProcess = false))
+        assertTrue(mustAwaitUmlTree(EngineSelection.AUTO, umlPidsPresent = false, umlStartedThisProcess = true))
+        assertTrue(mustAwaitUmlTree(null, umlPidsPresent = true, umlStartedThisProcess = false))
+    }
+
+    @Test
+    fun `uml tree is not awaited on a plain qemu or avf start`() {
+        assertFalse(mustAwaitUmlTree(EngineSelection.QEMU, umlPidsPresent = false, umlStartedThisProcess = false))
+        assertFalse(mustAwaitUmlTree(EngineSelection.AVF, umlPidsPresent = false, umlStartedThisProcess = false))
+        assertFalse(mustAwaitUmlTree(EngineSelection.AUTO, umlPidsPresent = false, umlStartedThisProcess = false))
+        assertFalse(mustAwaitUmlTree(null, umlPidsPresent = false, umlStartedThisProcess = false))
+    }
+
+    @Test
     fun `network feature probe skipped for forced qemu`() {
         assertFalse(shouldProbeNetworkFeature(EngineSelection.QEMU, avfUsable = true))
     }
@@ -230,4 +255,40 @@ class EngineHolderDecideBackendTest {
         customVmConfigSupported = true,
         smokeTestResult = null,
     )
+
+    @Test fun umlSelectedAndPassed_picksUml() =
+        assertEquals("uml" to null, decideBackend(EngineSelection.UML, avfUsable = true, protectedOnly = false, networkAvailable = true, umlStatus = UmlStatus.PASSED))
+
+    @Test fun umlSelectedProbeFailed_fallsBackToAvfWhenUsable() =
+        assertEquals("avf" to FallbackReason.UML_PROBE_FAILED, decideBackend(EngineSelection.UML, true, false, true, UmlStatus.FAILED))
+
+    @Test fun umlSelectedDemoted_fallsBackToQemuWithoutAvf() =
+        assertEquals("qemu" to FallbackReason.UML_DEMOTED, decideBackend(EngineSelection.UML, false, false, true, UmlStatus.DEMOTED))
+
+    @Test fun umlSelectedNotProbed_doesNotPickUml() =
+        assertEquals("qemu" to FallbackReason.UML_PROBE_FAILED, decideBackend(EngineSelection.UML, false, false, true, UmlStatus.NOT_PROBED))
+
+    @Test fun autoIgnoresUmlInRelease1() =
+        assertEquals("qemu" to null, decideBackend(EngineSelection.AUTO, false, false, true, UmlStatus.PASSED))
+
+    @Test fun umlFallbackHonorsAvfNetworkDisabled() =
+        assertEquals("qemu" to FallbackReason.UML_PROBE_FAILED, decideBackend(EngineSelection.UML, true, false, false, UmlStatus.FAILED))
+
+    @Test
+    fun `a uml start awaits leftover uml processes like any other start`() {
+        // runEngine calls this for the UML engine too (before it spawns), so an
+        // orphan tree from a dead app process is awaited and, if it survives,
+        // the UML start is refused.
+        assertTrue(mustAwaitUmlTree(EngineSelection.UML, umlPidsPresent = true, umlStartedThisProcess = false))
+        assertTrue(mustAwaitUmlTree(EngineSelection.UML, umlPidsPresent = false, umlStartedThisProcess = true))
+    }
+
+    @Test
+    fun `uml retry is refused while a vm is starting or running`() {
+        assertFalse(umlRetryAllowed(VmState.Starting))
+        assertFalse(umlRetryAllowed(VmState.Running))
+        assertTrue(umlRetryAllowed(VmState.Idle))
+        assertTrue(umlRetryAllowed(VmState.Stopped))
+        assertTrue(umlRetryAllowed(VmState.Error("x")))
+    }
 }

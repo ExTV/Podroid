@@ -1,0 +1,60 @@
+--- a/fs/hostfs/hostfs_kern.c
++++ b/fs/hostfs/hostfs_kern.c
+@@ -966,6 +966,19 @@
+ 	return 0;
+ }
+ 
++/*
++ * Podroid: every mount is confined to the hostfs= root. The mount data may
++ * only name that root itself ("" or "/"). A subpath would be resolved by the
++ * host, which follows ".." and any host symlink the guest planted below the
++ * root, so every other path, ".." included, is refused.
++ */
++static int hostfs_check_mount_path(const char *path)
++{
++	while (*path == '/')
++		path++;
++	return *path ? -EPERM : 0;
++}
++
+ enum hostfs_parma {
+ 	Opt_hostfs,
+ };
+@@ -980,7 +993,7 @@
+ 	struct hostfs_fs_info *fsi = fc->s_fs_info;
+ 	struct fs_parse_result result;
+ 	char *host_root, *tmp_root;
+-	int opt;
++	int opt, err;
+ 
+ 	opt = fs_parse(fc, hostfs_param_specs, param, &result);
+ 	if (opt < 0)
+@@ -989,6 +1002,9 @@
+ 	switch (opt) {
+ 	case Opt_hostfs:
+ 		host_root = param->string;
++		err = hostfs_check_mount_path(host_root);
++		if (err)
++			return err;
+ 		if (!*host_root)
+ 			break;
+ 		tmp_root = kasprintf(GFP_KERNEL, "%s%s",
+@@ -1011,6 +1027,8 @@
+ 	/* NULL is printed as '(null)' by printf(): avoid that. */
+ 	if (host_root == NULL)
+ 		return 0;
++	if (hostfs_check_mount_path(host_root))
++		return -EPERM;
+ 
+ 	tmp_root = kasprintf(GFP_KERNEL, "%s%s", fsi->host_root_path, host_root);
+ 	if (!tmp_root)
+@@ -1022,6 +1040,9 @@
+ 
+ static int hostfs_fc_get_tree(struct fs_context *fc)
+ {
++	/* Podroid: no hostfs= root on the command line means no mounts at all. */
++	if (!*root_ino)
++		return -EPERM;
+ 	return get_tree_nodev(fc, hostfs_fill_super);
+ }
+ 

@@ -55,6 +55,8 @@ class SettingsRepository @Inject constructor(
         val KEY_TERMINAL_COLOR_THEME   = stringPreferencesKey("terminal_color_theme")
         val KEY_TERMINAL_FONT          = stringPreferencesKey("terminal_font")
         val KEY_QEMU_EXTRA_ARGS        = stringPreferencesKey("qemu_extra_args")
+        val KEY_UML_PROBE_RECORD       = stringPreferencesKey("uml_probe_record")
+        val KEY_UML_DEMOTION           = stringPreferencesKey("uml_demotion")
         val KEY_KERNEL_EXTRA_CMDLINE   = stringPreferencesKey("kernel_extra_cmdline")
         val KEY_SHOW_EXTRA_KEYS        = booleanPreferencesKey("show_extra_keys")
         val KEY_HAPTICS_ENABLED        = booleanPreferencesKey("haptics_enabled")
@@ -128,6 +130,21 @@ class SettingsRepository @Inject constructor(
 
     private suspend fun <T> set(key: Preferences.Key<T>, value: T) =
         context.dataStore.edit { it[key] = value }
+
+    /** Raw serialized UML probe result / demotion; parsed by UmlProbeStore. */
+    val umlProbeRecord: Flow<String?> = context.dataStore.data
+        .catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
+        .map { it[KEY_UML_PROBE_RECORD] }
+    val umlDemotion: Flow<String?> = context.dataStore.data
+        .catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
+        .map { it[KEY_UML_DEMOTION] }
+
+    suspend fun setUmlProbeRecord(v: String?) = context.dataStore.edit {
+        if (v == null) it.remove(KEY_UML_PROBE_RECORD) else it[KEY_UML_PROBE_RECORD] = v
+    }
+    suspend fun setUmlDemotion(v: String?) = context.dataStore.edit {
+        if (v == null) it.remove(KEY_UML_DEMOTION) else it[KEY_UML_DEMOTION] = v
+    }
 
     val darkTheme            = pref(KEY_DARK_THEME, true)
     val vmRamMb              = pref(KEY_VM_RAM, 512)

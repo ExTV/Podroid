@@ -11,6 +11,7 @@ package com.excp.podroid.engine.control
 import com.excp.podroid.data.repository.PortForwardRule
 import com.excp.podroid.engine.EngineSelection
 import com.excp.podroid.engine.VmState
+import com.excp.podroid.engine.uml.UmlStatus
 import com.excp.podroid.ui.navigation.Routes
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -79,6 +80,19 @@ class ControlProviderTest {
             ControlCommand.SetBackend(EngineSelection.AUTO),
             parseCommand("set-backend", "Auto"),
         )
+    }
+
+    @Test
+    fun `set-backend accepts uml`() {
+        assertEquals(
+            ControlCommand.SetBackend(EngineSelection.UML),
+            parseCommand("set-backend", "uml"),
+        )
+    }
+
+    @Test
+    fun `uml-retry parses with no arg`() {
+        assertEquals(ControlCommand.UmlRetry, parseCommand("uml-retry", null))
     }
 
     @Test
@@ -189,7 +203,7 @@ class ControlProviderTest {
             versionCode = 42,
         )
         assertEquals(
-            "ok vm=running backend=qemu selection=AUTO stage=Ready! forwards=none vc=42",
+            "ok vm=running backend=qemu selection=AUTO stage=Ready! forwards=none vc=42 uml=not_probed",
             reply,
         )
     }
@@ -206,8 +220,52 @@ class ControlProviderTest {
         )
         assertEquals(
             "ok vm=starting backend=avf selection=QEMU stage=Almost_ready... " +
-                "forwards=tcp:8080:80,tcp:9922:22 vc=7",
+                "forwards=tcp:8080:80,tcp:9922:22 vc=7 uml=not_probed",
             reply,
         )
+    }
+
+    @Test
+    fun `formatStateReply reports the uml status and an underscored reason`() {
+        val reply = formatStateReply(
+            vmState = VmState.Idle,
+            backendId = "qemu",
+            selection = EngineSelection.UML,
+            bootStage = "",
+            forwards = emptyList(),
+            versionCode = 1,
+            umlStatus = UmlStatus.DEMOTED,
+            umlReason = "boot timed out\nafter 90 s",
+        )
+        assertEquals(
+            "ok vm=idle backend=qemu selection=UML stage= forwards=none vc=1 " +
+                "uml=demoted:boot_timed_out_after_90_s",
+            reply,
+        )
+    }
+
+    @Test
+    fun `formatStateReply omits the reason separator when there is none`() {
+        val reply = formatStateReply(
+            vmState = VmState.Idle,
+            backendId = "uml",
+            selection = EngineSelection.UML,
+            bootStage = "",
+            forwards = emptyList(),
+            versionCode = 1,
+            umlStatus = UmlStatus.PASSED,
+            umlReason = null,
+        )
+        assertTrue(reply.endsWith(" uml=passed"))
+    }
+
+    // ------------------------------------------------------------------
+    // uml-retry
+    // ------------------------------------------------------------------
+
+    @Test
+    fun `uml-retry reports ok only when the retry was accepted`() {
+        assertEquals("ok uml-retry", formatUmlRetryReply(accepted = true))
+        assertEquals("error vm-active", formatUmlRetryReply(accepted = false))
     }
 }

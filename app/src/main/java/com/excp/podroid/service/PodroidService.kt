@@ -95,6 +95,8 @@ internal suspend fun awaitAssetsReadyForVm(
 class PodroidService : Service() {
 
     @Inject lateinit var engine: VmEngine
+    // The same @Singleton as [engine]; injected by type for its UML fallback notices.
+    @Inject lateinit var engineHolder: com.excp.podroid.engine.EngineHolder
     @Inject lateinit var portForwardRepository: PortForwardRepository
     @Inject lateinit var settingsRepository: SettingsRepository
     @Inject lateinit var usbPassthroughManager: UsbPassthroughManager
@@ -239,6 +241,26 @@ class PodroidService : Service() {
         notificationJob = serviceScope.launch {
             launch { observeStateForNotification() }
             launch { observeStateForShutdown() }
+            launch { observeUmlFallbackNotices() }
+        }
+    }
+
+    /** Tells the user when a failing UML VM was restarted on another backend. */
+    private suspend fun observeUmlFallbackNotices() {
+        engineHolder.umlFallbackNotices.collect { backendId ->
+            if (!notificationPoster.notificationsPermitted()) {
+                Log.w(TAG, "UML fell back to $backendId; notifications not permitted, notice not posted")
+                return@collect
+            }
+            val localized = com.excp.podroid.data.repository.LanguageManager.wrapContextForLocale(
+                this, com.excp.podroid.data.repository.LanguageManager.getSavedLanguage(this),
+            )
+            notificationPoster.post(
+                title = null,
+                body = localized.getString(R.string.uml_fallback_notice, backendId.uppercase(java.util.Locale.ROOT)),
+                priority = com.excp.podroid.engine.hostbridge.HostProtocol.PRIO_NORMAL,
+                id = null,
+            )
         }
     }
 

@@ -1,0 +1,36 @@
+diff --git a/arch/um/os-Linux/mem.c b/arch/um/os-Linux/mem.c
+index 72f302f4d..d99ec1e86 100644
+--- a/arch/um/os-Linux/mem.c
++++ b/arch/um/os-Linux/mem.c
+@@ -13,6 +13,7 @@
+ #include <sys/stat.h>
+ #include <sys/mman.h>
+ #include <sys/vfs.h>
++#include <sys/syscall.h>
+ #include <linux/magic.h>
+ #include <init.h>
+ #include <kern_util.h>
+@@ -185,6 +186,23 @@ static int __init create_tmp_file(unsigned long long len)
+ 	int fd, err;
+ 	char zero;
+ 
++	/*
++	 * Spike: back guest RAM with a memfd (shmem) unless UML_PHYSMEM_FILE is
++	 * set. A file in TMPDIR on an Android app's flash-backed data dir gets
++	 * written back to storage, and executing from it rides an audited
++	 * SELinux exception for app_data_file.
++	 */
++	fd = getenv("UML_PHYSMEM_FILE") ? -1 :
++		syscall(__NR_memfd_create, "uml-physmem", 1 /* MFD_CLOEXEC */);
++	if (fd >= 0) {
++		if (ftruncate(fd, len) < 0) {
++			perror("ftruncate memfd");
++			exit(1);
++		}
++		os_info("Guest memory backed by memfd\n");
++		return fd;
++	}
++
+ 	fd = make_tempfile(TEMPNAME_TEMPLATE);
+ 	if (fd < 0)
+ 		exit(1);

@@ -24,6 +24,8 @@ import com.excp.podroid.di.ApplicationScope
 import com.excp.podroid.engine.EngineHolder
 import com.excp.podroid.engine.EngineSelection
 import com.excp.podroid.engine.VmState
+import com.excp.podroid.engine.uml.UmlInfo
+import com.excp.podroid.engine.uml.UmlStatus
 import com.excp.podroid.util.DeviceResourcePolicy
 import com.excp.podroid.util.NetworkUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -334,6 +336,27 @@ class SettingsViewModel @Inject constructor(
      *  networking compiled out (#43). The @StringRes ID for the Settings
      *  backend caption. The screen resolves it in the current locale. See #66. */
     val backendFallback: StateFlow<Int?> = engine.backendFallback
+
+    /** True when AVF can start on this device (drives the "AVF is faster than UML" note). */
+    val avfUsable: StateFlow<Boolean> = engine.avfUsable
+
+    /** UML probe/demotion status and reason, for the backend caption and Diagnostics. */
+    val umlInfo: StateFlow<UmlInfo> = engine.umlInfo
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UmlInfo(UmlStatus.NOT_PROBED, null))
+
+    private val _umlRetryMessage = MutableStateFlow<String?>(null)
+    /** One-shot message when "Try UML again" is refused because a VM is active; clear
+     *  after showing with [clearUmlRetryMessage]. */
+    val umlRetryMessage: StateFlow<String?> = _umlRetryMessage.asStateFlow()
+
+    fun clearUmlRetryMessage() { _umlRetryMessage.value = null }
+
+    /** "Try UML again": clears the demotion and re-picks (refused while a VM runs). */
+    fun retryUml() {
+        if (!engine.retryUml()) {
+            _umlRetryMessage.value = context.getString(R.string.uml_retry_vm_active)
+        }
+    }
 
     private val _exportError = MutableStateFlow<String?>(null)
     /** One-shot export failure message; clear after showing with [clearExportError]. */

@@ -1,5 +1,5 @@
 #!/sbin/openrc-run
-description="Podroid terminal resize daemon (hvc1 → stty hvc0)"
+description="Podroid terminal resize daemon (resize channel -> stty terminal tty)"
 command="/usr/local/bin/podroid-resize"
 command_background="yes"
 pidfile="/run/podroid-resize.pid"

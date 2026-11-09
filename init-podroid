@@ -30,13 +30,79 @@ echo "[podroid-init] mounted /sys" > /dev/console
 mount -t devtmpfs -o exec,nosuid,mode=0755  devtmpfs  /dev || true
 echo "[podroid-init] mounted /dev (or reused kernel pre-mount)" > /dev/console
 
+# Block device names: virtio-blk on QEMU/AVF, UML ubd on User-Mode Linux.
+if grep -q 'podroid\.backend=uml' /proc/cmdline 2>/dev/null; then
+    UML=1
+    PERSIST_DEV=/dev/ubda
+    DEV_GLOB="/dev/ubd*"
+    SYSTEM_DEV=/dev/ubdb
+else
+    UML=0
+    PERSIST_DEV=/dev/vda
+    DEV_GLOB="/dev/vd*"
+    SYSTEM_DEV=/dev/vdb
+fi
+
+# Probe mode (UML only): checks SMP, fork/exec, disk writes and networking, then
+# powers off. Genuine probe boots attach exactly one scratch disk as ubda. If a
+# second disk (ubdb) is present this is not a probe boot: fail WITHOUT writing
+# anything, so a stray podroid.probe=1 can never touch the persistent disk.
+if [ "$UML" = 1 ] && grep -q 'podroid\.probe=1' /proc/cmdline 2>/dev/null; then
+    _probe_fail() { echo "PODROID-PROBE: FAIL $1" > /dev/console; poweroff -f; exec sleep 3600; }
+    for _i in $(seq 1 30); do
+        [ -b /dev/ubda ] && break
+        sleep 0.1
+    done
+    [ -b /dev/ubda ] || _probe_fail disk
+    # Give a second disk time to enumerate before deciding this is a probe boot.
+    for _i in $(seq 1 10); do
+        [ -b /dev/ubdb ] && _probe_fail disk
+        sleep 0.1
+    done
+    [ -b /dev/ubdb ] && _probe_fail disk
+
+    # ncpus= is consumed by the UML kernel; podroid.ncpus= is the guest-visible copy.
+    _want=$(sed -n 's/.*podroid\.ncpus=\([0-9]*\).*/\1/p' /proc/cmdline 2>/dev/null || true)
+    [ -n "$_want" ] || _probe_fail smp
+    [ "$(nproc)" = "$_want" ] || _probe_fail smp
+
+    for _i in $(seq 1 50); do
+        /bin/true || _probe_fail fork
+    done
+
+    [ -b /dev/ubdb ] && _probe_fail disk
+    dd if=/dev/zero of=/dev/ubda bs=1M count=8 conv=fsync > /dev/null 2>&1 || _probe_fail disk
+
+    _d() { echo "PODROID-PROBE-DETAIL: net $*" > /dev/console; }
+    _nic=vec0
+    for _i in $(seq 1 30); do
+        [ -e /sys/class/net/vec0 ] && break
+        sleep 0.1
+    done
+    if [ ! -e /sys/class/net/vec0 ]; then
+        _d "nic vec0 missing, present: $(ls /sys/class/net 2>/dev/null | tr '\n' ' ')"
+        _probe_fail net
+    fi
+    ip link set lo up 2>/dev/null || { _d "lo-up failed"; _probe_fail net; }
+    ip link set "$_nic" up 2>/dev/null || { _d "link-up failed on $_nic"; _probe_fail net; }
+    ip addr add 10.0.2.15/24 dev "$_nic" 2>/dev/null || { _d "addr add failed on $_nic"; _probe_fail net; }
+    ip route add default via 10.0.2.2 dev "$_nic" 2>/dev/null || { _d "route add failed on $_nic"; _probe_fail net; }
+    _dns=$(sed -n 's/.*podroid\.dns=\([0-9.]*\).*/\1/p' /proc/cmdline 2>/dev/null || true)
+    [ -n "$_dns" ] || { _d "dns no podroid.dns= on cmdline"; _probe_fail net; }
+    nslookup dl-cdn.alpinelinux.org "$_dns" > /dev/null 2>&1 || { _d "dns lookup failed via $_dns"; _probe_fail net; }
+
+    echo "PODROID-PROBE: PASS" > /dev/console
+    poweroff -f
+    exec sleep 3600
+fi
+
 echo "Mounting storage..." > /dev/console
 
 # virtio_blk is built-in; modprobe is a no-op safety net
 [ -d "/lib/modules/$(uname -r)" ] && { depmod -a 2>/dev/null; modprobe virtio_blk 2>/dev/null; }
 
-# /dev/vda = persistent ext4 (user data, container storage)
-# /dev/vdb = read-only Alpine squashfs (system files)
+# vda/ubda = persistent ext4 (user data, container storage)
+# vdb/ubdb = read-only Alpine squashfs (system files)
 mkdir -p /mnt/persist /mnt/lower /mnt/overlay
 
 # Bounded wait for the virtio block nodes: on most boots they already exist
@@ -44,7 +110,7 @@ mkdir -p /mnt/persist /mnt/lower /mnt/overlay
 # behind init. Cap the wait so a genuinely-missing node still drops to the
 # FATAL diagnostics below instead of hanging forever.
 for _i in $(seq 1 30); do
-    [ -b /dev/vda ] && [ -b /dev/vdb ] && break
+    [ -b "$PERSIST_DEV" ] && [ -b "$SYSTEM_DEV" ] && break
     sleep 0.1
 done
 
@@ -57,33 +123,33 @@ done
 # barrier=1: write barriers ON so ext4's journal ordering is durable. The
 #   guest's flushes reach storage.img through QEMU's writeback cache, which
 #   honors flushes, keeping the on-disk journal consistent for recovery.
-if ! mount -t ext4 -o rw,noatime,commit=1,barrier=1 /dev/vda /mnt/persist 2>/dev/null; then
+if ! mount -t ext4 -o rw,noatime,commit=1,barrier=1 "$PERSIST_DEV" /mnt/persist 2>/dev/null; then
     # The first mount failed. e2fsck searches the backup superblocks by itself
     # when the primary is damaged. Exit codes: 0 clean, 1 corrected, 2 corrected
     # (reboot advised), 4 uncorrected, >=8 no usable filesystem or operational
     # error. Never reformat a disk e2fsck could read: only a brand-new, all-zero
     # storage.img (first boot) gets mkfs.
     rc=0
-    e2fsck -y /dev/vda > /dev/console 2>&1 || rc=$?
-    if [ "$rc" -ge 8 ] && [ -z "$(dd if=/dev/vda bs=1M count=1 2>/dev/null | tr -d '\000' | head -c 1)" ]; then
-        mkfs.ext4 -q -F /dev/vda
+    e2fsck -y "$PERSIST_DEV" > /dev/console 2>&1 || rc=$?
+    if [ "$rc" -ge 8 ] && [ -z "$(dd if="$PERSIST_DEV" bs=1M count=1 2>/dev/null | tr -d '\000' | head -c 1)" ]; then
+        mkfs.ext4 -q -F "$PERSIST_DEV"
     elif [ "$rc" -ge 4 ]; then
-        echo "FATAL: persistent ext4 (/dev/vda) could not be repaired (e2fsck rc=$rc); not reformatting, to keep the data" > /dev/console
+        echo "FATAL: persistent ext4 ($PERSIST_DEV) could not be repaired (e2fsck rc=$rc); not reformatting, to keep the data" > /dev/console
         exec sh
     fi
-    mount -t ext4 -o rw,noatime,commit=1,barrier=1 /dev/vda /mnt/persist \
-        || { echo "FATAL: persistent ext4 (/dev/vda) mount failed" > /dev/console; ls -l /dev/vd* > /dev/console 2>&1; exec sh; }
+    mount -t ext4 -o rw,noatime,commit=1,barrier=1 "$PERSIST_DEV" /mnt/persist \
+        || { echo "FATAL: persistent ext4 ($PERSIST_DEV) mount failed" > /dev/console; ls -l $DEV_GLOB > /dev/console 2>&1; exec sh; }
 fi
 
 # Android grows storage.img in place when the user raises the storage size;
 # the ext4 inside still has its old size until it is resized. Online resize is
 # a no-op when nothing changed and must never stop the boot.
-resize2fs /dev/vda >/dev/null 2>&1 \
-    || echo "WARN: resize2fs /dev/vda failed; storage keeps its previous size" > /dev/console
+resize2fs "$PERSIST_DEV" >/dev/null 2>&1 \
+    || echo "WARN: resize2fs $PERSIST_DEV failed; storage keeps its previous size" > /dev/console
 
 echo "Mounting system..." > /dev/console
-mount -t squashfs -o ro /dev/vdb /mnt/lower \
-    || { echo "FATAL: squashfs (/dev/vdb) mount failed" > /dev/console; ls -l /dev/vd* > /dev/console 2>&1; exec sh; }
+mount -t squashfs -o ro "$SYSTEM_DEV" /mnt/lower \
+    || { echo "FATAL: squashfs ($SYSTEM_DEV) mount failed" > /dev/console; ls -l $DEV_GLOB > /dev/console 2>&1; exec sh; }
 
 mkdir -p /mnt/persist/upper /mnt/persist/work /mnt/persist/.podroid \
     || { echo "FATAL: mkdir overlay upper/work failed" > /dev/console; exec sh; }
@@ -105,7 +171,7 @@ echo "Stacking overlay..." > /dev/console
 mount -t overlay overlay \
     -o lowerdir=/mnt/lower,upperdir=/mnt/persist/upper,workdir=/mnt/persist/work \
     /mnt/overlay \
-    || { echo "FATAL: overlay mount failed" > /dev/console; ls -l /dev/vd* > /dev/console 2>&1; exec sh; }
+    || { echo "FATAL: overlay mount failed" > /dev/console; ls -l $DEV_GLOB > /dev/console 2>&1; exec sh; }
 
 # Move /mnt/persist into the new root so users can reach raw storage,
 # and so switch_root can fully clear initramfs (no orphan mounts left

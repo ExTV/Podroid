@@ -83,4 +83,31 @@ class VmLoadSamplerTest {
     fun readProcessCpuTicks_returnsNullForInvalidPid() {
         assertNull(VmLoadSampler.readProcessCpuTicks(-1))
     }
+
+    @Test
+    fun sampleCpuPercent_wholeTreeReadsTheTreeTicks() {
+        var now = 1_000L
+        var tree = 0L
+        val s = VmLoadSampler(
+            clockHz = 100L,
+            nowMs = { now },
+            ticksReader = { 0L }, // supervisor alone stays idle (UML)
+            treeTicksReader = { tree },
+        )
+        assertNull(s.sampleCpuPercent(pid = 42, vmCpus = 2, wholeTree = true))
+        now = 2_000L
+        tree = 100L // one core busy across the kernel and stub processes
+        assertEquals(50f, s.sampleCpuPercent(pid = 42, vmCpus = 2, wholeTree = true)!!, 0.01f)
+    }
+
+    @Test
+    fun sampleCpuPercent_defaultReadsOnlyThePid() {
+        var now = 1_000L
+        var own = 0L
+        val s = VmLoadSampler(clockHz = 100L, nowMs = { now }, ticksReader = { own }, treeTicksReader = { 999_999L })
+        assertNull(s.sampleCpuPercent(pid = 42, vmCpus = 1))
+        now = 2_000L
+        own = 50L
+        assertEquals(50f, s.sampleCpuPercent(pid = 42, vmCpus = 1)!!, 0.01f)
+    }
 }

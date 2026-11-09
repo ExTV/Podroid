@@ -38,4 +38,11 @@ class UsbPassthroughFilterTest {
     fun `device-level HID class stays with Android`() {
         assertFalse(UsbPassthroughManager.isPassthroughCandidate(UsbConstants.USB_CLASS_HID, emptyList()))
     }
+
+    @Test
+    fun `passthrough is armed only on the qemu backend`() {
+        assertTrue(UsbPassthroughManager.backendSupportsPassthrough("qemu"))
+        assertFalse(UsbPassthroughManager.backendSupportsPassthrough("uml"))
+        assertFalse(UsbPassthroughManager.backendSupportsPassthrough("avf"))
+    }
 }

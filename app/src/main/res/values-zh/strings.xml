@@ -236,6 +236,23 @@
     <string name="backend_fallback_reason_protected_only">此设备仅支持受保护虚拟机</string>
     <!-- #43: AUTO avoided AVF because the OEM build compiled out networking (isFeatureEnabled(com.android.kvm.NETWORK) == false). Standalone sentence, unlike the fragments above. -->
     <string name="backend_fallback_reason_network">此设备的虚拟化服务关闭了网络功能，因此 Podroid 使用 QEMU 以保持虚拟机联网。</string>
+    <string name="backend_fallback_reason_uml_probe">此设备未通过 UML 兼容性测试。</string>
+    <string name="backend_fallback_reason_uml_demoted">UML 在此设备上已停止工作，将在下次更新前保持关闭。</string>
+    <!-- UML backend: VM error messages shown on Home -->
+    <string name="uml_router_stopped">UML 网络路由进程已停止，虚拟机已关闭。</string>
+    <string name="uml_exited_code">UML 已退出，退出码 %1$d</string>
+    <string name="uml_crashed">UML 崩溃（%1$s）</string>
+    <string name="uml_binaries_missing">未找到 UML 程序文件。</string>
+    <string name="uml_unsupported_page_size">UML 没有适用于此设备 %1$d 字节内存页的内核。</string>
+    <string name="uml_sockets_timeout">UML 未能在 %1$d 秒内创建套接字</string>
+    <string name="uml_tmpdir_failed">无法创建 UML 工作目录。</string>
+    <string name="uml_disk_prepare_failed">无法准备虚拟机磁盘映像。</string>
+    <string name="uml_unknown_error">未知错误</string>
+    <string name="uml_boot_timeout">UML 未能在 %1$d 秒内完成启动。</string>
+    <string name="uml_probe_stage">正在此设备上测试 UML...</string>
+    <string name="uml_fallback_notice">UML 在此设备上运行失败，虚拟机已改用 %1$s 重新启动。可在设置中再次尝试 UML。</string>
+    <string name="uml_tree_survived">UML 进程未能退出，为保护磁盘镜像，虚拟机未切换到其他后端重新启动。请关闭 Podroid 后重试。</string>
+    <string name="uml_backend_failed">Podroid 无法准备 UML 后端或从其切换。详情见诊断导出。请再次启动虚拟机以重试。</string>
 
     <!-- Permissions -->
     <string name="permissions">权限</string>
@@ -369,4 +386,15 @@
     <string name="avf_action_switch_qemu">切换至 QEMU</string>
     <string name="avf_action_retry">重试</string>
     <string name="avf_net_workaround_failed">此设备上 AVF 联网所需的兼容性设置失败，Linux 系统启动后可能没有网络连接。如果网络不可用，请将后端切换至 QEMU。</string>
+    <string name="backend_uml_experimental">UML（实验性）</string>
+    <string name="backend_uml_avf_better_note">此设备支持 AVF，它由硬件加速，比 UML 更快。</string>
+    <string name="usb_not_available_on_uml">UML 后端不可用：USB 设备直通需要 QEMU 后端。</string>
+    <string name="uml_try_again">重试 UML</string>
+    <string name="uml_retry_vm_active">请先停止虚拟机，然后再重试 UML。</string>
+    <string name="uml_status_label">UML（用户态）</string>
+    <string name="backend_fallback_suffix_uml">（UML 不可用）</string>
+    <string name="qemu_extra_args_qemu_only">额外的 QEMU 参数（仅限 QEMU）</string>
+    <string name="uml_reason_detail">原因：%1$s</string>
+    <string name="uml_diag_status">UML 状态：%1$s</string>
+    <string name="uml_diag_status_reason">UML 状态：%1$s（%2$s）</string>
 </resources>

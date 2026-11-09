@@ -309,12 +309,16 @@ class StatusViewModel @Inject constructor(
         if (pid == null) {
             loadSampler.reset()
             _vmLoadPercent.value = null
-            _vmLoadUnavailable.value = "avf"
+            // "avf" means "no host PID to sample". UML has one, so a missing PID
+            // there is a start-up race, not an unsupported backend: keep "collecting".
+            _vmLoadUnavailable.value = if (engine.backendId == "uml") null else "avf"
             return
         }
 
         _vmLoadUnavailable.value = null
-        val pct = loadSampler.sampleCpuPercent(pid, uiState.value.vmCpus) ?: return
+        // UML: the supervisor itself is idle; guest CPU time is in its descendants.
+        val wholeTree = engine.backendId == "uml"
+        val pct = loadSampler.sampleCpuPercent(pid, uiState.value.vmCpus, wholeTree) ?: return
         _vmLoadPercent.value = pct
         val h = _chartHistories.value
         _chartHistories.value = h.copy(vmCpu = MetricHistory.append(h.vmCpu, pct))
