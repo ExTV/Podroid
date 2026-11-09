@@ -98,6 +98,11 @@
             <td>Passing a physical USB device into the VM works only on the QEMU backend, which streams the open device handle to the emulator over QMP. The AVF backend has no equivalent channel, so USB passthrough is unavailable there. It is also opt-in and adds a USB controller at boot, so it must be enabled while the VM is stopped. Input devices (keyboards, mice, trackpads, touchscreens, including the ones built into a dock) are never passed through, so the phone keeps its input.</td>
           </tr>
           <tr>
+            <td>UML backend</td>
+            <td>Experimental; no USB passthrough; not a security sandbox</td>
+            <td>The opt-in UML backend runs the guest kernel as an ordinary Android process (see <a href="backends.html#uml">Backends</a>). USB passthrough needs the QEMU backend. Every guest process, including every container process, is a real Android process, so on Android 12 and later container-heavy workloads can hit the phantom-process limit and have processes killed; the fix is in the troubleshooting section below, and on Android 14 and later the Developer options switch <strong>Disable child process restrictions</strong> also lifts it. The Downloads share works and is restricted to the Downloads folder, but the guest kernel runs with the app's own privileges, so do not run untrusted code in it expecting VM-grade isolation. A clean guest shutdown takes about 15 to 30 seconds. The guest kernel is a different build from the QEMU/AVF one and the network interface is <code>vec0</code> instead of <code>eth0</code>. It has not yet been tested on devices with 16 KB memory pages or on very old Android kernels. If the first-run compatibility test fails (it needs a network connection) or UML later fails, Podroid falls back to the backend Auto would pick; use <strong>Try UML again</strong> in Settings with the VM stopped.</td>
+          </tr>
+          <tr>
             <td>Storage</td>
             <td>Size can grow but never shrink</td>
             <td>The persistent ext4 overlay image (<code>storage.img</code>) can be enlarged from Settings; the guest resizes its filesystem on the next start. Shrinking is not supported, and choosing a size larger than the phone's free space is not offered.</td>

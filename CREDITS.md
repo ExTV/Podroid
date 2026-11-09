@@ -67,6 +67,14 @@ QEMU provides the machine emulation that makes everything else possible. Podroid
 - Original author: Fabrice Bellard
 - Contributors: https://www.qemu.org/contributors/
 
+### User-Mode Linux (arm64 port)
+The experimental UML backend runs the guest as a User-Mode Linux kernel (the Linux kernel's `ARCH=um`). It is built from the out-of-tree arm64 port of User-Mode Linux by zalexdev, pinned at commit `32e5e10b8`, with Podroid's own patches and config fragments in `build-uml/kernel/`. The corresponding kernel source tarball is published with each release.
+
+- Project: https://github.com/zalexdev/linux-um-arm64
+- Upstream: https://kernel.org (User-Mode Linux, `ARCH=um`)
+- License: GNU General Public License v2.0
+- Author of the arm64 port: zalexdev
+
 ### libslirp
 SLIRP is QEMU's user-mode network stack. Podroid links it into the QEMU binary statically.
 

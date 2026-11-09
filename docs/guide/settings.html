@@ -185,8 +185,8 @@
         <tbody>
           <tr>
             <td>Backend</td>
-            <td>Auto / AVF (KVM) / QEMU (TCG)</td>
-            <td>Auto picks AVF when the device supports it, otherwise QEMU. Forcing AVF on a device that cannot run it falls back to QEMU, and the app says so: the AVF chip gains a caption with the reason, the Home screen shows a notice, and Status appends "AVF unavailable, running QEMU". Requires a VM restart. See the <a href="backends.html">Backends</a> page for details.</td>
+            <td>Auto / AVF (KVM) / QEMU (TCG) / UML (experimental)</td>
+            <td>Auto picks AVF when the device supports it, otherwise QEMU. Forcing AVF on a device that cannot run it falls back to QEMU, and the app says so: the AVF chip gains a caption with the reason, the Home screen shows a notice, and Status appends "AVF unavailable, running QEMU". UML (experimental) runs the guest kernel as a plain Android process and is never chosen by Auto; the first start with UML runs a short compatibility test, and if UML fails Podroid falls back to the Auto pick and Settings shows the reason with a <strong>Try UML again</strong> button (VM must be stopped). Requires a VM restart. See the <a href="backends.html">Backends</a> page for details.</td>
           </tr>
           <tr>
             <td>Extra QEMU args</td>

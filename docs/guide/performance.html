@@ -73,6 +73,55 @@
       <h2>Network</h2>
       <p>Podroid uses <strong>SLIRP</strong>, a userspace TCP/IP stack embedded inside QEMU. It is adequate for bulk transfers (container image pulls, SSH, HTTP) but adds per-packet CPU overhead compared to a kernel network path. High-connection-count workloads - tools that open hundreds of parallel connections like <code>npm install</code> with many dependencies - will feel this overhead in addition to the CPU emulation cost. There is no alternative without root: TAP networking requires a TUN/TAP device or elevated permissions.</p>
 
+      <h2 id="uml-speed">UML backend: measured speed</h2>
+      <p>The experimental UML backend (see <a href="backends.html#uml">Backends</a>) runs guest code natively instead of emulating it, which removes most of the TCG costs above. Measured on a Nothing Phone (1), Android 15, no AVF, 4 vCPUs, 2 GB RAM, same disk, median of three runs:</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Test</th>
+            <th>QEMU</th>
+            <th>UML</th>
+            <th>Speedup</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Boot to ready</td>
+            <td>33 to 41 s</td>
+            <td>13 to 18 s</td>
+            <td>about 2.5x</td>
+          </tr>
+          <tr>
+            <td><code>npm install express</code> (warm cache)</td>
+            <td>49.5 s</td>
+            <td>24.8 s</td>
+            <td>2.0x</td>
+          </tr>
+          <tr>
+            <td>Node.js CPU loop</td>
+            <td>18.8 s</td>
+            <td>4.7 s</td>
+            <td>4.0x</td>
+          </tr>
+          <tr>
+            <td><code>docker run</code> with a shell loop inside</td>
+            <td>19.7 s</td>
+            <td>7.4 s</td>
+            <td>2.7x</td>
+          </tr>
+          <tr>
+            <td><code>docker run --rm alpine true</code> (container start only)</td>
+            <td>7.6 s</td>
+            <td>8.2 s</td>
+            <td>no gain</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>On a Pixel 10 Pro XL (Android 17), the same warm <code>npm install express</code> took 25.7 s on QEMU, 20.6 s on UML and 1.9 s on AVF. AVF is roughly ten times faster than either, so on a device with AVF, use AVF.</p>
+      <p>These are single-device measurements and results vary with the device, its thermal state and the workload.</p>
+
       <h2>Tuning summary</h2>
       <p>The table below lists every tuning measure Podroid applies and what it buys. All of these are already active by default; they are not optional settings you need to find.</p>
 

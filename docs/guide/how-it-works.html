@@ -59,6 +59,7 @@
       <ul>
         <li><strong>QEMU (default):</strong> software CPU emulation via TCG. Works on any ARM64 Android 8+ device. Slower than native because every guest instruction is translated and executed by the host CPU. See the <a href="backends.html">Backends</a> page for tuning options.</li>
         <li><strong>AVF / pKVM:</strong> hardware virtualization via Android's Virtualization Framework. Available on recent Pixel devices that ship pKVM. Runs at near-native speed. Requires two one-time <code>adb</code> permission grants. See <a href="backends.html">Backends: QEMU &amp; AVF</a>.</li>
+        <li><strong>UML (experimental, opt-in):</strong> User-Mode Linux runs the guest kernel as an ordinary Android process, so guest code runs natively without root or special permissions. Never chosen by Auto. See <a href="backends.html#uml">Backends</a>.</li>
       </ul>
 
       <h2>The filesystem: squashfs + ext4 overlay</h2>
@@ -126,7 +127,7 @@
           </tr>
           <tr>
             <td>QEMU / AVF</td>
-            <td>Hypervisor backend; QEMU (software TCG) works on any device, AVF (hardware) on supported Pixels</td>
+            <td>Hypervisor backend; QEMU (software TCG) works on any device, AVF (hardware) on supported Pixels; UML (experimental) runs the guest kernel as a plain process</td>
           </tr>
           <tr>
             <td>podroid-hostd</td>
