@@ -47,6 +47,9 @@ app/src/main/jniLibs/arm64-v8a/libpodroid-bridge.so
 # Local planning / scratch dirs
 docs/superpowers/
 
+# UML kernel source tarball (build-all.sh uml)
+/out/
+
 # Claude Code sessions
 .claude/
 
@@ -79,3 +82,7 @@ app/src/main/jniLibs/
 
 # Visual companion (brainstorming sessions)
 .superpowers/
+app/src/debug/jniLibs/
+
+# Local UML research notes, logs and benchmarks
+/research/
