@@ -5,6 +5,7 @@
 package com.excp.podroid.ui.screens.x11
 
 import android.content.pm.ActivityInfo
+import android.view.PointerIcon
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
@@ -389,80 +390,84 @@ fun X11Screen(
                 val currentFbW  by rememberUpdatedState(fb.w)
                 val currentFbH  by rememberUpdatedState(fb.h)
 
-                AndroidView(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .pointerInput(
-                            s.touchMode,
-                            s.trackpadSensitivity, s.trackpadAccel,
-                        ) {
-                            x11PointerLoop(
-                                s = s,
-                                lockState = pointerLockState,
-                                viewModel = viewModel,
-                                requestFocus = { viewerFocus.requestFocus() },
-                                fbX = { px -> ((px - currentDstX) / currentDstW.coerceAtLeast(1) * currentFbW).toInt().coerceIn(0, currentFbW - 1) },
-                                fbY = { py -> ((py - currentDstY) / currentDstH.coerceAtLeast(1) * currentFbH).toInt().coerceIn(0, currentFbH - 1) },
-                                // True only inside the letterbox/pillarbox content rect. Used to
-                                // reject DIRECT-touch taps that land in the black bars instead of
-                                // clamping them to an edge pixel (which produced a phantom edge click).
-                                inContent = { px, py ->
-                                    px >= currentDstX && px < currentDstX + currentDstW &&
-                                        py >= currentDstY && py < currentDstY + currentDstH
-                                },
-                            )
-                        },
-                    factory = { ctx ->
-                        SurfaceView(ctx).apply {
-                            val r = X11SurfaceRenderer(
-                                holder = holder,
-                                frameBufferSize = { viewModel.framebuffer.size },
-                                withFrame = { block -> viewModel.withFrame(block) },
-                                debugRfbStats = { viewModel.debugSnapshotAndReset() },
-                                presentHw = { viewModel.debugPresentHw },
-                            )
-                            renderer = r
-                            holder.addCallback(object : SurfaceHolder.Callback {
-                                override fun surfaceCreated(h: SurfaceHolder) { r.onSurfaceCreated() }
-                                override fun surfaceChanged(h: SurfaceHolder, f: Int, w: Int, hh: Int) { r.onSurfaceChanged() }
-                                override fun surfaceDestroyed(h: SurfaceHolder) {}
-                            })
-                            // holder.setFixedSize (below, via the renderer) makes
-                            // SurfaceHolder.Callback.surfaceChanged report the BUFFER
-                            // size, not the view size, so the viewport used for
-                            // requestResolution must come from layout size instead:
-                            // otherwise feeding the buffer size back in would create a
-                            // resize feedback loop. Same IME baseline rule as before:
-                            // ignore height changes from the soft keyboard opening/
-                            // closing (a width change resets the baseline; otherwise
-                            // only a height BEYOND the largest non-IME height seen
-                            // counts as a real resize; an IME dismiss grows height back
-                            // up to the baseline and is correctly skipped).
-                            addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
-                                val w = right - left
-                                val hh = bottom - top
-                                if (w == oldRight - oldLeft && hh == oldBottom - oldTop) return@addOnLayoutChangeListener
-                                val widthChanged = w != svWidth
-                                if (widthChanged) svGenuineHeight = 0
-                                val heightGrew = hh > svGenuineHeight
-                                svWidth = w
-                                svHeight = hh
-                                if (heightGrew) svGenuineHeight = hh
-                                if (widthChanged || heightGrew) {
-                                    viewModel.requestResolution(w, hh)
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    AndroidView(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .pointerInput(
+                                s.touchMode,
+                                s.trackpadSensitivity, s.trackpadAccel, s.touchpadScrollDirection,
+                            ) {
+                                x11PointerLoop(
+                                    s = s,
+                                    lockState = pointerLockState,
+                                    viewModel = viewModel,
+                                    requestFocus = { viewerFocus.requestFocus() },
+                                    fbX = { px -> ((px - currentDstX) / currentDstW.coerceAtLeast(1) * currentFbW).toInt().coerceIn(0, currentFbW - 1) },
+                                    fbY = { py -> ((py - currentDstY) / currentDstH.coerceAtLeast(1) * currentFbH).toInt().coerceIn(0, currentFbH - 1) },
+                                    // True only inside the letterbox/pillarbox content rect. Used to
+                                    // reject DIRECT-touch taps that land in the black bars instead of
+                                    // clamping them to an edge pixel (which produced a phantom edge click).
+                                    inContent = { px, py ->
+                                        px >= currentDstX && px < currentDstX + currentDstW &&
+                                            py >= currentDstY && py < currentDstY + currentDstH
+                                    },
+                                )
+                            },
+                        factory = { ctx ->
+                            SurfaceView(ctx).apply {
+                                // The VNC cursor is displayed by the guest or our overlay, never Android too.
+                                pointerIcon = PointerIcon.getSystemIcon(ctx, PointerIcon.TYPE_NULL)
+                                val r = X11SurfaceRenderer(
+                                    holder = holder,
+                                    frameBufferSize = { viewModel.framebuffer.size },
+                                    withFrame = { block -> viewModel.withFrame(block) },
+                                    debugRfbStats = { viewModel.debugSnapshotAndReset() },
+                                    presentHw = { viewModel.debugPresentHw },
+                                )
+                                renderer = r
+                                holder.addCallback(object : SurfaceHolder.Callback {
+                                    override fun surfaceCreated(h: SurfaceHolder) { r.onSurfaceCreated() }
+                                    override fun surfaceChanged(h: SurfaceHolder, f: Int, w: Int, hh: Int) { r.onSurfaceChanged() }
+                                    override fun surfaceDestroyed(h: SurfaceHolder) {}
+                                })
+                                // holder.setFixedSize (below, via the renderer) makes
+                                // SurfaceHolder.Callback.surfaceChanged report the BUFFER
+                                // size, not the view size, so the viewport used for
+                                // requestResolution must come from layout size instead:
+                                // otherwise feeding the buffer size back in would create a
+                                // resize feedback loop. Same IME baseline rule as before:
+                                // ignore height changes from the soft keyboard opening/
+                                // closing (a width change resets the baseline; otherwise
+                                // only a height BEYOND the largest non-IME height seen
+                                // counts as a real resize; an IME dismiss grows height back
+                                // up to the baseline and is correctly skipped).
+                                addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+                                    val w = right - left
+                                    val hh = bottom - top
+                                    if (w == oldRight - oldLeft && hh == oldBottom - oldTop) return@addOnLayoutChangeListener
+                                    val widthChanged = w != svWidth
+                                    if (widthChanged) svGenuineHeight = 0
+                                    val heightGrew = hh > svGenuineHeight
+                                    svWidth = w
+                                    svHeight = hh
+                                    if (heightGrew) svGenuineHeight = hh
+                                    if (widthChanged || heightGrew) {
+                                        viewModel.requestResolution(w, hh)
+                                    }
                                 }
                             }
-                        }
-                    },
-                    update = {
-                        renderer?.updateGeometry(fb.w, fb.h, geometry)
-                    },
-                    onRelease = {
-                        renderer?.release()
-                        renderer = null
-                    },
-                )
+                        },
+                        update = {
+                            renderer?.updateGeometry(fb.w, fb.h, geometry)
+                        },
+                        onRelease = {
+                            renderer?.release()
+                            renderer = null
+                        },
+                    )
+                    X11CursorOverlay(viewModel, geometry, fb, Modifier.matchParentSize())
+                }
 
                     if (s.showExtraKeys && !fullscreen) {
                         X11ExtraKeysRow(

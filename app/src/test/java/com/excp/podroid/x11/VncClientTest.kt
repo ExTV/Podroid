@@ -298,17 +298,18 @@ class VncClientTest {
         assertFalse(EncodingPolicy.shouldFallBack(java.net.SocketTimeoutException(), sessionUsedZrle = true))
     }
 
-    @Test fun `negotiatePixelFormat with default encodings is byte-identical to the old hardcoded SetEncodings`() {
+    @Test fun `negotiatePixelFormat advertises Cursor alongside default framebuffer encodings`() {
         val out = java.io.ByteArrayOutputStream()
         VncClient.negotiatePixelFormat(out)
         val sent = out.toByteArray()
         // SetPixelFormat is fixed-size (20 bytes); SetEncodings follows it.
         val setEncodings = sent.copyOfRange(20, sent.size)
         val expected = byteArrayOf(
-            0x02, 0x00, 0x00, 0x03,                         // msg=2, pad, count=3
+            0x02, 0x00, 0x00, 0x04,                         // msg=2, pad, count=4
             0x00, 0x00, 0x00, 0x01,                         // CopyRect
             0x00, 0x00, 0x00, 0x00,                         // Raw
             0xFF.toByte(), 0xFF.toByte(), 0xFE.toByte(), 0xCC.toByte(), // ExtendedDesktopSize (-308)
+            0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0x11,          // Cursor (-239)
         )
         assertArrayEquals(expected, setEncodings)
         // Passing DEFAULT_ENCODINGS explicitly must produce the exact same bytes.
@@ -322,11 +323,12 @@ class VncClientTest {
         VncClient.negotiatePixelFormat(out, VncClient.ZRLE_ENCODINGS)
         val setEncodings = out.toByteArray().copyOfRange(20, out.size())
         val expected = byteArrayOf(
-            0x02, 0x00, 0x00, 0x04,                         // msg=2, pad, count=4
+            0x02, 0x00, 0x00, 0x05,                         // msg=2, pad, count=5
             0x00, 0x00, 0x00, 0x10,                         // ZRLE (16)
             0x00, 0x00, 0x00, 0x01,                         // CopyRect
             0x00, 0x00, 0x00, 0x00,                         // Raw
             0xFF.toByte(), 0xFF.toByte(), 0xFE.toByte(), 0xCC.toByte(), // ExtendedDesktopSize (-308)
+            0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0x11,          // Cursor (-239)
         )
         assertArrayEquals(expected, setEncodings)
     }

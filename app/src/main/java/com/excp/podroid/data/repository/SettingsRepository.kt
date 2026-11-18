@@ -86,6 +86,7 @@ class SettingsRepository @Inject constructor(
         val KEY_X11_CUSTOM_H        = intPreferencesKey("x11_custom_h")
         val KEY_X11_TOUCH_MODE      = stringPreferencesKey("x11_touch_mode")
         val KEY_X11_TP_SENSITIVITY  = stringPreferencesKey("x11_tp_sensitivity") // float as string, DataStore has no float key helper used here
+        val KEY_X11_TP_SCROLL_DIRECTION = stringPreferencesKey("x11_tp_scroll_direction")
         val KEY_X11_TP_ACCEL        = booleanPreferencesKey("x11_tp_accel")
         val KEY_X11_FULLSCREEN      = booleanPreferencesKey("x11_fullscreen_default")
         val KEY_X11_ROTATION        = stringPreferencesKey("x11_rotation_lock")
@@ -266,6 +267,7 @@ class SettingsRepository @Inject constructor(
             touchMode = runCatching { com.excp.podroid.x11.TouchMode.valueOf(p[KEY_X11_TOUCH_MODE] ?: "DIRECT") }.getOrDefault(com.excp.podroid.x11.TouchMode.DIRECT),
             trackpadSensitivity = (p[KEY_X11_TP_SENSITIVITY]?.toFloatOrNull() ?: 1.5f),
             trackpadAccel = p[KEY_X11_TP_ACCEL] ?: true,
+            touchpadScrollDirection = runCatching { com.excp.podroid.x11.TouchpadScrollDirection.valueOf(p[KEY_X11_TP_SCROLL_DIRECTION] ?: "NATURAL") }.getOrDefault(com.excp.podroid.x11.TouchpadScrollDirection.NATURAL),
             fullscreenDefault = p[KEY_X11_FULLSCREEN] ?: false,
             rotationLock = runCatching { com.excp.podroid.x11.RotationLock.valueOf(p[KEY_X11_ROTATION] ?: "AUTO") }.getOrDefault(com.excp.podroid.x11.RotationLock.AUTO),
             showExtraKeys = p[KEY_X11_SHOW_EXTRA_KEYS] ?: true,
@@ -281,6 +283,7 @@ class SettingsRepository @Inject constructor(
     }
     suspend fun setX11TouchMode(v: String) = set(KEY_X11_TOUCH_MODE, v)
     suspend fun setX11TrackpadSensitivity(v: Float) = set(KEY_X11_TP_SENSITIVITY, v.toString())
+    suspend fun setX11TouchpadScrollDirection(v: String) = set(KEY_X11_TP_SCROLL_DIRECTION, v)
     suspend fun setX11TrackpadAccel(v: Boolean) = set(KEY_X11_TP_ACCEL, v)
     suspend fun setX11Fullscreen(v: Boolean) = set(KEY_X11_FULLSCREEN, v)
     suspend fun setX11Rotation(v: String) = set(KEY_X11_ROTATION, v)

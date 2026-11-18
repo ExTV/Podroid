@@ -396,4 +396,9 @@
     <string name="uml_reason_detail">Reason: %1$s</string>
     <string name="uml_diag_status">UML status: %1$s</string>
     <string name="uml_diag_status_reason">UML status: %1$s (%2$s)</string>
+    <string name="touchpad_scroll_direction">Touchpad scroll direction</string>
+    <string name="scroll_natural">Natural</string>
+    <string name="scroll_traditional">Traditional</string>
+    <string name="scroll_natural_hint">Swipe up with two fingers to scroll down the page.</string>
+    <string name="scroll_traditional_hint">Swipe up with two fingers to scroll up the page.</string>
 </resources>
