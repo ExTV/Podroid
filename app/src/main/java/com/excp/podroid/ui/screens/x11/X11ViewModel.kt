@@ -19,7 +19,9 @@ import com.excp.podroid.x11.ResolutionPreset
 import com.excp.podroid.x11.RfbDebugSnapshot
 import com.excp.podroid.x11.RotationLock
 import com.excp.podroid.x11.TouchMode
+import com.excp.podroid.x11.TouchpadScrollDirection
 import com.excp.podroid.x11.VncClient
+import com.excp.podroid.x11.VncCursor
 import com.excp.podroid.x11.VncRect
 import com.excp.podroid.x11.VncSize
 import com.excp.podroid.x11.X11Constants
@@ -69,6 +71,8 @@ class X11ViewModel @Inject constructor(
     val fbSize: StateFlow<VncSize> = _fbSize.asStateFlow()
 
     val cursor = MutableStateFlow(android.graphics.Point(X11Constants.FB_WIDTH / 2, X11Constants.FB_HEIGHT / 2))
+    private val _cursorShape = MutableStateFlow<VncCursor?>(null)
+    val cursorShape: StateFlow<VncCursor?> = _cursorShape.asStateFlow()
 
     @Volatile private var fbW = X11Constants.FB_WIDTH
     @Volatile private var fbH = X11Constants.FB_HEIGHT
@@ -140,6 +144,8 @@ class X11ViewModel @Inject constructor(
             var retryWithRaw: Boolean
             do {
                 retryWithRaw = false
+                // Until the server confirms Cursor support, keep its framebuffer cursor.
+                _cursorShape.value = null
                 var sessionUsedZrle = false
                 val sock = Socket()
                 try {
@@ -192,6 +198,7 @@ class X11ViewModel @Inject constructor(
                             debugStats.recordRx(rxElapsed)
                         }
                         val ns = upd.newSize
+                        upd.cursor?.let { _cursorShape.value = it }
                         if (ns != null && (ns.w != fbW || ns.h != fbH)) {
                             val nw = ns.w; val nh = ns.h
                             val fresh = IntArray(nw * nh)
@@ -256,6 +263,7 @@ class X11ViewModel @Inject constructor(
                         _connection.value = X11ConnectionState.Failed(e.message ?: "unknown")
                     }
                 } finally {
+                    _cursorShape.value = null
                     rfbOut = null
                     rfbSocket = null
                     // Close the socket on the serialized writer, queued AFTER any pending
@@ -347,6 +355,10 @@ class X11ViewModel @Inject constructor(
 
     fun setTrackpadSensitivity(v: Float) {
         viewModelScope.launch { settings.setX11TrackpadSensitivity(v) }
+    }
+
+    fun setTouchpadScrollDirection(direction: TouchpadScrollDirection) {
+        viewModelScope.launch { settings.setX11TouchpadScrollDirection(direction.name) }
     }
 
     fun setTrackpadAccel(v: Boolean) {

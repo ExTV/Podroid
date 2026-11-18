@@ -48,6 +48,7 @@ import com.excp.podroid.x11.ResolutionMode
 import com.excp.podroid.x11.ResolutionPreset
 import com.excp.podroid.x11.RotationLock
 import com.excp.podroid.x11.TouchMode
+import com.excp.podroid.x11.TouchpadScrollDirection
 import com.excp.podroid.R
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -215,6 +216,33 @@ fun X11SettingsSheet(viewModel: X11ViewModel, onDismiss: () -> Unit) {
                     enabled = s.touchMode == TouchMode.TRACKPAD,
                 )
             }
+
+            PodroidSectionLabel(stringResource(R.string.touchpad_scroll_direction))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(PodroidTokens.Spacing.SM),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                TouchpadScrollDirection.entries.forEach { direction ->
+                    FilterChip(
+                        selected = s.touchpadScrollDirection == direction,
+                        onClick = { viewModel.setTouchpadScrollDirection(direction) },
+                        label = { Text(stringResource(
+                            if (direction == TouchpadScrollDirection.NATURAL) R.string.scroll_natural
+                            else R.string.scroll_traditional
+                        )) },
+                        shape = RoundedCornerShape(PodroidTokens.Radius.Chip),
+                        colors = PodroidChipColors(),
+                    )
+                }
+            }
+            Text(
+                stringResource(
+                    if (s.touchpadScrollDirection == TouchpadScrollDirection.NATURAL) R.string.scroll_natural_hint
+                    else R.string.scroll_traditional_hint
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
 
             // ── DISPLAY ───────────────────────────────────────────────
             PodroidSectionLabel(stringResource(R.string.display))

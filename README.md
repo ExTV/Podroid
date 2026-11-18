@@ -33,7 +33,8 @@ A real Alpine Linux VM with its own kernel - not a chroot or proot trick - so **
 - **Podman, Docker and LXC** - pre-installed, ready the moment it boots
 - **A real VM** - Alpine Linux on a custom kernel via QEMU, or hardware-accelerated AVF on supported pKVM devices; an experimental, opt-in **UML** backend (no USB passthrough yet) runs the guest kernel as a plain process and is selectable in Settings
 - **In-app terminal** - full xterm-256color, 122 color themes, 13 fonts, live resize
-- **X11 desktop** - run GUI Linux apps in a built-in viewer with touch, keyboard, mouse and audio
+- **X11 desktop** - run GUI Linux apps in a built-in viewer with touch, keyboard, mouse and audio; a single, locally drawn desktop cursor follows input without waiting for framebuffer updates
+- **Touchpad scrolling** - choose **Natural** (default) or **Traditional** under the X11 viewer's **Settings → Touchpad scroll direction**. Natural scrolling moves down the page when you swipe up with two fingers; Traditional reverses it. Changes apply immediately and are saved for the next launch.
 - **USB passthrough**, **SSH**, **port forwarding** and a **guest-to-Android bridge**
 - **Container backup**, a **live VM/device status view** and **Downloads-folder sharing** with the guest
 - **English and 中文**, no root, any arm64 device on Android 8+
@@ -78,6 +79,7 @@ Per-component builds and toolchain details: [CONTRIBUTING.md](CONTRIBUTING.md).
 Contributions of every size are welcome: bug reports, kernel-config tweaks, new themes, UI polish, X11 input fixes, anything.
 
 - **Pull requests:** read [CONTRIBUTING.md](CONTRIBUTING.md) first. Keep changes scoped, run `./build-all.sh test` before pushing, and explain *why* in the PR description.
+- **X11 input validation:** see the [device test report](docs/testing/x11-input-validation.md) for the isolated QEMU boot results, touchpad checks, and untested backends.
 - **Bug reports:** [open an issue](https://github.com/ExTV/Podroid/issues/new) with your device and Android version, a short repro, and the diagnostic log (**Settings → Export Diagnostic Log** in the app).
 
 ## Related projects

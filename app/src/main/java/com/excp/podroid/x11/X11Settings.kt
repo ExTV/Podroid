@@ -16,6 +16,15 @@ enum class ResolutionPreset(val w: Int, val h: Int) {
     R720P(1280, 720), R900P(1600, 900), R1080P(1920, 1080), R1440P(2560, 1440)
 }
 enum class TouchMode { DIRECT, TRACKPAD }
+enum class TouchpadScrollDirection {
+    NATURAL, TRADITIONAL;
+
+    // Natural scrolling moves content with the fingers; wheel-up moves content downward.
+    fun wheelUp(deltaY: Float): Boolean = when (this) {
+        NATURAL -> deltaY > 0f
+        TRADITIONAL -> deltaY < 0f
+    }
+}
 enum class RotationLock { AUTO, LANDSCAPE, PORTRAIT }
 
 data class X11Settings(
@@ -26,6 +35,7 @@ data class X11Settings(
     val touchMode: TouchMode = TouchMode.DIRECT,
     val trackpadSensitivity: Float = 1.5f,
     val trackpadAccel: Boolean = true,
+    val touchpadScrollDirection: TouchpadScrollDirection = TouchpadScrollDirection.NATURAL,
     val fullscreenDefault: Boolean = false,
     val rotationLock: RotationLock = RotationLock.AUTO,
     val showExtraKeys: Boolean = true,

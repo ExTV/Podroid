@@ -3,7 +3,7 @@
  * Copyright (C) 2024-2026 Podroid contributors
  *
  * Minimal RFB 3.8 client. Supports SecurityType None, Raw + CopyRect +
- * ExtendedDesktopSize + ZRLE encodings. Used over a loopback connection on
+ * ExtendedDesktopSize + Cursor + ZRLE encodings. Used over a loopback connection on
  * both backends (the VNC port is an implicit loopback forward).
  */
 package com.excp.podroid.x11
@@ -13,6 +13,9 @@ import java.io.InputStream
 import java.io.OutputStream
 
 data class VncServerInfo(val width: Int, val height: Int, val name: String)
+
+/** Pixels are immutable after decoding; an empty shape explicitly hides the cursor. */
+class VncCursor(val width: Int, val height: Int, val hotspotX: Int, val hotspotY: Int, val pixels: IntArray)
 
 /**
  * The server sent data this client cannot parse or decode (bad handshake field,
@@ -119,20 +122,21 @@ object VncClient {
     private const val ENC_COPY_RECT: Int = 1
     private const val ENC_ZRLE = 16
     private const val ENC_EXTENDED_DESKTOP_SIZE = -308
+    private const val ENC_CURSOR = -239
 
-    // Default SetEncodings list: CopyRect, Raw, ExtendedDesktopSize(-308). ZRLE
+    // Default SetEncodings list: CopyRect, Raw, ExtendedDesktopSize, Cursor. ZRLE
     // is opt-in only, via the debug-only x11-debug.conf switch (read only when
     // BuildConfig.DEBUG); a ZRLE session that hits a protocol error falls back
     // to this Raw list for the rest of the ViewModel's lifetime (see
     // EncodingPolicy). The release default stays Raw.
-    val DEFAULT_ENCODINGS: IntArray = intArrayOf(ENC_COPY_RECT, ENC_RAW, ENC_EXTENDED_DESKTOP_SIZE)
-    val ZRLE_ENCODINGS: IntArray = intArrayOf(ENC_ZRLE, ENC_COPY_RECT, ENC_RAW, ENC_EXTENDED_DESKTOP_SIZE)
+    val DEFAULT_ENCODINGS: IntArray = intArrayOf(ENC_COPY_RECT, ENC_RAW, ENC_EXTENDED_DESKTOP_SIZE, ENC_CURSOR)
+    val ZRLE_ENCODINGS: IntArray = intArrayOf(ENC_ZRLE, ENC_COPY_RECT, ENC_RAW, ENC_EXTENDED_DESKTOP_SIZE, ENC_CURSOR)
 
     /**
      * Sends SetPixelFormat to lock the server to 32bpp little-endian, depth 24,
      * R shift 16 / G shift 8 / B shift 0, then SetEncodings to advertise
-     * [encodings] (default: Raw + CopyRect + ExtendedDesktopSize, byte-identical
-     * to the previously hardcoded list). Call once after handshake before
+     * [encodings] (default: CopyRect + Raw + ExtendedDesktopSize + Cursor).
+     * Call once after handshake before
      * requesting any framebuffer update.
      */
     fun negotiatePixelFormat(out: OutputStream, encodings: IntArray = DEFAULT_ENCODINGS) {
@@ -175,7 +179,7 @@ object VncClient {
         out.flush()
     }
 
-    data class RfbUpdate(val newSize: VncSize?, val damage: List<VncRect>)
+    data class RfbUpdate(val newSize: VncSize?, val damage: List<VncRect>, val cursor: VncCursor?)
 
     /**
      * [onMessageStart], when non-null, is invoked exactly once, right when the
@@ -208,6 +212,7 @@ object VncClient {
         val numRects = din.readUnsignedShort()
         var rowBuf: ByteArray? = null
         var newSize: VncSize? = null
+        var cursor: VncCursor? = null
         val damage = ArrayList<VncRect>(numRects)
 
         repeat(numRects) {
@@ -215,6 +220,27 @@ object VncClient {
             val w = din.readUnsignedShort(); val h = din.readUnsignedShort()
             val enc = din.readInt()
             when (enc) {
+                ENC_CURSOR -> {
+                    // Cursor x/y are the hotspot, not framebuffer coordinates. Bound
+                    // allocations separately so a malformed shape cannot exhaust memory.
+                    if (w > 1024 || h > 1024 || (w > 0 && h > 0 && (x >= w || y >= h)))
+                        throw RfbProtocolException("RFB Cursor: invalid geometry w=$w h=$h hotspot=$x,$y")
+                    val pixels = IntArray(w * h)
+                    val bytes = ByteArray(pixels.size * 4)
+                    din.readFully(bytes)
+                    java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                        .asIntBuffer().get(pixels)
+                    val maskStride = (w + 7) / 8
+                    val mask = ByteArray(maskStride * h)
+                    din.readFully(mask)
+                    for (row in 0 until h) for (col in 0 until w) {
+                        val i = row * w + col
+                        // Each mask row is byte-padded, MSB first; BGRX's X is not alpha.
+                        pixels[i] = if (mask[row * maskStride + col / 8].toInt() and (0x80 ushr (col % 8)) != 0)
+                            pixels[i] or (0xFF shl 24) else 0
+                    }
+                    cursor = VncCursor(w, h, x, y, pixels)
+                }
                 ENC_EXTENDED_DESKTOP_SIZE -> {       // -308: w/h are the new fb dims
                     val screens = din.readUnsignedByte(); skipFully(din, 3)
                     skipFully(din, screens * 16)     // we use a single-screen model; dims come from w/h
@@ -257,7 +283,7 @@ object VncClient {
                 else -> throw RfbProtocolException("unsupported encoding $enc")
             }
         }
-        return RfbUpdate(newSize, damage)
+        return RfbUpdate(newSize, damage, cursor)
     }
 
     const val BTN_LEFT = 1; const val BTN_MIDDLE = 2; const val BTN_RIGHT = 4

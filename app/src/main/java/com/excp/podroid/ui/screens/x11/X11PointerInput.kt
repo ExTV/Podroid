@@ -8,6 +8,8 @@
  */
 package com.excp.podroid.ui.screens.x11
 
+import android.view.InputDevice
+import android.view.MotionEvent
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerId
@@ -50,10 +52,8 @@ private suspend fun AwaitPointerEventScope.drainUntilAllPointersUp() {
 
 /**
  * Runs the gesture state machine on the surface's pointerInput scope.
- * Behavior is unchanged from the original inline version: same thresholds
- * (16f move slop, 500ms long press, 60f scroll step, 28f two-finger tap
- * slop), same consume() calls, same focus-on-touch-down, same letterbox
- * rejection in DIRECT mode, same `finally` release, same order of VM calls.
+ * Touch thresholds: 16f move slop, 500ms long press, 60f scroll step,
+ * 28f two-finger tap slop. Physical mice and touchpads use absolute input.
  *
  * [fbX]/[fbY]/[inContent] read the caller's rememberUpdatedState-backed
  * geometry and framebuffer size fresh on every call, so a resize mid-
@@ -69,6 +69,7 @@ internal suspend fun PointerInputScope.x11PointerLoop(
     fbY: (Float) -> Int,
     inContent: (Float, Float) -> Boolean,
 ) {
+    var touchpadScroll = 0f
     awaitPointerEventScope {
         while (true) {
             val event = awaitPointerEvent()
@@ -85,10 +86,34 @@ internal suspend fun PointerInputScope.x11PointerLoop(
                 continue
             }
 
+            // Android touchpads send classified one-pointer swipes, not wheel events or two touches.
+            if (event.classification == MotionEvent.CLASSIFICATION_TWO_FINGER_SWIPE) {
+                when (event.type) {
+                    PointerEventType.Press -> {
+                        touchpadScroll = 0f
+                        viewModel.mouseUpdate(fbX(change.position.x), fbY(change.position.y), 0)
+                    }
+                    PointerEventType.Move -> {
+                        touchpadScroll += change.position.y - change.previousPosition.y
+                        // Keep the cursor anchored and apply the selected direction to wheel ticks.
+                        while (abs(touchpadScroll) >= 60f) {
+                            viewModel.scroll(up = s.touchpadScrollDirection.wheelUp(touchpadScroll))
+                            touchpadScroll += if (touchpadScroll > 0f) -60f else 60f
+                        }
+                    }
+                    PointerEventType.Release -> touchpadScroll = 0f
+                }
+                event.changes.forEach { it.consume() }
+                continue
+            }
+
             // Physical mouse -> absolute move + native buttons. Consuming
             // keeps right-click from falling through to Android Back (which
             // exited fullscreen) and sends it to X as button 3 instead.
-            if (change.type == PointerType.Mouse) {
+            // Touchpads can report SOURCE_MOUSE with TOOL_TYPE_FINGER; tool type alone loses hover.
+            if (change.type == PointerType.Mouse ||
+                event.motionEvent?.isFromSource(InputDevice.SOURCE_MOUSE) == true
+            ) {
                 var mask = 0
                 if (event.buttons.isPrimaryPressed) mask = mask or VncClient.BTN_LEFT
                 if (event.buttons.isSecondaryPressed) mask = mask or VncClient.BTN_RIGHT

@@ -397,4 +397,9 @@
     <string name="uml_reason_detail">原因：%1$s</string>
     <string name="uml_diag_status">UML 状态：%1$s</string>
     <string name="uml_diag_status_reason">UML 状态：%1$s（%2$s）</string>
+    <string name="touchpad_scroll_direction">触控板滚动方向</string>
+    <string name="scroll_natural">自然</string>
+    <string name="scroll_traditional">传统</string>
+    <string name="scroll_natural_hint">双指向上滑动时，页面向下滚动。</string>
+    <string name="scroll_traditional_hint">双指向上滑动时，页面向上滚动。</string>
 </resources>

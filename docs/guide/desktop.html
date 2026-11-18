@@ -201,6 +201,9 @@ password=na</code></pre>
 
       <h3>External input</h3>
       <p>A connected hardware keyboard passes through fully, including Ctrl, Alt, Shift, and composed shortcuts (e.g. Ctrl+L in a browser). An external mouse's scroll wheel scrolls, and all three buttons map to their X11 equivalents.</p>
+      <p>The desktop viewer hides the Android mouse pointer and draws the Linux cursor locally when the server supplies its shape, so movement does not wait for desktop frame updates. Cursor shapes such as text selection and window resizing are preserved. The mouse is not captured: move outside the viewer to use the Android toolbar and other controls normally.</p>
+
+      <p>In the viewer settings, <strong>Touchpad scroll direction</strong> offers <strong>Natural</strong> (default) and <strong>Traditional</strong>. With Natural, swiping up with two fingers scrolls down the page; Traditional reverses that direction. The choice takes effect immediately and is saved across app launches.</p>
 
       <h3>Other settings</h3>
       <table>
